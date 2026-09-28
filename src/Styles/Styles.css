@@ -39,19 +39,6 @@ button {
   background: #f5f8fc;
 }
 
-/* =========================
-   HEADER
-========================= */
-
-.app-header {
-  height: 80px;
-  display: flex;
-  align-items: stretch;
-  background: #ffffff;
-  border-top: 7px solid #3d3943;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
 .brand-section {
   display: flex;
   min-width: 155px;
@@ -703,12 +690,6 @@ button {
 }
 
 @media (max-width: 1100px) {
-  .app-header {
-    height: auto;
-    min-height: 80px;
-    flex-wrap: wrap;
-  }
-
   .brand-section {
     height: 73px;
   }
@@ -877,26 +858,6 @@ button {
 .sidebar-user .user-details span { margin-top: 3px; color: #b6c4e6; font-size: 8px; }
 .sidebar-user .logout-button { margin-left: auto; padding: 0; color: #e1e9ff; font-size: 17px; }
 
-.app-header {
-  height: 33px;
-  display: flex;
-  align-items: center;
-  padding: 0 16px 0 20px;
-  border: 0;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(21, 43, 77, .08);
-}
-
-.breadcrumb { display: flex; align-items: center; gap: 8px; color: #5a216f; font-size: 10px; }
-.breadcrumb b { color: #9a9ca6; font-weight: 400; }
-.breadcrumb strong { font-weight: 600; }
-.info-dot { width: 10px; height: 10px; display: inline-grid; place-items: center; border: 1px solid #8b559f; border-radius: 50%; font-size: 7px; }
-.header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; color: #4b5266; font-size: 12px; }
-.header-actions button { border: 0; padding: 0; background: transparent; color: inherit; font-size: 13px; }
-.share-button { padding: 3px 8px !important; border: 1px solid #d8dce4 !important; border-radius: 3px; font-size: 10px !important; }
-.header-user { display: flex; align-items: center; gap: 6px; color: #661a7a; font-size: 9px; }
-.header-user i { width: 20px; height: 20px; display: grid; place-items: center; border: 1px solid #cfd3de; border-radius: 50%; color: #67718c; font-style: normal; }
-
 .dashboard { padding: 13px 14px 40px 17px; }
 .page-heading { height: 43px; display: flex; align-items: flex-start; justify-content: space-between; }
 .page-heading h1 { margin: 0; color: #111a37; font-size: 18px; line-height: 1.1; }
@@ -998,9 +959,6 @@ button {
   .side-navigation { flex-direction: row; overflow-x: auto; padding: 5px; }
   .side-navigation .nav-item { min-width: max-content; width: auto; }
   .sidebar-user { display: none; }
-  .app-header { padding-left: 12px; }
-  .header-actions { gap: 7px; }
-  .header-actions .header-user, .header-actions button:not(.share-button) { display: none; }
   .dashboard { padding: 12px 8px 35px; }
   .kpi-banner { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts-grid { grid-template-columns: 1fr; }

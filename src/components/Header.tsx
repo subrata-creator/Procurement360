@@ -38,10 +38,6 @@ const Header: React.FC<HeaderProps> = ({
           <button type="button" className="logout-button" aria-label="Logout">↪</button>
         </div>
       </aside>
-      <header className="app-header">
-        <div className="breadcrumb"><span>Power Apps</span><b>|</b><strong>Procurement</strong><span className="info-dot">i</span></div>
-        <div className="header-actions"><button type="button" className="share-button">♧ Share⌄</button><button type="button" aria-label="Fullscreen">⛶</button><button type="button" aria-label="Download">⇩</button><button type="button" aria-label="Settings">⚙</button><button type="button" aria-label="Help">?</button><span className="header-user">Tannu Jha <i>TJ</i></span></div>
-      </header>
     </>
   );
 };
