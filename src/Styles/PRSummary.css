@@ -174,6 +174,21 @@
   color: #18ad5c;
 }
 
+.pr-detail-card-icon.current {
+  background: #eaf2ff;
+  color: #1769df;
+}
+
+.pr-detail-card-icon.pending {
+  background: #edf1f5;
+  color: #7d8899;
+}
+
+.pr-detail-card-icon.rejected {
+  background: #ffe2e7;
+  color: #e42f49;
+}
+
 .pr-detail-card-title h2 {
   margin: 0;
   color: #202a3c;

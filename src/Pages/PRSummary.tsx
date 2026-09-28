@@ -53,6 +53,13 @@ function stepCircleClass(status: string) {
   return "";
 }
 
+function milestoneIconClass(status: string) {
+  if (status === "Completed") return "green";
+  if (status === "Current") return "current";
+  if (status === "Rejected") return "rejected";
+  return "pending";
+}
+
 export default function PurchaseRequestDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
@@ -169,7 +176,7 @@ export default function PurchaseRequestDetail() {
           <section className="pr-detail-card">
             <div className="pr-detail-card-header">
               <div className="pr-detail-card-header-left">
-                <div className="pr-detail-card-icon green">
+                <div className={`pr-detail-card-icon ${milestoneIconClass(selectedMilestone.status)}`}>
                   <ShieldCheck size={12} />
                 </div>
                 <div className="pr-detail-card-title">
