@@ -5,6 +5,10 @@ export interface KpiItem {
   caption?: string;
   tone?: "blue" | "violet" | "green" | "amber";
   progress?: number;
+  trend?: string;        // e.g. "12%"
+  trendUp?: boolean;     // true = green arrow up, false = red arrow down
+  spark?: number[];      // small sparkline series
+  progressLabel?: string;
 }
 
 export interface Task {

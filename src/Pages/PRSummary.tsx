@@ -8,11 +8,9 @@ import {
   ClipboardList,
   Clock,
   Coins,
-  Download,
   FileText,
   Flag,
   Hash,
-  MoreHorizontal,
   PackageCheck,
   ShieldCheck,
   Tag,
@@ -257,7 +255,83 @@ export default function PurchaseRequestDetail() {
           ))}
         </div>
 
-        {activeTab !== "Summary" && (
+        {activeTab === "RFQs" && (
+          <div className="pr-rfq-section">
+            <div className="pr-rfq-card-header">
+              <div>
+                <div className="pr-rfq-title-row">
+                  <span className="pr-rfq-icon">✦</span>
+                  <h3>Request For Quotations (1)</h3>
+                </div>
+                <p>RFQs created from this purchase request</p>
+              </div>
+            </div>
+
+            <div className="pr-rfq-filters">
+              <label className="pr-rfq-filter">
+                <span>Ref No</span>
+                <input value={record.rfq || ""} readOnly />
+              </label>
+              <label className="pr-rfq-filter">
+                <span>Start Date</span>
+                <input value="4/6/2026" readOnly />
+              </label>
+              <label className="pr-rfq-filter">
+                <span>Reward Date</span>
+                <input value="4/3/2026" readOnly />
+              </label>
+              <label className="pr-rfq-filter">
+                <span>Rewarded Supplier</span>
+                <input value="Logitech" readOnly />
+              </label>
+              <label className="pr-rfq-filter">
+                <span>Status</span>
+                <select defaultValue="All Status">
+                  <option>All Status</option>
+                  <option>Rewarded</option>
+                  <option>Approved</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="pr-rfq-table-wrap">
+              <table className="pr-rfq-table">
+                <thead>
+                  <tr>
+                    <th>Ref No</th>
+                    <th>Start Date</th>
+                    <th>Reward Date</th>
+                    <th>Rewarded Supplier</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="pr-rfq-ref">{record.rfq}</td>
+                    <td>4/6/2026</td>
+                    <td>4/3/2026</td>
+                    <td className="pr-rfq-supplier">
+                      <span className="pr-rfq-supplier-badge">G</span>
+                      Logitech
+                    </td>
+                    <td><span className="pr-rfq-status">Rewarded</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pr-rfq-footer">
+              <span>Showing <strong>1-1</strong> of <strong>1</strong> results</span>
+              <div className="pr-rfq-pagination">
+                <button type="button" aria-label="Previous page">‹</button>
+                <button type="button" className="selected" aria-label="Page 1">1</button>
+                <button type="button" aria-label="Next page">›</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab !== "Summary" && activeTab !== "RFQs" && (
           <div className="pr-detail-tab-empty">No {activeTab.toLowerCase()} linked to this purchase request yet.</div>
         )}
 

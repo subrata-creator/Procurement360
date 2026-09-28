@@ -422,6 +422,195 @@
   font-size: 7px;
 }
 
+.pr-rfq-section {
+  padding: 0 0 6px;
+}
+
+.pr-rfq-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 16px 10px;
+}
+
+.pr-rfq-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pr-rfq-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #2068de;
+  font-size: 14px;
+}
+
+.pr-rfq-card-header h3 {
+  margin: 0;
+  color: #1f2a3d;
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.pr-rfq-card-header p {
+  margin: 4px 0 0;
+  color: #70809a;
+  font-size: 11px;
+}
+
+.pr-rfq-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid #edf1f5;
+  border-bottom: 1px solid #edf1f5;
+  background: #fff;
+}
+
+.pr-rfq-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pr-rfq-filter span {
+  color: #3d4d66;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.pr-rfq-filter input,
+.pr-rfq-filter select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #dfe6ef;
+  border-radius: 6px;
+  background: white;
+  color: #495a76;
+  font-size: 11px;
+  box-sizing: border-box;
+}
+
+.pr-rfq-filter input[readonly] {
+  background: #f9fbfd;
+}
+
+.pr-rfq-table-wrap {
+  overflow-x: auto;
+  padding: 0 12px;
+}
+
+.pr-rfq-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+  table-layout: fixed;
+}
+
+.pr-rfq-table th {
+  padding: 11px 8px;
+  background: #f4f7fb;
+  border-bottom: 1px solid #e9edf2;
+  color: #1f2d46;
+  font-size: 10px;
+  text-align: left;
+  font-weight: 700;
+}
+
+.pr-rfq-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #edf1f5;
+  color: #273a58;
+  font-size: 11px;
+}
+
+.pr-rfq-ref {
+  color: #1670df;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pr-rfq-supplier {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #2d3e5d;
+}
+
+.pr-rfq-supplier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #176ae8;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pr-rfq-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: #ffe0ef;
+  color: #d62f81;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pr-rfq-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  color: #62738f;
+  font-size: 11px;
+}
+
+.pr-rfq-footer strong {
+  color: #243a5d;
+}
+
+.pr-rfq-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pr-rfq-pagination button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dfe6ef;
+  border-radius: 6px;
+  background: white;
+  color: #7b8aa2;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.pr-rfq-pagination .selected {
+  background: #1769e8;
+  border-color: #1769e8;
+  color: white;
+}
+
 .pr-summary-top {
   display: flex;
   align-items: center;

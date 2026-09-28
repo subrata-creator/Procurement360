@@ -1,306 +1,83 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { taskInboxItems } from "../data/tasks";
 
 const PAGE_SIZE = 5;
+type Tab = "inbox" | "contract";
+type Filters = { name: string; type: string; who: string; date: string };
+
+const initials = (n: string) => n.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+const badge = (t: string) =>
+  t === "Invoice" ? "inv" : t === "Purchase Request" ? "pr" : t === "Purchase Order" ? "po" : "rfq";
+const has = (v: string, q: string) => v.toLowerCase().includes(q.trim().toLowerCase());
 
 const TaskInbox: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<
-    "inbox" | "contract"
-  >("inbox");
+  const [tab, setTab] = useState<Tab>("inbox");
+  const [f, setF] = useState<Filters>({ name: "", type: "", who: "", date: "" });
+  const [page, setPage] = useState(1);
 
-  const [taskSearch, setTaskSearch] = useState("");
-  const [typeSearch, setTypeSearch] = useState("");
-  const [assignedSearch, setAssignedSearch] = useState("");
-  const [dateSearch, setDateSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const setFilter = (k: keyof Filters, v: string) => {
+    setF((p) => ({ ...p, [k]: v }));
+    setPage(1);
+  };
 
-  const filteredTasks = useMemo(() => {
-    return taskInboxItems.filter((task) => {
-      const matchesTask =
-        task.taskName
-          .toLowerCase()
-          .includes(taskSearch.toLowerCase());
+  const rows = useMemo(
+    () =>
+      tab === "inbox"
+        ? taskInboxItems.filter(
+            (t) => has(t.taskName, f.name) && has(t.taskType, f.type) && has(t.assignedTo, f.who) && has(t.assignedOn, f.date)
+          )
+        : [],
+    [tab, f]
+  );
 
-      const matchesType =
-        task.taskType
-          .toLowerCase()
-          .includes(typeSearch.toLowerCase());
-
-      const matchesAssigned =
-        task.assignedTo
-          .toLowerCase()
-          .includes(assignedSearch.toLowerCase());
-
-      const matchesDate =
-        task.assignedOn
-          .toLowerCase()
-          .includes(dateSearch.toLowerCase());
-
-      return (
-        matchesTask &&
-        matchesType &&
-        matchesAssigned &&
-        matchesDate
-      );
-    });
-  }, [
-    taskSearch,
-    typeSearch,
-    assignedSearch,
-    dateSearch,
-  ]);
-
-  const visibleTasks = activeTab === "inbox" ? filteredTasks : [];
-  const totalPages = Math.max(1, Math.ceil(visibleTasks.length / PAGE_SIZE));
-  const startIndex = visibleTasks.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE;
-  const pagedTasks = visibleTasks.slice(startIndex, startIndex + PAGE_SIZE);
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const start = rows.length ? (page - 1) * PAGE_SIZE : 0;
+  const shown = rows.slice(start, start + PAGE_SIZE);
+  const heads: [string, keyof Filters][] = [["Task Name", "name"], ["Task Type", "type"], ["Assigned To", "who"], ["Assigned On", "date"]];
 
   return (
-    <section className="task-section">
-      <div className="task-tabs">
-        <button
-          type="button"
-          className={`task-tab ${
-            activeTab === "inbox" ? "active" : ""
-          }`}
-          onClick={() => {
-            setActiveTab("inbox");
-            setCurrentPage(1);
-          }}
-        >
-          TASK INBOX
+    <section className="xt">
+      <div className="xt-tabs">
+        <button type="button" className={tab === "inbox" ? "on" : ""} onClick={() => { setTab("inbox"); setPage(1); }}>
+          TASK INBOX ({taskInboxItems.length})
         </button>
-
-        <button
-          type="button"
-          className={`task-tab ${
-            activeTab === "contract" ? "active" : ""
-          }`}
-          onClick={() => {
-            setActiveTab("contract");
-            setCurrentPage(1);
-          }}
-        >
+        <button type="button" className={tab === "contract" ? "on" : ""} onClick={() => { setTab("contract"); setPage(1); }}>
           CONTRACT SIGNATORY TASKS
         </button>
       </div>
 
-      <div className="task-table-wrapper">
-        <table className="task-table">
-          <thead>
-            <tr>
-              <th>
-                <div className="column-heading">
-                  <span>Task Name</span>
-                  <span className="sort-icon">↕</span>
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="--Search--"
-                  value={taskSearch}
-                  onChange={(e) => {
-                    setCurrentPage(1);
-                    setTaskSearch(e.target.value)
-                  }}
-                />
-              </th>
-
-              <th>
-                <div className="column-heading">
-                  <span>Task Type</span>
-                  <span className="sort-icon">↕</span>
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="--Search--"
-                  value={typeSearch}
-                  onChange={(e) => {
-                    setCurrentPage(1);
-                    setTypeSearch(e.target.value)
-                  }}
-                />
-              </th>
-
-              <th>
-                <div className="column-heading">
-                  <span>Assigned To</span>
-                  <span className="sort-icon">↕</span>
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="--Search--"
-                  value={assignedSearch}
-                  onChange={(e) => {
-                    setCurrentPage(1);
-                    setAssignedSearch(e.target.value)
-                  }}
-                />
-              </th>
-
-              <th>
-                <div className="column-heading">
-                  <span>Assigned On</span>
-                  <span className="sort-icon">↕</span>
-                </div>
-
-                <div className="date-search">
-                  <span className="filter-symbol">=</span>
-
-                  <input
-                    type="text"
-                    placeholder="--Search--"
-                    value={dateSearch}
-                    onChange={(e) => {
-                      setCurrentPage(1);
-                      setDateSearch(e.target.value)
-                    }}
-                  />
-
-                  <button
-                    type="button"
-                    className="calendar-button"
-                    aria-label="Select date"
-                  >
-                    <svg
-                      width="17"
-                      height="17"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      <rect
-                        x="3"
-                        y="4"
-                        width="18"
-                        height="17"
-                        rx="2"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                      <path
-                        d="M8 2V6M16 2V6M3 9H21"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {activeTab === "contract" ? (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="empty-state"
-                >
-                  No contract signatory tasks available.
-                </td>
-              </tr>
-            ) : (
-              pagedTasks.map((task) => (
-                <tr key={task.id}>
-                  <td>
-                    <button
-                      type="button"
-                      className="task-name"
-                      onClick={() => navigate(`/tasks/${task.id}`)}
-                    >
-                      {task.taskName}
-                    </button>
-                  </td>
-
-                  <td>
-                    <span
-                      className={`task-badge ${getBadgeClass(
-                        task.taskType
-                      )}`}
-                    >
-                      {task.taskType}
-                    </span>
-                  </td>
-
-                  <td>
-                    <div className="assigned-user">
-                      <div className="small-avatar">
-                        SP
-                      </div>
-                      <span>{task.assignedTo}</span>
-                    </div>
-                  </td>
-
-                  <td>
-                    <div className="assigned-date">
-                      <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <rect
-                          x="3"
-                          y="4"
-                          width="18"
-                          height="17"
-                          rx="2"
-                          stroke="currentColor"
-                          strokeWidth="1.7"
-                        />
-                        <path
-                          d="M8 2V6M16 2V6M3 9H21"
-                          stroke="currentColor"
-                          strokeWidth="1.7"
-                        />
-                        <path
-                          d="M8 13L10 15L16 11"
-                          stroke="currentColor"
-                          strokeWidth="1.7"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-
-                      <span>{task.assignedOn}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
+      <div className="xt-grid xt-head">
+        {heads.map(([label]) => <span key={label}>{label}</span>)}
       </div>
-      <div className="table-footer">
-        <div className="pagination">
-          <button type="button" aria-label="First page" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>⇤</button>
-          <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>←</button>
-          <span>
-            Showing {visibleTasks.length === 0 ? 0 : startIndex + 1} to {Math.min(startIndex + PAGE_SIZE, visibleTasks.length)} of {visibleTasks.length}
-          </span>
-          <button type="button" aria-label="Next page" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}>→</button>
-          <button type="button" aria-label="Last page" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>⇥</button>
-        </div>
+      <div className="xt-grid xt-filters">
+        {heads.map(([label, key]) => (
+          <input key={key} placeholder="--Search--" aria-label={`Filter ${label}`} value={f[key]} onChange={(e) => setFilter(key, e.target.value)} />
+        ))}
+      </div>
+
+      {shown.length === 0 ? (
+        <div className="xt-empty">{tab === "contract" ? "No contract signatory tasks available." : "No task matches your filters."}</div>
+      ) : (
+        shown.map((t) => (
+          <div className="xt-grid xt-row" key={t.id}>
+            <button type="button" className="xt-link" title={t.taskName} onClick={() => navigate(`/tasks/${t.id}`)}>{t.taskName}</button>
+            <span><span className={`xt-badge ${badge(t.taskType)}`}>{t.taskType}</span></span>
+            <span className="xt-user"><span className="xt-av">{initials(t.assignedTo)}</span>{t.assignedTo}</span>
+            <span className="xt-date"><CalendarDays size={14} />{t.assignedOn}</span>
+          </div>
+        ))
+      )}
+
+      <div className="xt-foot">
+        <button type="button" aria-label="Previous page" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}><ChevronLeft size={14} /></button>
+        <span>Showing {rows.length ? start + 1 : 0} to {Math.min(start + PAGE_SIZE, rows.length)} of {rows.length}</span>
+        <button type="button" aria-label="Next page" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}><ChevronRight size={14} /></button>
       </div>
     </section>
   );
 };
-
-function getBadgeClass(type: string): string {
-  if (type === "Invoice") {
-    return "invoice";
-  }
-
-  if (type === "Purchase Request") {
-    return "purchase";
-  }
-
-  return "rfq";
-}
 
 export default TaskInbox;
