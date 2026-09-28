@@ -2,6 +2,9 @@ export interface KpiItem {
   label: string;
   value: string;
   icon: string;
+  caption?: string;
+  tone?: "blue" | "violet" | "green" | "amber";
+  progress?: number;
 }
 
 export interface Task {
@@ -10,6 +13,8 @@ export interface Task {
   taskType: string;
   assignedTo: string;
   assignedOn: string;
+  description?: string;
+  priority?: "Low" | "Normal" | "High";
 }
 
 export interface Activity {

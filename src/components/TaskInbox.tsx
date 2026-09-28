@@ -1,54 +1,11 @@
 import React, { useMemo, useState } from "react";
-import type { Task } from "../types/dashboard";
+import { useNavigate } from "react-router-dom";
+import { taskInboxItems } from "../data/tasks";
 
-const tasks: Task[] = [
-  {
-    id: 1,
-    taskName:
-      "Invoice Approvals for Business Owner - Invoice Approval for INV-2026-031",
-    taskType: "Invoice",
-    assignedTo: "Sakshi Paliwal",
-    assignedOn: "3/22/2026",
-  },
-  {
-    id: 2,
-    taskName:
-      "Invoice Approvals for Business Owner - Invoice Approval for INV-2026-030",
-    taskType: "Invoice",
-    assignedTo: "Sakshi Paliwal",
-    assignedOn: "3/20/2026",
-  },
-  {
-    id: 3,
-    taskName: "Changes needed for PR- DellInspiron 15 3530",
-    taskType: "Purchase Request",
-    assignedTo: "Sakshi Paliwal",
-    assignedOn: "10/30/2025",
-  },
-  {
-    id: 4,
-    taskName: "Changes needed for PR- Lenovo V15 Gen 4",
-    taskType: "Purchase Request",
-    assignedTo: "Sakshi Paliwal",
-    assignedOn: "10/30/2025",
-  },
-  {
-    id: 5,
-    taskName: "RFQ Approvals for RFQ-2025-019",
-    taskType: "Request for Quotation",
-    assignedTo: "Sakshi Paliwal",
-    assignedOn: "10/6/2025",
-  },
-  {
-    id: 6,
-    taskName: "RFQ Approvals for RFQ-2025-018",
-    taskType: "Request for Quotation",
-    assignedTo: "Sakshi Paliwal",
-    assignedOn: "8/7/2025",
-  },
-];
+const PAGE_SIZE = 5;
 
 const TaskInbox: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<
     "inbox" | "contract"
   >("inbox");
@@ -57,9 +14,10 @@ const TaskInbox: React.FC = () => {
   const [typeSearch, setTypeSearch] = useState("");
   const [assignedSearch, setAssignedSearch] = useState("");
   const [dateSearch, setDateSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    return taskInboxItems.filter((task) => {
       const matchesTask =
         task.taskName
           .toLowerCase()
@@ -94,6 +52,11 @@ const TaskInbox: React.FC = () => {
     dateSearch,
   ]);
 
+  const visibleTasks = activeTab === "inbox" ? filteredTasks : [];
+  const totalPages = Math.max(1, Math.ceil(visibleTasks.length / PAGE_SIZE));
+  const startIndex = visibleTasks.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE;
+  const pagedTasks = visibleTasks.slice(startIndex, startIndex + PAGE_SIZE);
+
   return (
     <section className="task-section">
       <div className="task-tabs">
@@ -102,7 +65,10 @@ const TaskInbox: React.FC = () => {
           className={`task-tab ${
             activeTab === "inbox" ? "active" : ""
           }`}
-          onClick={() => setActiveTab("inbox")}
+          onClick={() => {
+            setActiveTab("inbox");
+            setCurrentPage(1);
+          }}
         >
           TASK INBOX
         </button>
@@ -112,7 +78,10 @@ const TaskInbox: React.FC = () => {
           className={`task-tab ${
             activeTab === "contract" ? "active" : ""
           }`}
-          onClick={() => setActiveTab("contract")}
+          onClick={() => {
+            setActiveTab("contract");
+            setCurrentPage(1);
+          }}
         >
           CONTRACT SIGNATORY TASKS
         </button>
@@ -132,9 +101,10 @@ const TaskInbox: React.FC = () => {
                   type="text"
                   placeholder="--Search--"
                   value={taskSearch}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setCurrentPage(1);
                     setTaskSearch(e.target.value)
-                  }
+                  }}
                 />
               </th>
 
@@ -148,9 +118,10 @@ const TaskInbox: React.FC = () => {
                   type="text"
                   placeholder="--Search--"
                   value={typeSearch}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setCurrentPage(1);
                     setTypeSearch(e.target.value)
-                  }
+                  }}
                 />
               </th>
 
@@ -164,9 +135,10 @@ const TaskInbox: React.FC = () => {
                   type="text"
                   placeholder="--Search--"
                   value={assignedSearch}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setCurrentPage(1);
                     setAssignedSearch(e.target.value)
-                  }
+                  }}
                 />
               </th>
 
@@ -183,9 +155,10 @@ const TaskInbox: React.FC = () => {
                     type="text"
                     placeholder="--Search--"
                     value={dateSearch}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setCurrentPage(1);
                       setDateSearch(e.target.value)
-                    }
+                    }}
                   />
 
                   <button
@@ -231,12 +204,13 @@ const TaskInbox: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredTasks.map((task) => (
+              pagedTasks.map((task) => (
                 <tr key={task.id}>
                   <td>
                     <button
                       type="button"
                       className="task-name"
+                      onClick={() => navigate(`/tasks/${task.id}`)}
                     >
                       {task.taskName}
                     </button>
@@ -301,16 +275,16 @@ const TaskInbox: React.FC = () => {
           </tbody>
         </table>
 
-        <div className="table-footer">
-          <div className="pagination">
-            <button type="button">|◀</button>
-            <button type="button">◀</button>
-            <span>
-              1 to {filteredTasks.length} of 18
-            </span>
-            <button type="button">▶</button>
-            <button type="button">▶|</button>
-          </div>
+      </div>
+      <div className="table-footer">
+        <div className="pagination">
+          <button type="button" aria-label="First page" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>⇤</button>
+          <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>←</button>
+          <span>
+            Showing {visibleTasks.length === 0 ? 0 : startIndex + 1} to {Math.min(startIndex + PAGE_SIZE, visibleTasks.length)} of {visibleTasks.length}
+          </span>
+          <button type="button" aria-label="Next page" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}>→</button>
+          <button type="button" aria-label="Last page" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>⇥</button>
         </div>
       </div>
     </section>

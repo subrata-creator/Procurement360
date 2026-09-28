@@ -408,3 +408,51 @@
   border-color: #1d62d8;
   color: white;
 }
+
+.purchase-page { padding: 16px 18px 28px; }
+.purchase-heading { margin-bottom: 14px; }
+.purchase-heading h1 { font-size: 23px; line-height: 1.2; }
+.purchase-heading p { margin-top: 4px; font-size: 13px; }
+.purchase-search { width: min(360px, 45%); height: 36px; padding: 0 12px; }
+.purchase-search svg { width: 17px; height: 17px; }
+.purchase-search input { font-size: 12px; }
+.purchase-stats { gap: 12px; margin-bottom: 14px; }
+.purchase-stat { min-height: 82px; padding: 12px; gap: 10px; }
+.purchase-stat-icon { width: 34px; height: 34px; font-size: 18px; }
+.purchase-stat-content span { font-size: 11px; line-height: 1.3; }
+.purchase-stat-content strong { margin-top: 4px; font-size: 21px; line-height: 1.1; }
+.purchase-card-heading { height: 56px; padding: 0 16px; }
+.purchase-title { gap: 9px; font-size: 14px; }
+.purchase-title svg { width: 17px; height: 17px; }
+.export-button { width: 34px; height: 34px; }
+.create-button { height: 36px; padding: 0 14px; gap: 7px; font-size: 12px; }
+.create-button svg { width: 16px; height: 16px; }
+.pr-filters { gap: 11px; padding: 12px 16px 14px; }
+.filter-field label { margin-bottom: 6px; font-size: 10px; }
+.filter-input { height: 33px; padding: 0 9px; }
+.filter-input input,
+.filter-input select { font-size: 11px; }
+.purchase-table { min-width: 1040px; }
+.purchase-table thead th { padding: 11px 12px; font-size: 11px; }
+.purchase-table tbody td { padding: 12px; font-size: 11px; }
+.creator-pill { gap: 7px; padding: 4px 8px; font-size: 11px; }
+.creator-pill span { width: 22px; height: 22px; font-size: 9px; }
+.pr-status { gap: 5px; padding: 5px 9px; font-size: 10px; }
+.status-icon { font-size: 11px; }
+.purchase-footer { padding: 12px 16px; font-size: 11px; }
+.purchase-pagination { gap: 7px; }
+.purchase-pagination button { width: 30px; height: 30px; font-size: 12px; }
+
+@media (max-width: 1000px) {
+  .purchase-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pr-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .purchase-page { padding: 12px 9px 24px; }
+  .purchase-heading { align-items: stretch; flex-direction: column; gap: 10px; }
+  .purchase-search { width: 100%; }
+  .purchase-stats { grid-template-columns: 1fr; }
+  .pr-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .purchase-card-heading { padding: 0 10px; }
+}

@@ -10,7 +10,10 @@ import {
   Coins,
   Download,
   FileText,
+  Flag,
+  Hash,
   MoreHorizontal,
+  PackageCheck,
   ShieldCheck,
   Tag,
   User,
@@ -21,9 +24,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   buildApprovalSteps,
   buildDefaultLineItems,
-  buildDefaultSubTasks,
+  buildMilestoneSubTasks,
   getInitials,
   getPurchaseRequestByRef,
+  type ApprovalStep,
 } from "./Purchaserequestsdata";
 
 import "../Styles/PRSummary.css";
@@ -55,7 +59,7 @@ export default function PurchaseRequestDetail() {
 
   const [activeTab, setActiveTab] = useState("Summary");
   const [subTasksOpen, setSubTasksOpen] = useState(false);
-  const [showPRDetails, setShowPRDetails] = useState(false);
+  const [selectedMilestone, setSelectedMilestone] = useState<ApprovalStep | null>(null);
 
   const record = ref ? getPurchaseRequestByRef(ref) : undefined;
 
@@ -71,10 +75,30 @@ export default function PurchaseRequestDetail() {
   }
 
   const approvalSteps = buildApprovalSteps(record);
-  const subTasks = buildDefaultSubTasks(record);
+  const creationStep = approvalSteps.find((step) => /^PR creation/i.test(step.title));
+  const approvalHistory = approvalSteps.filter((step) =>
+    (step.status === "Completed" || step.status === "Rejected") &&
+    /(approval|rejected)/i.test(step.title)
+  );
+  const historyEvents = [
+    ...(creationStep ? [creationStep] : []),
+    ...approvalHistory.filter((step) => step.step !== creationStep?.step),
+  ];
+  const subTasks = selectedMilestone ? buildMilestoneSubTasks(record, selectedMilestone) : [];
   const lineItems = buildDefaultLineItems(record);
 
   const subTasksCompleted = subTasks.length > 0 && subTasks.every((task) => task.status === "Completed");
+
+  const toggleMilestone = (step: ApprovalStep) => {
+    if (subTasksOpen && selectedMilestone?.step === step.step) {
+      setSubTasksOpen(false);
+      setSelectedMilestone(null);
+      return;
+    }
+
+    setSelectedMilestone(step);
+    setSubTasksOpen(true);
+  };
 
   return (
     <div className="pr-detail-page">
@@ -108,47 +132,45 @@ export default function PurchaseRequestDetail() {
         </div>
       </div>
 
-      <section className="pr-detail-card">
+      <section className="pr-detail-card pr-journey-card">
         <div className="pr-detail-card-header">
           <div className="pr-detail-card-header-left">
             <div className="pr-detail-card-icon">
               <Clock size={12} />
             </div>
             <div className="pr-detail-card-title">
-              <h2>Approval History</h2>
-              <p>Track the approval journey of this purchase request</p>
+              <h2>PR Journey</h2>
+              <p>Track progress from PR creation through closure</p>
             </div>
           </div>
         </div>
 
         <div className="approval-timeline">
           {approvalSteps.map((step) => (
-            <div
-              className={`approval-step ${step.title === "PR Creation" ? "clickable" : ""}`}
+            <button
+              className={`approval-step ${selectedMilestone?.step === step.step ? "selected" : ""}`}
               key={step.step}
-              onClick={() => {
-                if (step.title === "PR Creation") {
-                  setShowPRDetails((open) => !open);
-                }
-              }}
+              type="button"
+              aria-label={`${step.title}, ${step.status}. View milestone tasks`}
+              aria-pressed={selectedMilestone?.step === step.step}
+              aria-expanded={subTasksOpen && selectedMilestone?.step === step.step}
+              onClick={() => toggleMilestone(step)}
             >
               <div className={`approval-step-line ${step.status === "Completed" ? "done" : ""}`} />
               <div className={`approval-step-circle ${stepCircleClass(step.status)}`}>{step.step}</div>
 
               <div className="approval-step-label">
                 <strong>{step.title}</strong>
-                {step.date && <span>{step.date}</span>}
-                {step.by && <small>By {step.by}</small>}
                 <span className={`approval-step-status ${step.status.toLowerCase().replace(" ", "-")}`}>
                   {step.status === "Skipped" ? "Not Applicable" : step.status}
                 </span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </section>
 
-      {showPRDetails && (
+      {selectedMilestone && (
         <>
           <section className="pr-detail-card">
             <div className="pr-detail-card-header">
@@ -157,8 +179,8 @@ export default function PurchaseRequestDetail() {
                   <ShieldCheck size={12} />
                 </div>
                 <div className="pr-detail-card-title">
-                  <h2>{record.status} - Sub Tasks</h2>
-                  <p>All activities under approval stage</p>
+                  <h2>{selectedMilestone.title} - Sub Tasks</h2>
+                  <p>{selectedMilestone.date ? `Milestone activity on ${selectedMilestone.date}` : `Milestone status: ${selectedMilestone.status}`}{selectedMilestone.by ? ` · ${selectedMilestone.by}` : ""}</p>
                 </div>
               </div>
 
@@ -240,6 +262,8 @@ export default function PurchaseRequestDetail() {
 
         {activeTab === "Summary" && (
           <>
+            <div className="pr-summary-layout">
+              <div className="pr-summary-main-column">
             <div className="pr-summary-top">
               <div className="pr-summary-title">
                 <ClipboardList size={13} />
@@ -310,6 +334,52 @@ export default function PurchaseRequestDetail() {
                   <strong>{record.requiredDate || "—"}</strong>
                 </div>
               </div>
+
+              <div className="pr-detail-field">
+                <div className="pr-detail-field-icon"><PackageCheck size={11} /></div>
+                <div>
+                  <span>Category</span>
+                  <strong>{record.category || "—"}</strong>
+                </div>
+              </div>
+
+              <div className="pr-detail-field">
+                <div className="pr-detail-field-icon"><Flag size={11} /></div>
+                <div>
+                  <span>Priority</span>
+                  <strong>{record.priority || "—"}</strong>
+                </div>
+              </div>
+
+              <div className="pr-detail-field">
+                <div className="pr-detail-field-icon"><Hash size={11} /></div>
+                <div>
+                  <span>Cost Center</span>
+                  <strong>{record.costCenter || "—"}</strong>
+                </div>
+              </div>
+
+              <div className="pr-detail-field">
+                <div className="pr-detail-field-icon"><ClipboardList size={11} /></div>
+                <div>
+                  <span>Associated RFQ</span>
+                  <strong>{record.rfq}</strong>
+                </div>
+              </div>
+
+              <div className="pr-detail-field">
+                <div className="pr-detail-field-icon"><FileText size={11} /></div>
+                <div>
+                  <span>Associated PO</span>
+                  <strong>{record.po}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="pr-detail-justification">
+              <span>Business Justification</span>
+              <p>{record.justification || "No business justification provided."}</p>
+              <small>Delivery location: {record.deliveryAddress || "—"}</small>
             </div>
 
             <div className="pr-detail-lineitems-heading">
@@ -348,6 +418,40 @@ export default function PurchaseRequestDetail() {
                   ))}
                 </tbody>
               </table>
+            </div>
+              </div>
+
+              <aside className="pr-summary-approval-card">
+                <div className="pr-summary-approval-heading">
+                  <Clock size={17} />
+                  <h2>Approval History</h2>
+                </div>
+                <div className="pr-summary-approval-list">
+                  {historyEvents.length > 0 ? historyEvents.map((step, index) => {
+                    const [actor, role] = (step.by ?? "").split("|").map((part) => part.trim());
+                    return (
+                    <button
+                      type="button"
+                      className={`pr-summary-approval-step ${step.status.toLowerCase()} ${selectedMilestone?.step === step.step ? "selected" : ""}`}
+                      key={step.step}
+                      aria-label={`${step.title}, ${step.status}. View milestone tasks`}
+                      aria-expanded={subTasksOpen && selectedMilestone?.step === step.step}
+                      onClick={() => toggleMilestone(step)}
+                    >
+                      <span className="pr-summary-approval-rail">
+                        <span className="pr-summary-approval-node">{step.status === "Completed" ? "✓" : index + 1}</span>
+                      </span>
+                      <span className="pr-summary-approval-copy">
+                        <strong>{step.title}</strong>
+                        {actor && <span><b>{actor}</b>{role && <>: <em>{role}</em></>}</span>}
+                        {step.department && <span>{step.department}</span>}
+                        {step.date && <small>{step.date}</small>}
+                      </span>
+                    </button>
+                    );
+                  }) : <p className="pr-summary-approval-empty">No approval actions recorded yet.</p>}
+                </div>
+              </aside>
             </div>
           </>
         )}

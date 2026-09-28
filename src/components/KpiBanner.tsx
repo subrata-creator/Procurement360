@@ -6,31 +6,45 @@ const kpis: KpiItem[] = [
     label: "Purchase Requests",
     value: "42",
     icon: "cart",
+    caption: "Request volume",
+    tone: "blue",
   },
   {
     label: "RFQs",
     value: "43",
     icon: "quote",
+    caption: "Quotation volume",
+    tone: "violet",
   },
   {
     label: "Orders",
     value: "20",
     icon: "order",
+    caption: "Order volume",
+    tone: "green",
   },
   {
     label: "Invoice Submissions",
     value: "18",
     icon: "invoice",
+    caption: "Submission volume",
+    tone: "amber",
   },
   {
     label: "Allocated Budget",
     value: "USD 10.00M",
     icon: "budget",
+    caption: "Budget utilization",
+    tone: "blue",
+    progress: 95,
   },
   {
     label: "Remaining Budget",
     value: "USD 9.90M",
     icon: "money",
+    caption: "Available budget",
+    tone: "violet",
+    progress: 10,
   },
 ];
 
@@ -167,16 +181,30 @@ const KpiBanner: React.FC = () => {
   return (
     <section className="kpi-banner">
       {kpis.map((kpi) => (
-        <div className="kpi-card" key={kpi.label}>
-          <div className="kpi-icon">
+        <article className={`kpi-card kpi-${kpi.tone}`} key={kpi.label}>
+          <div className="kpi-card-top">
+            <span className="kpi-label">{kpi.label}</span>
+            <div className="kpi-icon" aria-hidden="true">
             <Icon type={kpi.icon} />
+            </div>
           </div>
-
           <div className="kpi-content">
-            <div className="kpi-label">{kpi.label}</div>
-            <div className="kpi-value">{kpi.value}</div>
+            <strong className="kpi-value">{kpi.value}</strong>
+            <span className="kpi-caption">{kpi.caption}</span>
           </div>
-        </div>
+          {kpi.progress !== undefined && (
+            <div
+              className="kpi-progress"
+              role="progressbar"
+              aria-label={kpi.label}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={kpi.progress}
+            >
+              <span style={{ width: `${kpi.progress}%` }} />
+            </div>
+          )}
+        </article>
       ))}
     </section>
   );

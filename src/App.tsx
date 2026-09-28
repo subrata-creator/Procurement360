@@ -8,6 +8,7 @@ import RfqPage from "./Pages/RfqPage";
 import OrdersPage from "./Pages/OrdersPage";
 import PurchaseRequest from "./Pages/PurchaseRequest";
 import PurchaseRequestDetail from "./Pages/PRSummary";
+import TaskDetail from "./Pages/TaskDetail";
 import "./Styles/Styles.css";
 
 const chartData = [
@@ -74,6 +75,7 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isPurchaseRequestRoute = location.pathname.startsWith("/purchase-requests");
+  const isTaskRoute = location.pathname.startsWith("/tasks/");
   const routeNavigation = isPurchaseRequestRoute
     ? "Purchase Requests"
     : location.pathname === "/rfqs"
@@ -100,6 +102,10 @@ const AppContent: React.FC = () => {
           <Routes>
             <Route path="/purchase-requests" element={<PurchaseRequest />} />
             <Route path="/purchase-requests/:ref" element={<PurchaseRequestDetail />} />
+          </Routes>
+        ) : isTaskRoute ? (
+          <Routes>
+            <Route path="/tasks/:id" element={<TaskDetail />} />
           </Routes>
         ) : activeNavigation === "RFQs" ? (
           <RfqPage />

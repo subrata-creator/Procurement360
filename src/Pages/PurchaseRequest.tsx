@@ -152,7 +152,7 @@ export default function PurchaseRequest() {
             </button>
             <button type="button" className="create-button">
               <Plus size={12} />
-              Create PR
+              Create Purchase Request
             </button>
           </div>
         </div>

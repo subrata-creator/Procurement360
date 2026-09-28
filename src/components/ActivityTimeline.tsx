@@ -40,10 +40,27 @@ const activities: Activity[] = [
     actor: "Sakshi Paliwal",
     date: "4/3/2026, 12:28 PM",
   },
+  {
+    id: 6,
+    type: "PR",
+    title:
+      "PR-2026-088 | IT equipment request has been submitted for approval",
+    actor: "Subrat Dey",
+    date: "4/2/2026, 10:16 AM",
+  },
+  {
+    id: 7,
+    type: "Invoice",
+    title:
+      "INV-2026-031 | invoice has been submitted for review",
+    actor: "Sakshi Paliwal",
+    date: "4/2/2026, 9:45 AM",
+  },
 ];
 
 const ActivityTimeline: React.FC = () => {
   const [filter, setFilter] = useState("All");
+  const [visibleCount, setVisibleCount] = useState(5);
 
   const filteredActivities =
     filter === "All"
@@ -51,6 +68,7 @@ const ActivityTimeline: React.FC = () => {
       : activities.filter(
           (activity) => activity.type === filter
         );
+  const visibleActivities = filteredActivities.slice(0, visibleCount);
 
   return (
     <aside className="timeline-panel">
@@ -59,7 +77,10 @@ const ActivityTimeline: React.FC = () => {
 
         <select
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            setVisibleCount(5);
+          }}
         >
           <option value="All">-- All --</option>
           <option value="PR">PR</option>
@@ -68,7 +89,7 @@ const ActivityTimeline: React.FC = () => {
       </div>
 
       <div className="timeline-list">
-        {filteredActivities.map((activity) => (
+        {visibleActivities.map((activity) => (
           <div
             className="timeline-item"
             key={activity.id}
@@ -109,12 +130,15 @@ const ActivityTimeline: React.FC = () => {
         ))}
       </div>
 
-      <button
-        type="button"
-        className="load-more-button"
-      >
-        ↻ Load more...
-      </button>
+      {visibleActivities.length < filteredActivities.length && (
+        <button
+          type="button"
+          className="load-more-button"
+          onClick={() => setVisibleCount((count) => count + 5)}
+        >
+          ↻ Load more ({filteredActivities.length - visibleActivities.length})
+        </button>
+      )}
     </aside>
   );
 };
