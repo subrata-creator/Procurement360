@@ -675,25 +675,6 @@ button {
 }
 
 /* =========================
-   FLOATING CHAT
-========================= */
-
-.floating-chat {
-  position: fixed;
-  right: 0;
-  bottom: 16px;
-  width: 60px;
-  height: 60px;
-  border: 0;
-  border-radius: 50%;
-  background: #242c66;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.2);
-}
-
-/* =========================
    RESPONSIVE
 ========================= */
 
@@ -1003,9 +984,6 @@ button {
 .bar-list.monthly { gap: 4px; }
 .bar-list.monthly .bar { width: min(100%, 24px); }
 .chart-axis-label { margin-left: 25px; color: #8993a3; font-size: 6px; text-align: center; }
-
-.floating-chat { right: 10px; bottom: 10px; width: 35px; height: 35px; }
-.floating-chat svg { width: 19px; height: 19px; }
 
 @media (max-width: 1050px) {
   .kpi-banner { grid-template-columns: repeat(3, minmax(0, 1fr)); height: auto; }
