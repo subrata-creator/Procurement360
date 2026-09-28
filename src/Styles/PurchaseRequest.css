@@ -314,13 +314,22 @@
 }
 
 .purchase-link {
-  color: #1b62db;
+  color: #1670df;
   font-weight: 600;
   cursor: pointer;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.purchase-link:hover {
+  color: #1670df;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .purchase-muted {
-  color: #7d8899;
+  color: #6f7c91;
+  font-weight: 500;
+  cursor: default;
 }
 
 .creator-pill {
@@ -408,7 +417,31 @@
   border-color: #1d62d8;
   color: white;
 }
+/* =========================================================
+   PR / RFQ / PO LINK COLORS
+   ========================================================= */
 
+/* Actual clickable PR / RFQ / PO references */
+.purchase-link {
+  color: #1670df !important;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.purchase-link:hover {
+  color: #1670df !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Unavailable PR / RFQ / PO values */
+.purchase-muted {
+  color: #6f7c91 !important;
+  font-weight: 500;
+  cursor: default;
+  text-decoration: none;
+}
 .purchase-page { padding: 16px 18px 28px; }
 .purchase-heading { margin-bottom: 14px; }
 .purchase-heading h1 { font-size: 23px; line-height: 1.2; }

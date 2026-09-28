@@ -118,13 +118,7 @@ export default function PurchaseRequestDetail() {
         </div>
 
         <div className="pr-detail-actions">
-          <button type="button" className="pr-detail-icon-btn" title="More">
-            <MoreHorizontal size={13} />
-          </button>
-          <button type="button" className="pr-detail-download-btn">
-            <Download size={11} />
-            Download
-          </button>
+          
           <button type="button" className="pr-detail-primary-btn">
             <FileText size={11} />
             Initiate RFQ
