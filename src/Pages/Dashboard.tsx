@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ChevronDown, HelpCircle } from "lucide-react";
+import { Bell, HelpCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KpiBanner from "../components/KpiBanner";
 import AIInsights from "../components/AIInsights";
@@ -18,9 +18,9 @@ export default function Dashboard() {
           <p>Overview of your procurement activities with AI insights</p>
         </div>
         <div className="xd-header-actions">
-          <button type="button" className="xd-date"><CalendarDays size={15} /> Apr 1, 2026 - Apr 30, 2026 <ChevronDown size={14} /></button>
           <button type="button" className="xd-icon-btn xd-bell" aria-label="Notifications"><Bell size={16} /></button>
           <button type="button" className="xd-icon-btn" aria-label="Help"><HelpCircle size={16} /></button>
+          <button type="button" className="xd-create-pr" onClick={() => navigate("/purchase-requests")}>+ Create Purchase Request</button>
         </div>
       </header>
 

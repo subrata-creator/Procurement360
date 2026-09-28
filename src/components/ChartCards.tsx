@@ -1,7 +1,7 @@
 import React from "react";
-import { BarChart3, ShoppingCart, Users, TrendingUp, Lightbulb, Sparkles } from "lucide-react";
+import { BarChart3, ShoppingCart, PieChart, TrendingUp, Lightbulb, Sparkles } from "lucide-react";
 
-type Item = { label: string; value: number };
+type Item = { label: string; value: number; color?: string };
 type Props = {
   title: string; legend: string; icon: React.ReactNode; items: Item[];
   ticks: number[]; predTone: "violet" | "green" | "orange"; predIcon: React.ReactNode; prediction: string;
@@ -36,6 +36,105 @@ const BarCard: React.FC<Props> = ({ title, legend, icon, items, ticks, predTone,
   );
 };
 
+const PieCard: React.FC<Props> = ({
+  title,
+  legend,
+  icon,
+  items,
+  predTone,
+  predIcon,
+  prediction,
+}) => {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+
+  let accumulated = 0;
+
+  const gradient = items
+    .map((item) => {
+      const start = accumulated;
+      accumulated += (item.value / total) * 100;
+
+      return `${item.color || "#2563eb"} ${start}% ${accumulated}%`;
+    })
+    .join(", ");
+
+  return (
+    <section className="xd-panel xd-chart xd-pie-card">
+
+      {/* HEADER */}
+      <header className="xd-chart-head">
+        <span className="xd-badge-icon sm blue">
+          {icon}
+        </span>
+
+        <h3>{title}</h3>
+
+        <span className="xd-legend">
+          <i />
+          {legend}
+        </span>
+      </header>
+
+      {/* PIE CONTENT */}
+      <div className="xd-pie-layout">
+
+        {/* LEFT - LEGEND */}
+        <ul className="xd-pie-legend">
+          {items.map((item) => (
+            <li key={item.label}>
+              <span
+                className="xd-pie-dot"
+                style={{
+                  background: item.color || "#2563eb",
+                }}
+              />
+
+              <span>{item.label}</span>
+            </li>
+          ))}
+        </ul>
+
+        {/* CENTER - PIE */}
+        <div className="xd-pie-wrap">
+          <div
+            className="xd-pie-chart"
+            style={{
+              background: `conic-gradient(${gradient})`,
+            }}
+          />
+
+          <div className="xd-pie-center">
+            {total}
+          </div>
+        </div>
+
+        {/* RIGHT - VALUES */}
+        <div className="xd-pie-values">
+          {items.map((item) => (
+            <strong key={item.label}>
+              {item.value}
+            </strong>
+          ))}
+        </div>
+
+      </div>
+
+      {/* AI PREDICTION */}
+      <div className={`xd-pred ${predTone}`}>
+        <span className="xd-pred-icon">
+          {predIcon}
+        </span>
+
+        <p>
+          <b>AI Prediction</b>
+          {prediction}
+        </p>
+      </div>
+
+    </section>
+  );
+};
+
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthly = [6, 4, 9, 12, 17, 24, 20, 12, 16, 10, 14, 9];
 
@@ -54,9 +153,14 @@ const ChartCards: React.FC = () => (
       predTone="green" predIcon={<TrendingUp size={20} />}
       prediction="Orders from ITC and Logitech are likely to increase by 25% next month based on historical patterns."
     />
-    <BarCard
-      title="Orders By Department" legend="Order Count" icon={<Users size={15} />}
-      items={[{ label: "ADM", value: 80 }, { label: "HR", value: 200 }, { label: "PDT", value: 130 }, { label: "IT", value: 160 }]}
+    <PieCard
+      title="Orders By Department" legend="Order Count" icon={<PieChart size={15} />}
+      items={[
+        { label: "ADM", value: 80, color: "#7c3aed" },
+        { label: "HR", value: 200, color: "#3b82f6" },
+        { label: "PDT", value: 130, color: "#f59e0b" },
+        { label: "IT", value: 160, color: "#10b981" },
+      ]}
       ticks={[200, 150, 100, 50, 0]}
       predTone="orange" predIcon={<Lightbulb size={20} />}
       prediction="IT department spend may exceed its allocated budget by 8% if the current trend continues."
