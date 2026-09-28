@@ -75,10 +75,24 @@ const PieCard: React.FC<Props> = ({
         </span>
       </header>
 
-      {/* PIE CONTENT */}
+      {/* PIE + LEGEND + VALUES */}
       <div className="xd-pie-layout">
 
-        {/* LEFT - LEGEND */}
+        {/* LEFT - PIE */}
+        <div className="xd-pie-wrap">
+          <div
+            className="xd-pie-chart"
+            style={{
+              background: `conic-gradient(${gradient})`,
+            }}
+          />
+
+          <div className="xd-pie-center">
+            {total}
+          </div>
+        </div>
+
+        {/* CENTER - LEGEND */}
         <ul className="xd-pie-legend">
           {items.map((item) => (
             <li key={item.label}>
@@ -93,20 +107,6 @@ const PieCard: React.FC<Props> = ({
             </li>
           ))}
         </ul>
-
-        {/* CENTER - PIE */}
-        <div className="xd-pie-wrap">
-          <div
-            className="xd-pie-chart"
-            style={{
-              background: `conic-gradient(${gradient})`,
-            }}
-          />
-
-          <div className="xd-pie-center">
-            {total}
-          </div>
-        </div>
 
         {/* RIGHT - VALUES */}
         <div className="xd-pie-values">
@@ -134,7 +134,6 @@ const PieCard: React.FC<Props> = ({
     </section>
   );
 };
-
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthly = [6, 4, 9, 12, 17, 24, 20, 12, 16, 10, 14, 9];
 
