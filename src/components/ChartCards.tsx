@@ -47,16 +47,15 @@ const PieCard: React.FC<Props> = ({
 }) => {
   const total = items.reduce((sum, item) => sum + item.value, 0);
 
-  let accumulated = 0;
+  const gradient = items.map((item, index) => {
+    const previousTotal = items
+      .slice(0, index)
+      .reduce((sum, previous) => sum + previous.value, 0);
+    const start = (previousTotal / total) * 100;
+    const end = ((previousTotal + item.value) / total) * 100;
 
-  const gradient = items
-    .map((item) => {
-      const start = accumulated;
-      accumulated += (item.value / total) * 100;
-
-      return `${item.color || "#2563eb"} ${start}% ${accumulated}%`;
-    })
-    .join(", ");
+    return `${item.color || "#38BDF8"} ${start}% ${end}%`;
+  }).join(", ");
 
   return (
     <section className="xd-panel xd-chart xd-pie-card">
@@ -99,7 +98,7 @@ const PieCard: React.FC<Props> = ({
               <span
                 className="xd-pie-dot"
                 style={{
-                  background: item.color || "#2563eb",
+                  background: item.color || "#38BDF8",
                 }}
               />
 
@@ -155,10 +154,10 @@ const ChartCards: React.FC = () => (
     <PieCard
       title="Orders By Department" legend="Order Count" icon={<PieChart size={15} />}
       items={[
-        { label: "ADM", value: 80, color: "#7c3aed" },
-        { label: "HR", value: 200, color: "#3b82f6" },
-        { label: "PDT", value: 130, color: "#f59e0b" },
-        { label: "IT", value: 160, color: "#10b981" },
+        { label: "ADM", value: 80, color: "#17222C" },
+        { label: "HR", value: 200, color: "#38BDF8" },
+        { label: "PDT", value: 130, color: "#F59E0B" },
+        { label: "IT", value: 160, color: "#22C55E" },
       ]}
       ticks={[200, 150, 100, 50, 0]}
       predTone="orange" predIcon={<Lightbulb size={20} />}

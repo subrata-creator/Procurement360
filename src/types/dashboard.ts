@@ -9,6 +9,8 @@ export interface KpiItem {
   trendUp?: boolean;     // true = green arrow up, false = red arrow down
   spark?: number[];      // small sparkline series
   progressLabel?: string;
+  insight?: string;
+  insightTrend?: "positive" | "attention";
 }
 
 export interface Task {
