@@ -32,7 +32,11 @@ const PrJourney: React.FC<Props> = ({ onViewPending }) => {
 
       <div className="xd-journey">
         {stages.map((s, i) => (
-          <div className={`xd-stage ${s.tone}`} key={s.label}>
+          <div
+            className={`xd-stage ${s.tone}`}
+            key={s.label}
+            title={`${s.count} requests at ${s.label} · ${Math.round((s.count / total) * 100)}% of created requests. Processing time and aging data are not available in this sample.`}
+          >
             <div className="xd-stage-head"><span>{i + 1}</span><strong>{s.label}</strong></div>
             <div className="xd-stage-body">
               <span className="xd-stage-icon">{s.icon}</span>

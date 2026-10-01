@@ -46,6 +46,36 @@ const Spark: React.FC<{ data: number[] }> = ({ data }) => {
   );
 };
 
+const KpiValue: React.FC<{ value: string }> = ({ value }) => {
+  const numericMatch = value.match(/^([^0-9]*)([\d,]+(?:\.\d+)?)(.*)$/);
+  const prefix = numericMatch?.[1] ?? "";
+  const numericText = numericMatch?.[2];
+  const target = numericMatch ? Number(numericMatch[2].replace(/,/g, "")) : 0;
+  const suffix = numericMatch?.[3] ?? "";
+  const decimals = numericMatch?.[2].split(".")[1]?.length ?? 0;
+  const valueRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const valueElement = valueRef.current;
+    if (!numericText || !valueElement || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const startedAt = performance.now();
+    let frame = 0;
+    const animate = (now: number) => {
+      const progress = Math.min((now - startedAt) / 650, 1);
+      const eased = 1 - (1 - progress) ** 3;
+      valueElement.textContent = `${prefix}${(target * eased).toFixed(decimals)}${suffix}`;
+      if (progress < 1) frame = window.requestAnimationFrame(animate);
+    };
+
+    valueElement.textContent = `${prefix}${(0).toFixed(decimals)}${suffix}`;
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [decimals, numericText, prefix, suffix, target]);
+
+  return <strong ref={valueRef} aria-label={value}>{value}</strong>;
+};
+
 const KpiInsight: React.FC<{ label: string; text: string; tone: string; trend?: KpiItem["insightTrend"] }> = ({ label, text, tone, trend }) => {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0, placement: "above" as "above" | "below" });
@@ -184,11 +214,14 @@ const KpiBanner: React.FC = () => (
           <span className="xd-kpi-icon">{icons[k.icon]}</span>
         </div>
         <div className="xd-kpi-mid">
-          <strong>{k.value}</strong>
+          <KpiValue value={k.value} />
           {k.trend && (
-            <span className={`xd-trend ${k.trendUp ? "up" : "down"}`}>
-              {k.trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              {k.trend}
+            <span className="xd-kpi-trend-group">
+              <span className={`xd-trend ${k.trendUp ? "up" : "down"}`}>
+                {k.trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                {k.trendUp ? "+" : "−"}{k.trend}
+              </span>
+              <small>vs last month</small>
             </span>
           )}
         </div>

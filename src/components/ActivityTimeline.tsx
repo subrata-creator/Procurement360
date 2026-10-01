@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { FileText, ReceiptText } from "lucide-react";
 import type { Activity } from "../types/dashboard";
 
 const activities: Activity[] = [
@@ -17,6 +18,16 @@ const ActivityTimeline: React.FC = () => {
 
   const list = filter === "All" ? activities : activities.filter((a) => a.type === filter);
   const shown = list.slice(0, visible);
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+  const grouped = shown.reduce<Record<string, Activity[]>>((groups, activity) => {
+    const activityDate = new Date(activity.date);
+    const dayStart = new Date(activityDate.getFullYear(), activityDate.getMonth(), activityDate.getDate()).getTime();
+    const group = dayStart === todayStart ? "Today" : dayStart === yesterdayStart ? "Yesterday" : "Earlier";
+    (groups[group] ??= []).push(activity);
+    return groups;
+  }, {});
 
   return (
     <aside className="xa">
@@ -30,16 +41,23 @@ const ActivityTimeline: React.FC = () => {
       </div>
 
       <div className="xa-list">
-        {shown.map((a) => (
-          <div className="xa-item" key={a.id}>
-            <span className="xa-dot">✓</span>
-            <div>
-              <div className="xa-title">{a.title}</div>
-              <div className="xa-meta">{a.actor ? `${a.actor} | ` : ""}{a.date}</div>
-            </div>
-            <span className={`xa-badge ${a.type === "Invoice" ? "inv" : "pr"}`}>{a.type}</span>
-          </div>
-        ))}
+        {(["Today", "Yesterday", "Earlier"] as const).map((group) => grouped[group]?.length ? (
+          <section className="xa-group" key={group}>
+            <h3>{group}</h3>
+            {grouped[group].map((activity) => (
+              <div className="xa-item" key={activity.id}>
+                <span className={`xa-dot ${activity.type === "Invoice" ? "invoice" : "pr"}`}>
+                  {activity.type === "Invoice" ? <ReceiptText size={11} /> : <FileText size={11} />}
+                </span>
+                <div>
+                  <div className="xa-title">{activity.title}</div>
+                  <div className="xa-meta">{activity.actor ? `${activity.actor} | ` : ""}{activity.date}</div>
+                </div>
+                <span className={`xa-badge ${activity.type === "Invoice" ? "inv" : "pr"}`}>{activity.type}</span>
+              </div>
+            ))}
+          </section>
+        ) : null)}
       </div>
 
       {shown.length < list.length && (

@@ -18,10 +18,12 @@ type CopilotMessage = {
 
 const suggestions = [
   "Why are purchase requests delayed?",
-  "Identify procurement bottlenecks",
-  "Show suppliers with the highest order value",
+  "Which suppliers are receiving the most orders?",
+  "Where can we reduce procurement spend?",
+  "Show invoices requiring attention",
+  "Analyze supplier concentration risk",
   "Summarize this month's procurement performance",
-  "Identify potential budget risks",
+  "Show departments likely to exceed budget",
 ];
 
 const initialMessage: CopilotMessage = {
@@ -49,10 +51,38 @@ function answerFor(question: string): Omit<CopilotMessage, "id" | "role"> {
     };
   }
 
-  if (normalized.includes("supplier") || normalized.includes("order value")) {
+  if (normalized.includes("concentration")) {
     return {
-      text: "The current dashboard reports order counts, not supplier order values. By count, ITC leads with 100 orders, followed by Logitech with 92.",
+      text: "By displayed order count, ITC represents 31% of the listed supplier orders and Logitech 28%. Spend concentration is not available in the current dataset.",
       sources: ["Suppliers By Orders chart"],
+    };
+  }
+
+  if (normalized.includes("supplier") || normalized.includes("order value") || normalized.includes("most orders")) {
+    return {
+      text: "The dashboard reports order counts rather than order values. By count, ITC leads with 100 orders, followed by Logitech with 92 and TechScan with 70.",
+      sources: ["Suppliers By Orders chart"],
+    };
+  }
+
+  if (normalized.includes("invoice")) {
+    return {
+      text: "There are 2 invoice approval tasks in the current work queue. Due dates are not included in this dataset, so confirm urgency with the assigned owner.",
+      sources: ["My Procurement Tasks"],
+    };
+  }
+
+  if (normalized.includes("spend") || normalized.includes("saving") || normalized.includes("reduce cost")) {
+    return {
+      text: "IT is at 85% of its budget allocation, which is the clearest current area to review. Category-level spend and negotiated savings data are not connected yet.",
+      sources: ["Allocated Budget KPI", "Budget Utilization Insight"],
+    };
+  }
+
+  if (normalized.includes("department") || normalized.includes("exceed budget")) {
+    return {
+      text: "Information Technology is currently at 85% of its allocation. The dashboard does not include department forecasts, so treat this as a utilization watch rather than a projected overrun.",
+      sources: ["Allocated Budget KPI"],
     };
   }
 
@@ -79,8 +109,10 @@ function answerFor(question: string): Omit<CopilotMessage, "id" | "role"> {
 export default function ProcurementCopilot({ onClose, onViewPending }: Props) {
   const [messages, setMessages] = useState<CopilotMessage[]>([initialMessage]);
   const [input, setInput] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
   const nextId = useRef(2);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const thinkingTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -94,16 +126,22 @@ export default function ProcurementCopilot({ onClose, onViewPending }: Props) {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
+  useEffect(() => () => {
+    if (thinkingTimerRef.current !== null) window.clearTimeout(thinkingTimerRef.current);
+  }, []);
+
   const ask = (question: string) => {
     const cleanedQuestion = question.trim();
-    if (!cleanedQuestion) return;
-    const answer = answerFor(cleanedQuestion);
-    setMessages((current) => [
-      ...current,
-      { id: nextId.current++, role: "user", text: cleanedQuestion },
-      { id: nextId.current++, role: "assistant", ...answer },
-    ]);
+    if (!cleanedQuestion || isThinking) return;
+    setMessages((current) => [...current, { id: nextId.current++, role: "user", text: cleanedQuestion }]);
     setInput("");
+    setIsThinking(true);
+    thinkingTimerRef.current = window.setTimeout(() => {
+      const answer = answerFor(cleanedQuestion);
+      setMessages((current) => [...current, { id: nextId.current++, role: "assistant", ...answer }]);
+      setIsThinking(false);
+      thinkingTimerRef.current = null;
+    }, 520);
   };
 
   const submitQuestion = (event: FormEvent<HTMLFormElement>) => {
@@ -156,6 +194,12 @@ export default function ProcurementCopilot({ onClose, onViewPending }: Props) {
               </div>
             </article>
           ))}
+          {isThinking && (
+            <article className="copilot-message assistant copilot-thinking" aria-label="Copilot is thinking">
+              <span className="copilot-avatar"><Bot size={14} /></span>
+              <div className="copilot-thinking-bubble"><span /><span /><span /></div>
+            </article>
+          )}
           <div ref={threadEndRef} />
         </div>
 
@@ -177,7 +221,7 @@ export default function ProcurementCopilot({ onClose, onViewPending }: Props) {
             placeholder="Ask about requests, suppliers, or budget..."
             aria-label="Ask Procurement Copilot"
           />
-          <button type="submit" disabled={!input.trim()} aria-label="Send question">
+          <button type="submit" disabled={!input.trim() || isThinking} aria-label="Send question">
             <Send size={16} />
           </button>
         </form>

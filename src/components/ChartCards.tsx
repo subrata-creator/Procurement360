@@ -1,14 +1,13 @@
-import React from "react";
-import { BarChart3, ShoppingCart, PieChart, TrendingUp, Lightbulb, Sparkles } from "lucide-react";
+import React, { useState } from "react";
+import { BarChart3, ShoppingCart, PieChart } from "lucide-react";
 
-type Item = { label: string; value: number; color?: string };
-type Props = {
-  title: string; legend: string; icon: React.ReactNode; items: Item[];
-  ticks: number[]; predTone: "violet" | "green" | "orange"; predIcon: React.ReactNode; prediction: string;
-};
+type Item = { label: string; value: number; color?: string; comparison?: string; observation?: string };
+type CardProps = { title: string; legend: string; icon: React.ReactNode; items: Item[] };
+type BarCardProps = CardProps & { ticks: number[] };
 
-const BarCard: React.FC<Props> = ({ title, legend, icon, items, ticks, predTone, predIcon, prediction }) => {
+const BarCard: React.FC<BarCardProps> = ({ title, legend, icon, items, ticks }) => {
   const max = ticks[0];
+  const [activeItem, setActiveItem] = useState<string | null>(null);
   return (
     <section className="xd-panel xd-chart">
       <header className="xd-chart-head">
@@ -21,29 +20,39 @@ const BarCard: React.FC<Props> = ({ title, legend, icon, items, ticks, predTone,
         <div className="xd-bars">
           <div className="xd-grid">{ticks.map((t) => <span key={t} />)}</div>
           {items.map((it) => (
-            <div className="xd-col" key={it.label} title={`${it.label}: ${it.value}`}>
+            <div
+              className={`xd-col${activeItem === it.label ? " active" : ""}`}
+              key={it.label}
+              tabIndex={0}
+              aria-label={`${it.label}: ${it.value}${it.comparison ? `, ${it.comparison}` : ""}`}
+              onMouseEnter={() => setActiveItem(it.label)}
+              onMouseLeave={() => setActiveItem(null)}
+              onFocus={() => setActiveItem(it.label)}
+              onBlur={() => setActiveItem(null)}
+            >
               <div className="xd-bar" style={{ height: `${(it.value / max) * 100}%` }} />
+              {activeItem === it.label && (
+                <div className="xd-chart-tooltip" role="status">
+                  <strong>{it.label}</strong>
+                  <span>{legend}: {it.value}</span>
+                  {it.comparison && <small>{it.comparison}</small>}
+                  {it.observation && <small className="ai-note"><span>AI</span>{it.observation}</small>}
+                </div>
+              )}
               <small>{it.label}</small>
             </div>
           ))}
         </div>
       </div>
-      <div className={`xd-pred ${predTone}`}>
-        <span className="xd-pred-icon">{predIcon}</span>
-        <p><b>AI Prediction</b>{prediction}</p>
-      </div>
     </section>
   );
 };
 
-const PieCard: React.FC<Props> = ({
+const PieCard: React.FC<CardProps> = ({
   title,
   legend,
   icon,
   items,
-  predTone,
-  predIcon,
-  prediction,
 }) => {
   const total = items.reduce((sum, item) => sum + item.value, 0);
 
@@ -94,7 +103,7 @@ const PieCard: React.FC<Props> = ({
         {/* CENTER - LEGEND */}
         <ul className="xd-pie-legend">
           {items.map((item) => (
-            <li key={item.label}>
+            <li key={item.label} title={`${item.label}: ${item.value} orders`}>
               <span
                 className="xd-pie-dot"
                 style={{
@@ -118,18 +127,6 @@ const PieCard: React.FC<Props> = ({
 
       </div>
 
-      {/* AI PREDICTION */}
-      <div className={`xd-pred ${predTone}`}>
-        <span className="xd-pred-icon">
-          {predIcon}
-        </span>
-
-        <p>
-          <b>AI Prediction</b>
-          {prediction}
-        </p>
-      </div>
-
     </section>
   );
 };
@@ -140,16 +137,17 @@ const ChartCards: React.FC = () => (
   <div className="xd-charts">
     <BarCard
       title="RFQ Breakout By Months" legend="RFQ Count" icon={<BarChart3 size={15} />}
-      items={months.map((m, i) => ({ label: m, value: monthly[i] }))} ticks={[24, 18, 12, 6, 0]}
-      predTone="violet" predIcon={<Sparkles size={20} />}
-      prediction="RFQ volume is expected to increase by 18% in May 2026 based on current trend."
+      items={months.map((month, index) => ({
+        label: month,
+        value: monthly[index],
+        comparison: index === 0 ? "Baseline month" : `${monthly[index] >= monthly[index - 1] ? "+" : ""}${monthly[index] - monthly[index - 1]} vs ${months[index - 1]}`,
+        ...(index === 4 && { observation: "Current forecast indicates an 18% increase next month." }),
+      }))} ticks={[24, 18, 12, 6, 0]}
     />
     <BarCard
       title="Suppliers By Orders" legend="Order Count" icon={<ShoppingCart size={15} />}
-      items={[{ label: "Dell Inc.", value: 25 }, { label: "TechScan", value: 70 }, { label: "ITC", value: 100 }, { label: "Logitech", value: 92 }, { label: "Pidilite", value: 40 }]}
+      items={[{ label: "Dell Inc.", value: 25 }, { label: "TechScan", value: 70 }, { label: "ITC", value: 100, observation: "Highest displayed order count." }, { label: "Logitech", value: 92 }, { label: "Pidilite", value: 40 }]}
       ticks={[100, 75, 50, 25, 0]}
-      predTone="green" predIcon={<TrendingUp size={20} />}
-      prediction="Orders from ITC and Logitech are likely to increase by 25% next month based on historical patterns."
     />
     <PieCard
       title="Orders By Department" legend="Order Count" icon={<PieChart size={15} />}
@@ -159,9 +157,6 @@ const ChartCards: React.FC = () => (
         { label: "PDT", value: 130, color: "#F59E0B" },
         { label: "IT", value: 160, color: "#22C55E" },
       ]}
-      ticks={[200, 150, 100, 50, 0]}
-      predTone="orange" predIcon={<Lightbulb size={20} />}
-      prediction="IT department spend may exceed its allocated budget by 8% if the current trend continues."
     />
   </div>
 );
