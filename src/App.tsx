@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Header from "./components/Header";
-import Dashboard from "./Pages/Dashboard"; // <-- new AI dashboard page
+import Dashboard from "./Pages/Dashboard";
 import RfqPage from "./Pages/RfqPage";
 import OrdersPage from "./Pages/OrdersPage";
 import PurchaseRequest from "./Pages/PurchaseRequest";
