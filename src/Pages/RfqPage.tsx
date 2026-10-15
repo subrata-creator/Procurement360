@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  Award,
   Building2,
   CalendarDays,
   ChevronDown,
@@ -8,8 +9,10 @@ import {
   ChevronRight,
   CircleAlert,
   CircleCheck,
+  ClipboardList,
   Clock3,
   MessageSquareText,
+  Percent,
   Plus,
   Search,
   Sparkles,
@@ -89,9 +92,9 @@ const RfqPage: React.FC = () => {
   const awardRate = Math.round((rewardedCount / (rfqs.length || 1)) * 100);
 
   const metrics = [
-    { label: "Total RFQs", value: rfqs.length, caption: "RFQ records", progress: 100, icon: <ChevronRight size={0} style={{ display: "none" }} />, tone: "blue" },
-    { label: "Avg Response Rate", value: `${avgResponseRate}%`, caption: `${responseTotals.received} of ${responseTotals.invited} invited suppliers responded`, progress: avgResponseRate, icon: <MessageSquareText size={18} />, tone: "violet" },
-    { label: "Award Rate", value: `${awardRate}%`, caption: `${rewardedCount} of ${rfqs.length} RFQs rewarded`, progress: awardRate, icon: <CircleCheck size={18} />, tone: "green" },
+    { label: "Total RFQs", value: rfqs.length, caption: "RFQ records", progress: 100, icon: <ClipboardList size={18} />, tone: "blue" },
+    { label: "Avg Response Rate", value: `${avgResponseRate}%`, caption: `${responseTotals.received} of ${responseTotals.invited} invited suppliers responded`, progress: avgResponseRate, icon: <Percent size={18} />, tone: "violet" },
+    { label: "Award Rate", value: `${awardRate}%`, caption: `${rewardedCount} of ${rfqs.length} RFQs rewarded`, progress: awardRate, icon: <Award size={18} />, tone: "green" },
     { label: "Needs Attention", value: unlinkedCount, caption: "RFQs with no linked PR", progress: Math.round((unlinkedCount / (rfqs.length || 1)) * 100), icon: <CircleAlert size={18} />, tone: "amber" },
   ];
 
