@@ -1,88 +1,101 @@
 import React, { useMemo, useState } from "react";
+import { CircleCheck, ClipboardList, Download, MessageSquareText, Plus, Search } from "lucide-react";
+import { rfqs } from "../data/rfqs";
 
-type RfqStatus = "Rewarded" | "Approved";
-
-interface RfqRow {
-  refNo: string;
-  title: string;
-  pr: string;
-  po: string;
-  responses: string;
-  supplier: string;
-  createdBy: string;
-  createdDate: string;
-  status: RfqStatus;
-}
-
-const rfqs: RfqRow[] = [
-  { refNo: "RFQ-2026-052", title: "RFQ - IT Equipments", pr: "PR-2026-088", po: "PO-2026-032", responses: "3/3", supplier: "Logitech", createdBy: "Ashish Bhatia", createdDate: "01/04/2026", status: "Rewarded" },
-  { refNo: "RFQ-2026-051", title: "RFQ for Printer", pr: "No PR available", po: "No PO available", responses: "1/2", supplier: "N/A", createdBy: "Ashish Bhatia", createdDate: "18/03/2026", status: "Approved" },
-  { refNo: "RFQ-2026-050", title: "RFQ", pr: "No PR available", po: "No PO available", responses: "1/2", supplier: "N/A", createdBy: "Ashish Bhatia", createdDate: "17/03/2026", status: "Approved" },
-  { refNo: "RFQ-2026-049", title: "RFQ", pr: "No PR available", po: "No PO available", responses: "0/2", supplier: "N/A", createdBy: "Ashish Bhatia", createdDate: "17/03/2026", status: "Approved" },
-  { refNo: "RFQ-2026-048", title: "RFQ", pr: "PR-2026-087", po: "No PO available", responses: "1/2", supplier: "Dell Inc.", createdBy: "Ashish Bhatia", createdDate: "03/02/2026", status: "Rewarded" },
-  { refNo: "RFQ-2026-047", title: "RFQ Pens", pr: "PR-2026-085", po: "PO-2026-028", responses: "2/2", supplier: "ITC", createdBy: "Ashish Bhatia", createdDate: "03/02/2026", status: "Rewarded" },
-  { refNo: "RFQ-2026-046", title: "RFQ ST - IT", pr: "No PR available", po: "No PO available", responses: "1/2", supplier: "Dell Inc.", createdBy: "Ashish Bhatia", createdDate: "30/01/2026", status: "Rewarded" },
-];
+const responseTotals = rfqs.reduce((totals, row) => {
+  const [received, invited] = row.responses.split("/").map(Number);
+  return { received: totals.received + received, invited: totals.invited + invited };
+}, { received: 0, invited: 0 });
+const rewardedCount = rfqs.filter((row) => row.status === "Rewarded").length;
+const approvedCount = rfqs.filter((row) => row.status === "Approved").length;
 
 const metrics = [
-  { label: "Rewarded Suppliers", value: "24", icon: "♧", tone: "blue" },
-  { label: "Published To Suppliers", value: "43", icon: "▣", tone: "purple" },
-  { label: "Response Due This Week", value: "0", icon: "⇆", tone: "amber" },
-  { label: "Overdue RFQs", value: "39", icon: "▣", tone: "pink" },
+  { label: "Total RFQs", value: rfqs.length, caption: "RFQ records", progress: 100, icon: <ClipboardList size={18} />, tone: "blue" },
+  { label: "Rewarded RFQs", value: rewardedCount, caption: `${Math.round((rewardedCount / (rfqs.length || 1)) * 100)}% of RFQs`, progress: Math.round((rewardedCount / (rfqs.length || 1)) * 100), icon: <CircleCheck size={18} />, tone: "green" },
+  { label: "Approved RFQs", value: approvedCount, caption: `${Math.round((approvedCount / (rfqs.length || 1)) * 100)}% of RFQs`, progress: Math.round((approvedCount / (rfqs.length || 1)) * 100), icon: <CircleCheck size={18} />, tone: "amber" },
+  { label: "Supplier Responses", value: `${responseTotals.received}/${responseTotals.invited}`, caption: "Received / invited", progress: Math.round((responseTotals.received / (responseTotals.invited || 1)) * 100), icon: <MessageSquareText size={18} />, tone: "violet" },
 ];
 
 const RfqPage: React.FC = () => {
   const [search, setSearch] = useState("");
   const visibleRows = useMemo(() => {
-    const query = search.toLowerCase();
+    const query = search.trim().toLowerCase();
     return rfqs.filter((row) => Object.values(row).some((value) => value.toLowerCase().includes(query)));
   }, [search]);
 
   return (
-    <main className="rfq-page">
-      <div className="rfq-heading">
+    <main className="purchase-page rfq-page">
+      <div className="purchase-heading rfq-heading">
         <div>
           <h1>Request For Quotations</h1>
           <p>Manage and track all RFQs</p>
         </div>
-        <label className="rfq-global-search"><span>⌕</span><input placeholder="Search RFQs..." /></label>
-        <button className="rfq-notification" type="button" aria-label="Notifications">♧<i /></button>
+        <label className="purchase-search rfq-search">
+          <Search size={15} aria-hidden="true" />
+          <input aria-label="Search" placeholder="Search RFQs, PRs, POs, titles, suppliers..." value={search} onChange={(event) => setSearch(event.target.value)} />
+        </label>
       </div>
 
-      <section className="rfq-metrics">
+      <section className="xd-kpis rfq-metrics" aria-label="RFQ metrics">
         {metrics.map((metric) => (
-          <article className={`rfq-metric ${metric.tone}`} key={metric.label}>
-            <div className="rfq-metric-icon">{metric.icon}</div>
-            <div><span>{metric.label}</span><strong>{metric.value}</strong></div>
-            <div className="metric-spark" aria-hidden="true" />
+          <article className={`xd-kpi xd-${metric.tone}`} key={metric.label}>
+            <div className="xd-kpi-top">
+              <span className="xd-kpi-label">{metric.label}</span>
+              <span className="xd-kpi-icon">{metric.icon}</span>
+            </div>
+            <div className="xd-kpi-mid"><strong>{metric.value}</strong></div>
+            <div className="xd-kpi-progress-wrap">
+              <span className="xd-kpi-cap">{metric.caption}</span>
+              <div className="xd-progress" role="progressbar" aria-label={metric.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={metric.progress}>
+                <span style={{ width: `${Math.max(metric.progress, 2)}%` }} />
+              </div>
+            </div>
           </article>
         ))}
       </section>
 
-      <section className="rfq-card">
-        <div className="rfq-card-heading">
-          <h2><span>➤</span> Request For Quotations</h2>
-          <div className="rfq-card-actions"><button type="button" className="export-button" aria-label="Export RFQs">▣</button><button type="button" className="create-rfq">＋ Create RFQ</button></div>
+      <section className="purchase-card rfq-records-card">
+        <div className="purchase-card-heading">
+          <div className="purchase-title">
+            <ClipboardList size={16} />
+            <div className="purchase-title-copy">
+              <strong>Request For Quotations</strong>
+              <span>{visibleRows.length} of {rfqs.length} RFQs</span>
+            </div>
+          </div>
+          <div className="purchase-actions">
+            <button type="button" className="export-button" aria-label="Export RFQs"><Download size={14} /></button>
+            <button type="button" className="dashboard-create-button"><span className="create-plus"><Plus size={16} /></span>Create RFQ</button>
+          </div>
         </div>
-        <div className="rfq-filters">
-          {[
-            ["Ref No", "Search..."], ["Title", "Search..."], ["Associated PR", "Search..."], ["Associated PO", "Search..."], ["Responses", "Search..."], ["Rewarded Supplier", "Search..."], ["Created By", "Search..."],
-          ].map(([label, placeholder], index) => (
-            <label key={label}><span>{label}</span><input value={index === 0 ? search : undefined} onChange={index === 0 ? (event) => setSearch(event.target.value) : undefined} placeholder={placeholder} /></label>
-          ))}
-          <label><span>Created Date</span><div className="date-filter"><b>▣</b><input placeholder="Select date" /><i>⚱</i></div></label>
-          <label><span>Status</span><select defaultValue="All"><option>All Status</option><option>Rewarded</option><option>Approved</option></select></label>
-        </div>
-        <div className="rfq-table-wrap">
-          <table className="rfq-table">
-            <thead><tr><th>#</th><th>Ref No <b>↕</b></th><th>Title</th><th>Associated PR <b>↕</b></th><th>Associated PO <b>↕</b></th><th>Responses <b>↕</b></th><th>Rewarded Supplier <b>↕</b></th><th>Created By <b>↕</b></th><th>Created Date <b>↕</b></th><th>Status <b>↕</b></th></tr></thead>
-            <tbody>{visibleRows.map((row, index) => <tr key={row.refNo}>
-              <td>{index + 1}</td><td className="link-cell">{row.refNo}</td><td>{row.title}</td><td className={row.pr.startsWith("PR-") ? "link-cell" : "muted-cell"}>{row.pr}</td><td className={row.po.startsWith("PO-") ? "link-cell" : "muted-cell"}>{row.po}</td><td>{row.responses}</td>
-              <td><span className={`supplier-cell ${row.supplier === "N/A" ? "supplier-na" : ""}`}>{row.supplier !== "N/A" && <b>{row.supplier === "Logitech" ? "G" : row.supplier === "ITC" ? "△" : "D"}</b>}{row.supplier}</span></td><td><span className="creator-cell"><b>👤</b>{row.createdBy}</span></td><td><span className="date-cell">▣ {row.createdDate}</span></td><td><span className={`status-pill ${row.status.toLowerCase()}`}>{row.status === "Rewarded" ? "▣" : "◉"} {row.status}</span></td>
-            </tr>)}</tbody>
+        <div className="purchase-table-wrap">
+          <table className="purchase-table rfq-table">
+            <thead>
+              <tr><th>#</th><th>RFQ Ref</th><th>Title</th><th>Associated PR</th><th>Associated PO</th><th>Responses</th><th>Supplier</th><th>Created By</th><th>Created Date</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row, index) => (
+                <tr key={row.refNo}>
+                  <td className="purchase-row-number">{String(index + 1).padStart(2, "0")}</td>
+                  <td className="purchase-link">{row.refNo}</td>
+                  <td className="rfq-title-cell">{row.title}</td>
+                  <td className={row.pr.startsWith("PR-") ? "purchase-link" : "purchase-muted"}>{row.pr.startsWith("PR-") ? row.pr : "Not linked"}</td>
+                  <td className={row.po.startsWith("PO-") ? "purchase-link" : "purchase-muted"}>{row.po.startsWith("PO-") ? row.po : "Not linked"}</td>
+                  <td className="rfq-response-count">{row.responses}</td>
+                  <td>{row.supplier === "N/A" ? <span className="purchase-muted">Not assigned</span> : row.supplier}</td>
+                  <td>{row.createdBy}</td>
+                  <td>{row.createdDate}</td>
+                  <td><span className={`rfq-status-pill ${row.status.toLowerCase()}`}>{row.status}</span></td>
+                </tr>
+              ))}
+              {visibleRows.length === 0 && <tr><td className="purchase-empty-state" colSpan={10}>No RFQs match this search.</td></tr>}
+            </tbody>
           </table>
         </div>
-        <div className="rfq-footer"><span>Showing <strong>1-{visibleRows.length}</strong> of <strong>39</strong> results</span><div className="rfq-pagination"><button type="button">‹</button><button type="button" className="selected">1</button><button type="button">›</button></div></div>
+        <div className="purchase-footer">
+          <span>Showing <strong>{visibleRows.length ? `1-${visibleRows.length}` : "0"}</strong> of <strong>{rfqs.length}</strong> RFQs</span>
+          <div className="purchase-pagination"><button type="button" aria-label="Previous page" disabled><span aria-hidden="true">‹</span></button><button type="button" className="selected" aria-label="Page 1">1</button><button type="button" aria-label="Next page" disabled><span aria-hidden="true">›</span></button></div>
+        </div>
       </section>
     </main>
   );

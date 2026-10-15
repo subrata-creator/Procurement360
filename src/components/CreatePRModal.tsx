@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, Check, Plus, RotateCcw, Send, Sparkles, X } from "lucide-react";
+import { addPurchaseRequest, getNextPurchaseRequestRef, type PurchaseRequestRecord } from "../Pages/Purchaserequestsdata";
 
 type Product = {
   code: string;
@@ -17,6 +18,7 @@ const products: Product[] = [
 
 type Props = {
   onClose: () => void;
+  onCreate?: (request: PurchaseRequestRecord) => void;
 };
 
 type RequestLine = {
@@ -31,12 +33,28 @@ type Message = {
   insightLabel?: string;
 };
 
-type Stage = "product" | "quantity" | "more" | "title" | "review" | "done";
+type Stage = "product" | "quantity" | "more" | "title" | "dueDate" | "review" | "done";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 });
+
+function formatUsd(amount: number): string {
+  return currency.format(amount).replace("$", "USD ");
+}
+
+function isoToUsDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return `${month}/${day}/${year}`;
+}
+
+function getTodayIsoDate(): string {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${today.getFullYear()}-${month}-${day}`;
+}
 
 const initialMessages: Message[] = [
   {
@@ -58,12 +76,14 @@ const initialMessages: Message[] = [
   },
 ];
 
-export default function CreatePRModal({ onClose }: Props) {
+export default function CreatePRModal({ onClose, onCreate }: Props) {
   const [messages, setMessages] = useState(initialMessages);
   const [stage, setStage] = useState<Stage>("product");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [requestLines, setRequestLines] = useState<RequestLine[]>([]);
   const [requestTitle, setRequestTitle] = useState("");
+  const [requiredDate, setRequiredDate] = useState("");
+  const [createdRequestRef, setCreatedRequestRef] = useState("");
   const [input, setInput] = useState("");
   const nextMessageId = useRef(4);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -147,12 +167,72 @@ export default function CreatePRModal({ onClose }: Props) {
 
     if (stage === "title") {
       setRequestTitle(value);
-      setStage("review");
+      setStage("dueDate");
       addMessages(
         { role: "user", text: value },
-        { role: "assistant", text: "Here is your draft. You can review it before finishing." },
+        { role: "assistant", text: "When do you need these items delivered? Choose a required-by date." },
+      );
+      return;
+    }
+
+    if (stage === "dueDate") {
+      const selectedDate = new Date(`${value}T00:00:00`);
+      const today = new Date(`${getTodayIsoDate()}T00:00:00`);
+      if (Number.isNaN(selectedDate.getTime()) || selectedDate < today) {
+        addMessages({ role: "assistant", text: "Choose a valid required-by date today or later." });
+        return;
+      }
+      setRequiredDate(value);
+      setStage("review");
+      addMessages(
+        { role: "user", text: isoToUsDate(value) },
+        { role: "assistant", text: "Review the details below, then create your purchase request." },
       );
     }
+  };
+
+  const createRequest = () => {
+    if (!requestLines.length || !requestTitle.trim() || !requiredDate) {
+      addMessages({ role: "assistant", text: "Add an item, quantity, request title, and required-by date before creating the request." });
+      return;
+    }
+
+    const ref = getNextPurchaseRequestRef();
+    const createdOn = new Date();
+    const createdRequest: PurchaseRequestRecord = {
+      ref,
+      title: requestTitle.trim(),
+      rfq: "No RFQ available",
+      po: "No PO available",
+      createdBy: "Subrat Dey",
+      date: `${createdOn.getMonth() + 1}/${createdOn.getDate()}/${createdOn.getFullYear()}`,
+      status: "In Review",
+      requiredDate: isoToUsDate(requiredDate),
+      totalAmount: formatUsd(total),
+      priority: "Normal",
+      category: "Catalog Request",
+      justification: "Created with the Purchase Request Assistant.",
+      lineItems: requestLines.map((line, index) => ({
+        id: index + 1,
+        itemCode: line.product.code,
+        itemName: line.product.name,
+        quantity: line.quantity,
+        previousContract: "USD -",
+        unitPrice: formatUsd(line.product.unitPrice),
+        totalAmount: formatUsd(finishRequestLine(line)),
+        deliveryDate: isoToUsDate(requiredDate),
+        deliveryAddress: "Not specified",
+      })),
+    };
+
+    addPurchaseRequest(createdRequest);
+    onCreate?.(createdRequest);
+    setCreatedRequestRef(ref);
+    setStage("done");
+    addMessages(
+      { role: "user", text: "Create purchase request" },
+      { role: "assistant", text: `${ref} was created and added to the purchase request worklist.` },
+    );
   };
 
   const handleQuickAction = (action: string) => {
@@ -179,9 +259,8 @@ export default function CreatePRModal({ onClose }: Props) {
     } else if (action === "Edit items") {
       setStage("more");
       addMessages({ role: "user", text: action }, { role: "assistant", text: "You can add another product, then review the updated draft." });
-    } else if (action === "Finish draft") {
-      setStage("done");
-      addMessages({ role: "user", text: action }, { role: "assistant", text: "Your purchase request draft is ready. Submission is not connected in this demo yet." });
+    } else if (action === "Create purchase request") {
+      createRequest();
     } else if (action === "Start another request") {
       nextMessageId.current = 4;
       setMessages(initialMessages);
@@ -189,6 +268,8 @@ export default function CreatePRModal({ onClose }: Props) {
       setSelectedProduct(null);
       setRequestLines([]);
       setRequestTitle("");
+      setRequiredDate("");
+      setCreatedRequestRef("");
       setInput("");
     }
   };
@@ -197,11 +278,13 @@ export default function CreatePRModal({ onClose }: Props) {
 
   const inputPlaceholder = stage === "quantity"
     ? "Type a quantity..."
+    : stage === "dueDate"
+      ? "Choose a required-by date..."
     : stage === "title"
       ? "Type a request title..."
       : "Search or type a product name...";
 
-  const canType = stage === "product" || stage === "quantity" || stage === "title";
+  const canType = stage === "product" || stage === "quantity" || stage === "title" || stage === "dueDate";
 
   const finishRequestLine = (line: RequestLine) => line.product.unitPrice * line.quantity;
 
@@ -249,10 +332,11 @@ export default function CreatePRModal({ onClose }: Props) {
               <div className="pr-chat-summary-heading">
                 <span>REQUEST DRAFT</span>
                 <strong>{requestTitle}</strong>
+                <small>Required by {isoToUsDate(requiredDate)}</small>
               </div>
               <div className="pr-chat-summary-lines">
-                {requestLines.map((line) => (
-                  <div className="pr-chat-summary-line" key={line.product.code}>
+                {requestLines.map((line, index) => (
+                  <div className="pr-chat-summary-line" key={`${line.product.code}-${index}`}>
                     <span>{line.quantity} × {line.product.name}</span>
                     <strong>{currency.format(finishRequestLine(line))}</strong>
                   </div>
@@ -299,13 +383,14 @@ export default function CreatePRModal({ onClose }: Props) {
           {stage === "review" && (
             <div className="pr-chat-quick-replies">
               <button className="pr-chat-quick" type="button" onClick={() => handleQuickAction("Edit items")}><Plus size={13} /> Edit items</button>
-              <button className="pr-chat-quick primary" type="button" onClick={() => handleQuickAction("Finish draft")}><Check size={14} /> Finish draft</button>
+              <button className="pr-chat-quick primary" type="button" onClick={() => handleQuickAction("Create purchase request")}><Check size={14} /> Create purchase request</button>
             </div>
           )}
 
           {stage === "done" && (
             <div className="pr-chat-done-actions">
-              <p>This is a local preview. No request has been submitted.</p>
+              <p>Request {createdRequestRef} is now in your purchase request worklist.</p>
+              <button className="pr-chat-quick primary" type="button" onClick={onClose}><Check size={13} /> Done</button>
               <button className="pr-chat-quick" type="button" onClick={() => handleQuickAction("Start another request")}><RotateCcw size={13} /> Start another request</button>
             </div>
           )}
@@ -315,8 +400,9 @@ export default function CreatePRModal({ onClose }: Props) {
           <form className="pr-chat-composer" onSubmit={submitInput}>
             <input
               autoFocus
-              type={stage === "quantity" ? "number" : "text"}
-              min={stage === "quantity" ? 1 : undefined}
+              type={stage === "quantity" ? "number" : stage === "dueDate" ? "date" : "text"}
+              min={stage === "quantity" ? 1 : stage === "dueDate" ? getTodayIsoDate() : undefined}
+              step={stage === "quantity" ? 1 : undefined}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder={inputPlaceholder}
