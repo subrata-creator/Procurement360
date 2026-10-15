@@ -110,6 +110,15 @@
   flex-shrink: 0;
 }
 
+.command-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
 
 /* =========================================================
    HEADER ICON BUTTONS
@@ -1386,6 +1395,11 @@
     justify-content: flex-end;
   }
 
+  .command-tools {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .dashboard-middle {
     grid-template-columns: 1fr;
   }
@@ -1427,6 +1441,11 @@
     flex-wrap: wrap;
   }
 
+  .command-tools {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .dashboard-create-button {
     flex: 1;
   }
@@ -1449,6 +1468,11 @@
 
   .dashboard-actions {
     width: 100%;
+  }
+
+  .command-tools {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .dashboard-create-button {
