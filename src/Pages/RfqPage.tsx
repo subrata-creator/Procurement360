@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ArrowRight,
   Award,
@@ -17,9 +17,12 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { rfqs } from "../data/rfqs";
 import "../Styles/Styles.css";
 import "../Styles/RFQPage.css";
+import {getInitials } from "./Purchaserequestsdata";
+
 const RFQ_STATUS_PROGRESS: Record<string, number> = {
   Rewarded: 100,
   Approved: 50,
@@ -39,30 +42,52 @@ function isoToDmyDate(iso: string): string {
   return `${pad(day)}/${pad(month)}/${year}`;
 }
 
+// function RfqStatusRing({ status }: { status: string }) {
+//   const progress = RFQ_STATUS_PROGRESS[status] ?? 25;
+//   const tone = status.toLowerCase();
+//   return (
+//     <span
+//       className={`rfq-status-ring ${tone}`}
+//       role="img"
+//       aria-label={`${status}, ${progress}% complete`}
+//       title={`${status} · ${progress}% complete`}
+//       style={{ "--ring-progress": progress } as React.CSSProperties}
+//     >
+//       <span aria-hidden="true">
+//         {progress}
+//         <small>%</small>
+//       </span>
+//     </span>
+//   );
+// }
 function RfqStatusRing({ status }: { status: string }) {
   const progress = RFQ_STATUS_PROGRESS[status] ?? 25;
-  const tone = status.toLowerCase();
+  const tone = status.toLowerCase(); // "rewarded" | "approved"
   return (
     <span
-      className={`rfq-status-ring ${tone}`}
+      className={`purchase-status-indicator ${tone}`}
       role="img"
       aria-label={`${status}, ${progress}% complete`}
       title={`${status} · ${progress}% complete`}
-      style={{ "--ring-progress": progress } as React.CSSProperties}
+      style={{ "--status-progress": `${progress}%` } as React.CSSProperties}
     >
-      <span aria-hidden="true">
-        {progress}
-        <small>%</small>
-      </span>
+      <span aria-hidden="true">{progress}<small>%</small></span>
     </span>
   );
 }
-
 const RfqPage: React.FC = () => {
-  const createdOnDateRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [createdOnQuery, setCreatedOnQuery] = useState("");
   const [statusQuery, setStatusQuery] = useState("All Status");
+  const [askAiQuery, setAskAiQuery] = useState("");
+
+  const runAskAiQuery = () => {
+    const query = askAiQuery.trim();
+    if (!query) return;
+    setSearch(query);
+    document.getElementById("rfq-records-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -276,21 +301,42 @@ const RfqPage: React.FC = () => {
         <div className="rfq-ask-ai">
           <h2>Ask Procurement AI</h2>
           <div className="rfq-ask-ai-input">
-            <label htmlFor="rfq-ask-ai" className="sr-only">Ask Procurement AI about RFQs</label>
-            <input id="rfq-ask-ai" type="text" placeholder="Ask about response rates, suppliers, awards..." />
-            <button type="button" aria-label="Ask Procurement AI">
+            <input
+              type="text"
+              aria-label="Ask Procurement AI about RFQs"
+              placeholder="Ask about response rates, suppliers, awards..."
+              value={askAiQuery}
+              onChange={(event) => {
+                setAskAiQuery(event.target.value);
+                setSearch(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") runAskAiQuery();
+              }}
+            />
+            <button type="button" aria-label="Search RFQs" onClick={runAskAiQuery}>
               <MessageSquareText size={14} />
             </button>
           </div>
           <div className="rfq-ask-ai-chips">
             <button type="button" onClick={() => setSearch("Not linked")}>Which RFQs lack a PR?</button>
             <button type="button" onClick={() => setStatusQuery("Approved")}>Show all approved RFQs</button>
-            <button type="button" onClick={() => setSearch("")}>Reset filters</button>
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setAskAiQuery("");
+                setCreatedOnQuery("");
+                setStatusQuery("All Status");
+              }}
+            >
+              Reset filters
+            </button>
           </div>
         </div>
       </section>
 
-      <section className="purchase-card rfq-records-card">
+      <section id="rfq-records-card" className="purchase-card rfq-records-card">
         <div className="purchase-card-heading">
           <div className="purchase-title">
             <span className="rfq-title-icon" aria-hidden="true">
@@ -317,29 +363,30 @@ const RfqPage: React.FC = () => {
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by ref no, title, PR, PO, supplier or created by..."
+                placeholder="Search by Rfq Id, title, PR, PO or supplier..."
               />
             </div>
           </div>
           <div className="rfq-filter-field">
             <label>Created On</label>
-            <div className="rfq-filter-input">
+            <div className="rfq-filter-input rfq-date-input">
+              <CalendarDays size={13} aria-hidden="true" />
               <input
-                ref={createdOnDateRef}
                 type="date"
-                className="rfq-hidden-date-input"
+                aria-label="Filter by created date"
                 value={createdOnQuery}
                 onChange={(event) => setCreatedOnQuery(event.target.value)}
               />
-              <input
-                readOnly
-                placeholder="Select date"
-                value={createdOnQuery ? isoToDmyDate(createdOnQuery) : ""}
-                onClick={() => createdOnDateRef.current?.showPicker?.()}
-              />
-              <button type="button" className="rfq-filter-calendar-btn" onClick={() => createdOnDateRef.current?.showPicker?.()}>
-                <CalendarDays size={11} />
-              </button>
+              {createdOnQuery && (
+                <button
+                  type="button"
+                  className="rfq-filter-clear-btn"
+                  aria-label="Clear date filter"
+                  onClick={() => setCreatedOnQuery("")}
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
           <div className="rfq-filter-field">
@@ -367,13 +414,20 @@ const RfqPage: React.FC = () => {
               {visibleRows.map((row) => (
                 <tr key={row.refNo}>
                   <td className="purchase-status-cell"><RfqStatusRing status={row.status} /></td>
-                  <td className="purchase-link">{row.refNo}</td>
+                  <td>
+                    <button type="button" className="purchase-ref-link" onClick={() => navigate(`/rfqs/${row.refNo}`)}>{row.refNo}</button>
+                  </td>
                   <td className="rfq-title-cell">{row.title}</td>
                   <td className={row.pr.startsWith("PR-") ? "purchase-link" : "purchase-muted"}>{row.pr.startsWith("PR-") ? row.pr : "Not linked"}</td>
                   <td className={row.po.startsWith("PO-") ? "purchase-link" : "purchase-muted"}>{row.po.startsWith("PO-") ? row.po : "Not linked"}</td>
                   <td className="rfq-response-count">{row.responses}</td>
                   <td>{row.supplier === "N/A" ? <span className="purchase-muted">Not assigned</span> : row.supplier}</td>
-                  <td>{row.createdBy}</td>
+                  <td>
+  <span className="creator-pill">
+    <span>{getInitials(row.createdBy)}</span>
+    {row.createdBy}
+  </span>
+</td>
                   <td>{row.createdDate}</td>
                 </tr>
               ))}

@@ -1,0 +1,211 @@
+/* =========================================================
+   ORDERS PAGE - PLUS LAYER (import AFTER OrdersPage.css)
+   KPI sizing, filter fix, table structure, avatars, pills.
+========================================================= */
+
+/* ---------- KPI CARDS: 6 equal cards in one row ---------- */
+.orders-page .orders-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.orders-page .orders-metrics .xd-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 120px;
+  padding: 14px 16px;
+}
+
+.orders-page .orders-metrics .xd-kpi-label {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-page .orders-metrics .xd-kpi-mid { min-width: 0; }
+
+.orders-page .orders-metrics .xd-kpi-mid strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: clamp(19px, 1.6vw, 26px);
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-page .orders-metrics .xd-kpi-progress-wrap { margin-top: auto; }
+.orders-page .orders-metrics .xd-kpi-cap { font-size: 11px; line-height: 1.35; }
+
+@media (max-width: 1400px) { .orders-page .orders-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px)  { .orders-page .orders-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px)  { .orders-page .orders-metrics { grid-template-columns: 1fr; } }
+
+/* ---------- FILTERS: one border per field, no overlap ---------- */
+.orders-page .orders-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--muted-hex);
+  border-bottom: 1px solid var(--border-hex);
+}
+
+.orders-page .orders-filter-field { min-width: 0; width: 100%; }
+
+.orders-page .orders-filter-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid var(--border-hex);
+  border-radius: 8px;
+  background: var(--card-hex);
+  box-shadow: none;
+}
+
+.orders-page .orders-filter-input:focus-within {
+  border-color: var(--primary-hex);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-hex) 16%, transparent);
+}
+
+/* the real controls draw NO border/background of their own */
+.orders-page .orders-filter-input > input,
+.orders-page .orders-filter-input > select {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--foreground-hex);
+}
+
+/* keep the native calendar icon + dropdown arrow (single icon, no duplicates) */
+.orders-page .orders-filter-input select {
+  appearance: auto;
+  -webkit-appearance: auto;
+  background-image: none !important;
+  color-scheme: dark;
+  cursor: pointer;
+}
+.orders-page .orders-date-input input[type="date"] { color-scheme: dark; cursor: pointer; }
+.orders-page .orders-date-input input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.8;
+  filter: invert(1) brightness(1.6);
+}
+:root[data-theme="light"] .orders-page .orders-filter-input select,
+:root[data-theme="light"] .orders-page .orders-date-input input[type="date"] { color-scheme: light; }
+:root[data-theme="light"] .orders-page .orders-date-input input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }
+
+@media (max-width: 1000px) { .orders-page .orders-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px)  { .orders-page .orders-filters { grid-template-columns: 1fr; } }
+
+/* ---------- TABLE STRUCTURE ---------- */
+.orders-page .orders-table { min-width: 1280px; table-layout: fixed; }
+
+.orders-page .orders-table th:nth-child(1) { width: 7%; }
+.orders-page .orders-table th:nth-child(2) { width: 12%; }
+.orders-page .orders-table th:nth-child(3) { width: 12%; }
+.orders-page .orders-table th:nth-child(4) { width: 11%; }
+.orders-page .orders-table th:nth-child(5) { width: 14%; }
+.orders-page .orders-table th:nth-child(6) { width: 11%; }
+.orders-page .orders-table th:nth-child(7) { width: 14%; }
+.orders-page .orders-table th:nth-child(8) { width: 10%; }
+.orders-page .orders-table th:nth-child(9) { width: 9%; }
+
+.orders-page .orders-table .purchase-status-cell {
+  width: auto;
+  padding-left: 18px !important;
+  padding-right: 8px !important;
+  text-align: center !important;
+}
+
+.orders-page .purchase-ref-link { cursor: default; }
+
+/* ---------- AVATARS / LOGOS ---------- */
+.po-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--elevated-hex);
+}
+
+.po-avatar.fallback {
+  display: inline-grid;
+  place-items: center;
+  color: var(--card-foreground-hex);
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--border-hex);
+}
+
+.po-supplier {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+/* supplier logos sit on a white tile so dark logos stay visible */
+.po-supplier img.po-avatar {
+  width: 32px;
+  height: 32px;
+  padding: 3px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #fff;
+}
+.po-supplier .po-avatar.fallback { width: 32px; height: 32px; border-radius: 8px; }
+
+.po-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  color: var(--card-foreground-hex);
+  font-size: 11px;
+  border-radius: 999px;
+  background: var(--muted-hex);
+}
+.po-person .po-avatar { width: 24px; height: 24px; font-size: 9px; }
+
+.po-date { display: inline-flex; align-items: center; gap: 8px; color: var(--card-foreground-hex); }
+.po-date svg { flex: none; color: var(--muted-foreground-hex); }
+
+/* ---------- STATUS PILL ---------- */
+.po-pill {
+  --pc: var(--info-hex);
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  color: var(--pc);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--pc) 32%, transparent);
+  background: color-mix(in srgb, var(--pc) 12%, transparent);
+}
+.po-pill.approved  { --pc: var(--success-hex); }
+.po-pill.in-review { --pc: var(--warning-hex); }
+.po-pill.rejected  { --pc: var(--destructive-hex); }

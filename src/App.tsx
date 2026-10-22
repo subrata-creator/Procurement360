@@ -4,9 +4,11 @@ import Header from "./components/Header";
 import Dashboard from "./Pages/Dashboard"; // <-- new AI dashboard page
 import RfqPage from "./Pages/RfqPage";
 import OrdersPage from "./Pages/OrdersPage";
+import OrderDetail from "./Pages/OrderDetail";
 import PurchaseRequest from "./Pages/PurchaseRequest";
 import PurchaseRequestDetail from "./Pages/PRSummary";
 import TaskDetail from "./Pages/TaskDetail";
+import RfqDetail from "./Pages/rfqdetail";
 import "./Styles/Styles.css";
 
 const AppContent: React.FC = () => {
@@ -21,12 +23,14 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isPurchaseRequestRoute = location.pathname.startsWith("/purchase-requests");
+  const isRfqRoute = location.pathname.startsWith("/rfqs");
+  const isOrdersRoute = location.pathname.startsWith("/orders");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
   const routeNavigation = isPurchaseRequestRoute
     ? "Purchase Requests"
-    : location.pathname === "/rfqs"
+    : isRfqRoute
       ? "RFQs"
-      : location.pathname === "/orders"
+      : isOrdersRoute
         ? "Orders"
         : undefined;
   const activeNavigation = routeNavigation ?? fallbackNavigation;
@@ -64,14 +68,20 @@ const AppContent: React.FC = () => {
             <Route path="/purchase-requests" element={<PurchaseRequest />} />
             <Route path="/purchase-requests/:ref" element={<PurchaseRequestDetail />} />
           </Routes>
+        ) : isRfqRoute ? (
+          <Routes>
+            <Route path="/rfqs" element={<RfqPage />} />
+            <Route path="/rfqs/:ref" element={<RfqDetail />} />
+          </Routes>
+        ) : isOrdersRoute ? (
+          <Routes>
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/orders/:ref" element={<OrderDetail />} />
+          </Routes>
         ) : isTaskRoute ? (
           <Routes>
             <Route path="/tasks/:id" element={<TaskDetail />} />
           </Routes>
-        ) : activeNavigation === "RFQs" ? (
-          <RfqPage />
-        ) : activeNavigation === "Orders" ? (
-          <OrdersPage />
         ) : (
           <Dashboard />
         )}

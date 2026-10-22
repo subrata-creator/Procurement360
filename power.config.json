@@ -9,6 +9,29 @@
   "buildEntryPoint": "index.html",
   "localAppUrl": "http://localhost:3000",
   "logoPath": "Default",
-  "connectionReferences": {},
-  "databaseReferences": {}
+  "connectionReferences": {
+    "e990410c-7344-405e-b819-35460716c4a0": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_microsoftcopilotstudio",
+      "displayName": "Microsoft Copilot Studio",
+      "dataSources": [
+        "microsoftcopilotstudio"
+      ],
+      "dataSets": {}
+    }
+  },
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "purchaserequests": {
+          "entitySetName": "cr49f_purchaserequests",
+          "logicalName": "cr49f_purchaserequest"
+        },
+        "purchaserequestlines": {
+          "entitySetName": "cr49f_purchaserequestlines",
+          "logicalName": "cr49f_purchaserequestline"
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
 }

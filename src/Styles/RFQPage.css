@@ -346,26 +346,50 @@
 .rfq-filter-input input::placeholder { color: var(--rfq-muted); }
 .rfq-filter-input select option { background: var(--rfq-card); color: var(--rfq-text); }
 
-.rfq-hidden-date-input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
+/* Created On: a single real native date input (replaces the old hidden-input
+   + readOnly-decoy + showPicker() combo, which depended on a browser API
+   that isn't reliable everywhere and whose 0x0 hidden input could still
+   reserve native rendering space in some engines, producing the overlap). */
+.rfq-date-input > svg:first-child {
+  flex: none;
+  color: var(--rfq-muted);
 }
 
-.rfq-filter-calendar-btn {
-  display: grid;
-  flex: none;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--rfq-muted);
+.rfq-date-input input[type="date"] {
+  color-scheme: dark;
   cursor: pointer;
 }
 
-.rfq-filter-calendar-btn:hover { color: var(--rfq-teal); }
+.rfq-date-input input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.6);
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.rfq-date-input input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.rfq-filter-clear-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--rfq-muted) 18%, transparent);
+  color: var(--rfq-text);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rfq-filter-clear-btn:hover {
+  background: var(--rfq-teal);
+  color: var(--rfq-bg);
+}
 
 .rfq-page .purchase-card.rfq-records-card {
   border: 1px solid var(--rfq-border);
@@ -497,3 +521,137 @@
   }
   .rfq-aging-row { grid-template-columns: 68px minmax(30px, 1fr) 38px; gap: 7px; }
 }
+/* FIX: Prevent overlapping borders inside RFQ filters */
+
+.rfq-page .rfq-records-card .rfq-filters {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.rfq-page .rfq-records-card .rfq-filter-field {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rfq-page .rfq-records-card .rfq-filter-input {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--rfq-border);
+  border-radius: 8px;
+  background: var(--rfq-bg);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+/* Remove nested borders and backgrounds from the actual controls */
+.rfq-page .rfq-records-card .rfq-filter-input > input,
+.rfq-page .rfq-records-card .rfq-filter-input > select {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border: 0 !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--rfq-text);
+}
+
+/* Keep a single focus outline around the wrapper */
+.rfq-page .rfq-records-card .rfq-filter-input:focus-within {
+  border-color: var(--rfq-teal);
+  box-shadow: 0 0 0 2px color-mix(
+    in srgb,
+    var(--rfq-teal) 16%,
+    transparent
+  );
+}
+
+/* Keep the native date picker inside its field */
+.rfq-page .rfq-records-card .rfq-date-input > input[type="date"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 0;
+  padding: 0;
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color-scheme: dark;
+}
+
+/* Responsive filter layout */
+@media (max-width: 700px) {
+  .rfq-page .rfq-records-card .rfq-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rfq-page .rfq-records-card .rfq-filter-field {
+    width: 100%;
+  }
+}/* Keep the native clickable calendar icon */
+.rfq-page .rfq-records-card
+.rfq-filter-input input[type="date"]::-webkit-calendar-picker-indicator {
+  display: block;
+  cursor: pointer;
+}
+
+/* Keep the native clickable dropdown arrow */
+.rfq-page .rfq-records-card
+.rfq-filter-input select {
+  appearance: auto;
+  -webkit-appearance: auto;
+  background-image: none !important;
+}
+
+/* Remove the extra custom calendar icon */
+.rfq-page .rfq-records-card
+.rfq-date-input > svg {
+  display: none;
+}
+
+/* Remove the extra custom dropdown chevron */
+.rfq-page .rfq-records-card
+.rfq-filter-input > svg:last-child {
+  display: none;
+}
+/* ---- Match the Purchase Requests table ---- */
+
+/* ring colors for RFQ statuses (PR's "approved" is green, but RFQ "Approved" stays amber) */
+.rfq-page .purchase-status-indicator.rewarded { --status-color: var(--success-hex); }
+.rfq-page .purchase-status-indicator.approved { --status-color: var(--warning-hex); }
+
+/* same cell spacing as PR so the 46px ring fits */
+.rfq-page .purchase-status-cell {
+  width: auto;
+  padding-left: 18px !important;
+  padding-right: 8px !important;
+  text-align: center !important;
+}
+
+/* same row padding + text size as PR */
+.rfq-page .purchase-card.rfq-records-card .rfq-table th { padding: 12px 14px; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table td { padding: 12px 16px; font-size: 11px; }
+
+/* column widths re-balanced for the bigger ring + creator pill (total = 100%) */
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(1) { width: 7%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(2) { width: 12%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(3) { width: 15%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(4) { width: 12%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(5) { width: 12%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(6) { width: 8%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(7) { width: 10%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(8) { width: 14%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(9) { width: 10%; }

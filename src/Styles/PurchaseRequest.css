@@ -1,8 +1,8 @@
 .purchase-page {
   min-height: calc(100vh - 32px);
   padding: 16px 18px 28px;
-  background: #0B1117;
-  color: #F8FAFC;
+  background: var(--background-hex, #171E26);
+  color: var(--foreground-hex, #DDE3EA);
   font-family: "Segoe UI", Arial, sans-serif;
   box-sizing: border-box;
 }
@@ -45,6 +45,10 @@
 .purchase-search:focus-within {
   border-color: var(--primary-hex);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-hex) 18%, transparent);
+}
+
+.purchase-search input:focus-visible {
+  outline: none;
 }
 
 .purchase-search svg {
@@ -108,6 +112,15 @@
 .filter-input:focus-within {
   border-color: var(--primary-hex);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-hex) 18%, transparent);
+}
+
+/* Same fix as RFQPage.css: suppress the raw input/select's own global
+   focus-visible outline (set in Theme.css) since the wrapper above
+   already shows a focus ring via :focus-within — the two together
+   produce a visibly overlapping double ring in this compact box. */
+.filter-input input:focus-visible,
+.filter-input select:focus-visible {
+  outline: none;
 }
 
 .filter-input input,
@@ -1096,7 +1109,7 @@
 
 /* =========================================================
    RESPONSIVE
-   ========================================================= */
+   ==================================================ss======= */
 
 @media (max-width: 1000px) {
   .purchase-page .purchase-stats {
