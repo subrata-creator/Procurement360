@@ -411,7 +411,7 @@
 
 .rfq-page .purchase-card.rfq-records-card .rfq-table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 980px;
   border-collapse: collapse;
   table-layout: fixed;
   color: var(--rfq-text);
@@ -440,46 +440,6 @@
 .rfq-page .purchase-card.rfq-records-card .rfq-table tbody tr:hover {
   background: color-mix(in srgb, var(--rfq-teal) 5%, var(--rfq-card));
 }
-
-.rfq-page .purchase-status-cell { width: 44px; padding: 0 4px !important; }
-
-.rfq-status-ring {
-  --ring-size: 34px;
-  --ring-thickness: 3px;
-  --ring-color: var(--rfq-amber);
-  position: relative;
-  display: inline-flex;
-  width: var(--ring-size);
-  height: var(--ring-size);
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: conic-gradient(var(--ring-color) calc(var(--ring-progress, 0) * 1%), color-mix(in srgb, var(--rfq-muted) 16%, transparent) 0);
-  font-family: inherit;
-}
-
-.rfq-status-ring::before {
-  position: absolute;
-  inset: var(--ring-thickness);
-  border-radius: 50%;
-  background: var(--rfq-card);
-  content: "";
-}
-
-.rfq-status-ring > span { position: relative; z-index: 1; color: var(--rfq-text); font-size: 9px; font-weight: 700; line-height: 1; }
-.rfq-status-ring > span small { margin-left: 1px; font-size: 6px; }
-.rfq-status-ring.rewarded { --ring-color: var(--rfq-green); }
-.rfq-status-ring.approved { --ring-color: var(--rfq-amber); }
-
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(1) { width: 4%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(2) { width: 12%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(3) { width: 18%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(4) { width: 12%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(5) { width: 12%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(6) { width: 8%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(7) { width: 10%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(8) { width: 12%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(9) { width: 12%; }
 
 .rfq-title-cell { overflow: hidden; text-overflow: ellipsis; }
 .rfq-response-count { color: var(--rfq-muted) !important; font-variant-numeric: tabular-nums; }
@@ -629,15 +589,11 @@
 }
 /* ---- Match the Purchase Requests table ---- */
 
-/* ring colors for RFQ statuses (PR's "approved" is green, but RFQ "Approved" stays amber) */
-.rfq-page .purchase-status-indicator.rewarded { --status-color: var(--success-hex); }
-.rfq-page .purchase-status-indicator.approved { --status-color: var(--warning-hex); }
-
-/* same cell spacing as PR so the 46px ring fits */
+/* same cell spacing as PR so the ring is centered */
 .rfq-page .purchase-status-cell {
   width: auto;
-  padding-left: 18px !important;
-  padding-right: 8px !important;
+  padding-left: 14px !important;
+  padding-right: 6px !important;
   text-align: center !important;
 }
 
@@ -645,13 +601,66 @@
 .rfq-page .purchase-card.rfq-records-card .rfq-table th { padding: 12px 14px; }
 .rfq-page .purchase-card.rfq-records-card .rfq-table td { padding: 12px 16px; font-size: 11px; }
 
-/* column widths re-balanced for the bigger ring + creator pill (total = 100%) */
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(1) { width: 7%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(2) { width: 12%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(3) { width: 15%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(4) { width: 12%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(5) { width: 12%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(6) { width: 8%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(7) { width: 10%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(8) { width: 14%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(9) { width: 10%; }
+/* ---------------------------------------------------------
+   Status ring — a single ring with the % inside, colored by
+   status, replacing both the old plain dot and the separate
+   "Status" text column.
+
+   NOTE: this base shape block (size/conic-gradient/inner circle)
+   got dropped by mistake in an earlier full-file rewrite of this
+   CSS — only the color modifiers below survived, which is exactly
+   why you saw plain "50%" text with no ring. It's restored here,
+   self-contained, so it can't go missing again if this block gets
+   moved.
+--------------------------------------------------------- */
+.rfq-status-ring {
+  --ring-size: 34px;
+  --ring-thickness: 3px;
+  --ring-color: var(--rfq-amber);
+  position: relative;
+  display: inline-flex;
+  width: var(--ring-size);
+  height: var(--ring-size);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--ring-color) calc(var(--ring-progress, 0) * 1%), color-mix(in srgb, var(--rfq-muted) 16%, transparent) 0);
+  font-family: inherit;
+}
+
+.rfq-status-ring::before {
+  position: absolute;
+  inset: var(--ring-thickness);
+  border-radius: 50%;
+  background: var(--rfq-card);
+  content: "";
+}
+
+.rfq-status-ring > span { position: relative; z-index: 1; color: var(--rfq-text); font-size: 9px; font-weight: 700; line-height: 1; }
+.rfq-status-ring > span small { margin-left: 1px; font-size: 6px; }
+
+.rfq-status-ring.pending { --ring-color: var(--rfq-amber); }
+.rfq-status-ring.changes-needed { --ring-color: #F97316; }
+.rfq-status-ring.approved { --ring-color: var(--rfq-green); }
+.rfq-status-ring.rejected { --ring-color: var(--rfq-red); }
+
+/* 10 columns: status ring, ID & Title, Associated PR, Associated PO,
+   Request Date, Submission Deadline, Award Date, Closed Date,
+   Delivery Location, Created By. Associated PO is new per your
+   request, but is NOT backed by a real field — cr49f_requestforqoutations
+   has no PO lookup (only cr49f_PRRFQ, the PR one), so it always
+   reads "Not linked" until that relationship exists in Dataverse.
+   The old "Status" text column is removed — status now lives only
+   in the ring. */
+.rfq-page .purchase-card.rfq-records-card .rfq-table { min-width: 1280px; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(1) { width: 6%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(2) { width: 20%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(3) { width: 11%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(4) { width: 11%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(5) { width: 10%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(6) { width: 11%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(7) { width: 9%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(8) { width: 9%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(9) { width: 11%; }
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(10) { width: 12%; }
