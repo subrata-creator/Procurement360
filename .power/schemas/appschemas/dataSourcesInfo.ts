@@ -19,6 +19,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cr49f_requestforqoutations": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_requestforqoutationid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "microsoftcopilotstudio": {
     "tableId": "",
     "version": "",

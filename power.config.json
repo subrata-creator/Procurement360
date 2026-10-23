@@ -29,6 +29,10 @@
         "purchaserequestlines": {
           "entitySetName": "cr49f_purchaserequestlines",
           "logicalName": "cr49f_purchaserequestline"
+        },
+        "requestforqoutations": {
+          "entitySetName": "cr49f_requestforqoutations",
+          "logicalName": "cr49f_requestforqoutation"
         }
       },
       "environmentVariableName": ""

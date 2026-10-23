@@ -1,6 +1,6 @@
+
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
-
 import {
   ChevronDown,
   ChevronLeft,
@@ -17,22 +17,19 @@ import {
   Search,
   ShoppingCart,
 } from "lucide-react";
-
 import { useNavigate } from "react-router-dom";
 import CreatePRModal from "../components/CreatePRModal";
 import { PROCUREMENT_BUDGET_USD } from "../data/procurementBudget";
-
 import {
   getInitials,
   type PRStatus,
   type PurchaseRequestRecord,
 } from "./Purchaserequestsdata";
-
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
-
 import "../Styles/PurchaseRequest.css";
 
+const PAGE_SIZE = 10;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 const usdFormatter = new Intl.NumberFormat("en-US", {
@@ -47,11 +44,17 @@ const STATUS_PROGRESS: Record<PRStatus, number> = {
   Rejected: 0,
 };
 
+type DataverseRequestWithFormattedLookups = Cr49f_purchaserequests & {
+  "_createdby_value@OData.Community.Display.V1.FormattedValue"?: string;
+  "_createdby_value"?: string;
+  "_ownerid_value@OData.Community.Display.V1.FormattedValue"?: string;
+  "_createdby_value@Microsoft.Dynamics.CRM.lookuplogicalname"?: string;
+};
+
 function formatDataverseDate(value?: string | null): string {
   if (!value) return "";
 
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) return "";
 
   return new Intl.DateTimeFormat("en-US", {
@@ -74,9 +77,8 @@ function parseRequestDate(value?: string): Date | null {
     );
   }
 
-  const timestamp = new Date(value);
-
-  return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function isoToUsDate(iso: string): string {
@@ -85,15 +87,16 @@ function isoToUsDate(iso: string): string {
 }
 
 function getDatabaseStatus(record: Cr49f_purchaserequests): PRStatus {
-  const statusValue = record.cr49f_statusname?.trim().toLowerCase();
+  const statusName = record.cr49f_statusname?.trim().toLowerCase();
 
-  if (statusValue === "approved") return "Approved";
-  if (statusValue === "rejected") return "Rejected";
+  if (statusName === "approved" || record.cr49f_status === 1) {
+    return "Approved";
+  }
 
-  if (record.cr49f_status === 1) return "Approved";
-  if (record.cr49f_status === 3) return "Rejected";
+  if (statusName === "rejected" || record.cr49f_status === 3) {
+    return "Rejected";
+  }
 
-  // Pending and Changes Needed use the existing yellow In Review indicator.
   return "In Review";
 }
 
@@ -117,9 +120,20 @@ function getDatabasePriority(record: Cr49f_purchaserequests): string {
 function mapDataverseRequest(
   record: Cr49f_purchaserequests
 ): PurchaseRequestRecord {
+  const raw = record as DataverseRequestWithFormattedLookups;
+
   const ref =
     record.cr49f_prnumber?.trim() ||
     record.cr49f_purchaserequestid;
+
+  // Dataverse returns lookup display names as formatted annotation fields.
+  // Use the exact Created By annotation first, then the generated name field.
+  const createdBy =
+    raw[
+      "_createdby_value@OData.Community.Display.V1.FormattedValue"
+    ]?.trim() ||
+    record.createdbyname?.trim() ||
+    "Unknown";
 
   return {
     ref,
@@ -129,20 +143,14 @@ function mapDataverseRequest(
         ? ""
         : usdFormatter.format(Number(record.cr49f_totalamount)),
     date: formatDataverseDate(record.createdon),
-    createdBy: record.createdbyname?.trim() || "Unknown",
+    createdBy,
     priority: getDatabasePriority(record),
     status: getDatabaseStatus(record),
-
-    // The current supplied Dataverse model has no RFQ or PO field.
-    rfq: "",
-    po: "",
-
-    // Required delivery date is supplied by Dataverse.
     requiredDate: formatDataverseDate(
       record.cr49f_requireddeliverydate
     ),
-
-    // These fields are not present in the supplied PR model.
+    rfq: "",
+    po: "",
     category: "",
     department: "",
     approvalSteps: [],
@@ -152,10 +160,7 @@ function mapDataverseRequest(
 function getRequestAmount(request: PurchaseRequestRecord): number | null {
   if (!request.totalAmount) return null;
 
-  const amount = Number(
-    request.totalAmount.replace(/[^\d.-]/g, "")
-  );
-
+  const amount = Number(request.totalAmount.replace(/[^\d.-]/g, ""));
   return Number.isFinite(amount) ? amount : null;
 }
 
@@ -164,7 +169,6 @@ function getRequestAgeDays(
   today: Date
 ): number | null {
   const createdDate = parseRequestDate(request.date);
-
   if (!createdDate) return null;
 
   createdDate.setHours(0, 0, 0, 0);
@@ -177,15 +181,11 @@ function getRequestAgeDays(
 
 function formatReviewDuration(days: number | null): string {
   if (days === null) return "Not available";
-
   return days < 1
     ? `${(days * 24).toFixed(1)} hours`
     : `${days.toFixed(1)} days`;
 }
 
-/**
- * Existing status-circle design is retained.
- */
 function StatusIndicator({ status }: { status: PRStatus }) {
   const progress = STATUS_PROGRESS[status];
   const statusClass = status.toLowerCase().replace(" ", "-");
@@ -196,9 +196,7 @@ function StatusIndicator({ status }: { status: PRStatus }) {
       role="img"
       aria-label={`${status}, ${progress}% complete`}
       title={`${status} · ${progress}% complete`}
-      style={
-        { "--status-progress": `${progress}%` } as CSSProperties
-      }
+      style={{ "--status-progress": `${progress}%` } as CSSProperties}
     >
       <span aria-hidden="true">
         {progress}
@@ -211,46 +209,54 @@ function StatusIndicator({ status }: { status: PRStatus }) {
 export default function PurchaseRequest() {
   const navigate = useNavigate();
 
+  // All React hooks must be inside the component.
+  const [currentPage, setCurrentPage] = useState(1);
   const [requests, setRequests] = useState<PurchaseRequestRecord[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(true);
   const [requestLoadError, setRequestLoadError] = useState("");
-
   const [isCreatePROpen, setIsCreatePROpen] = useState(false);
   const [tableQuery, setTableQuery] = useState("");
   const [createdOnQuery, setCreatedOnQuery] = useState("");
-  const [statusQuery, setStatusQuery] = useState<
-    "All Status" | PRStatus
-  >("All Status");
+  const [statusQuery, setStatusQuery] = useState<"All Status" | PRStatus>(
+    "All Status"
+  );
 
-  const loadRequests = useCallback(async () => {
+  const loadRequests = useCallback(async (signal?: AbortSignal) => {
     setIsLoadingRequests(true);
     setRequestLoadError("");
 
     try {
       const result = await Cr49f_purchaserequestsService.getAll();
 
+      if (signal?.aborted) return;
+
       if (!result.success) {
         throw new Error("Unable to retrieve purchase requests from Dataverse.");
       }
 
       const records = result.data ?? [];
-
       setRequests(records.map(mapDataverseRequest));
     } catch (error) {
-      console.error("Error loading purchase requests:", error);
+      if (signal?.aborted) return;
 
+      console.error("Error loading purchase requests:", error);
       setRequestLoadError(
         error instanceof Error
           ? error.message
           : "Failed to load purchase requests."
       );
     } finally {
-      setIsLoadingRequests(false);
+      if (!signal?.aborted) {
+        setIsLoadingRequests(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void loadRequests();
+    const controller = new AbortController();
+    void loadRequests(controller.signal);
+
+    return () => controller.abort();
   }, [loadRequests]);
 
   const filteredRequests = requests.filter((request) => {
@@ -271,29 +277,43 @@ export default function PurchaseRequest() {
     const matchesQuery = haystack.includes(
       tableQuery.trim().toLowerCase()
     );
-
     const matchesCreatedOn =
-      !createdOnQuery ||
-      request.date === isoToUsDate(createdOnQuery);
-
+      !createdOnQuery || request.date === isoToUsDate(createdOnQuery);
     const matchesStatus =
-      statusQuery === "All Status" ||
-      request.status === statusQuery;
+      statusQuery === "All Status" || request.status === statusQuery;
 
     return matchesQuery && matchesCreatedOn && matchesStatus;
   });
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRequests.length / PAGE_SIZE)
+  );
+
+  // Keep the page valid when filters reduce the number of results.
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedRequests = filteredRequests.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
+  const startRecord = filteredRequests.length
+    ? (safePage - 1) * PAGE_SIZE + 1
+    : 0;
+  const endRecord = Math.min(
+    safePage * PAGE_SIZE,
+    filteredRequests.length
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tableQuery, createdOnQuery, statusQuery]);
+
   const requestCounts = {
     total: requests.length,
-    approved: requests.filter(
-      (request) => request.status === "Approved"
-    ).length,
-    review: requests.filter(
-      (request) => request.status === "In Review"
-    ).length,
-    rejected: requests.filter(
-      (request) => request.status === "Rejected"
-    ).length,
+    approved: requests.filter((r) => r.status === "Approved").length,
+    review: requests.filter((r) => r.status === "In Review").length,
+    rejected: requests.filter((r) => r.status === "Rejected").length,
   };
 
   const percentOfRequests = (count: number) =>
@@ -344,7 +364,7 @@ export default function PurchaseRequest() {
   today.setHours(0, 0, 0, 0);
 
   const waitingRequests = filteredRequests.filter(
-    (request) => request.status === "In Review"
+    (r) => r.status === "In Review"
   );
 
   const waitingAges = waitingRequests.map((request) => ({
@@ -385,9 +405,7 @@ export default function PurchaseRequest() {
 
   const overdueRequests = filteredRequests.filter((request) => {
     if (request.status !== "In Review") return false;
-
     const dueDate = parseRequestDate(request.requiredDate);
-
     return dueDate !== null && dueDate < today;
   });
 
@@ -399,23 +417,17 @@ export default function PurchaseRequest() {
     const createdStep = request.approvalSteps.find((step) =>
       /^PR creation/i.test(step.title)
     );
-
     const approvedStep = request.approvalSteps.find(
       (step) =>
-        /^Approved$/i.test(step.title) &&
-        step.status === "Completed"
+        /^Approved$/i.test(step.title) && step.status === "Completed"
     );
 
     const createdAt = parseRequestDate(createdStep?.date);
     const approvedAt = parseRequestDate(approvedStep?.date);
 
-    if (!createdAt || !approvedAt || approvedAt < createdAt) {
-      return [];
-    }
+    if (!createdAt || !approvedAt || approvedAt < createdAt) return [];
 
-    return [
-      (approvedAt.getTime() - createdAt.getTime()) / DAY_IN_MS,
-    ];
+    return [(approvedAt.getTime() - createdAt.getTime()) / DAY_IN_MS];
   });
 
   const averageReviewDays = reviewDurations.length
@@ -425,22 +437,19 @@ export default function PurchaseRequest() {
 
   const spendRecords = filteredRequests.flatMap((request) => {
     const amount = getRequestAmount(request);
-
     return amount === null ? [] : [{ request, amount }];
   });
 
   const requestedSpend = spendRecords.reduce(
-    (sum, record) => sum + record.amount,
+    (sum, item) => sum + item.amount,
     0
   );
-
   const approvedSpend = spendRecords
     .filter(({ request }) => request.status === "Approved")
-    .reduce((sum, record) => sum + record.amount, 0);
-
+    .reduce((sum, item) => sum + item.amount, 0);
   const pendingSpend = spendRecords
     .filter(({ request }) => request.status === "In Review")
-    .reduce((sum, record) => sum + record.amount, 0);
+    .reduce((sum, item) => sum + item.amount, 0);
 
   const spendByCategoryTotals = new Map<string, number>();
 
@@ -460,16 +469,12 @@ export default function PurchaseRequest() {
     spendByCategoryTotals,
     ([category, amount]) => ({ category, amount })
   )
-    .sort((first, second) => second.amount - first.amount)
+    .sort((a, b) => b.amount - a.amount)
     .slice(0, 4);
 
   const largestCategorySpend = spendByCategory[0]?.amount ?? 0;
-
   const budgetShare = PROCUREMENT_BUDGET_USD
-    ? Math.min(
-        (requestedSpend / PROCUREMENT_BUDGET_USD) * 100,
-        100
-      )
+    ? Math.min((requestedSpend / PROCUREMENT_BUDGET_USD) * 100, 100)
     : 0;
 
   const recommendations: Array<{
@@ -479,14 +484,13 @@ export default function PurchaseRequest() {
   }> = [];
 
   const oldestOverdue = [...overdueRequests].sort(
-    (first, second) =>
-      (getRequestAgeDays(second, today) ?? 0) -
-      (getRequestAgeDays(first, today) ?? 0)
+    (a, b) =>
+      (getRequestAgeDays(b, today) ?? 0) -
+      (getRequestAgeDays(a, today) ?? 0)
   )[0];
 
   if (oldestOverdue) {
     const age = getRequestAgeDays(oldestOverdue, today) ?? 0;
-
     recommendations.push({
       title: "Follow up on an overdue approval",
       detail: `${oldestOverdue.ref} has waited ${age} days and is past its required-by date (${oldestOverdue.requiredDate}).`,
@@ -496,8 +500,7 @@ export default function PurchaseRequest() {
 
   const approvedWithoutPO = filteredRequests.find(
     (request) =>
-      request.status === "Approved" &&
-      !request.po.startsWith("PO-")
+      request.status === "Approved" && !request.po.startsWith("PO-")
   );
 
   if (approvedWithoutPO) {
@@ -508,29 +511,18 @@ export default function PurchaseRequest() {
     });
   }
 
-  const requestWithMissingDetails = filteredRequests.find(
-    (request) => {
-      const missingAmount = getRequestAmount(request) === null;
-      const missingDueDate = !request.requiredDate;
-      const missingClassification =
-        !request.category && !request.department;
-
-      return (
-        missingAmount ||
-        missingDueDate ||
-        missingClassification
-      );
-    }
-  );
+  const requestWithMissingDetails = filteredRequests.find((request) => {
+    return (
+      getRequestAmount(request) === null ||
+      !request.requiredDate ||
+      (!request.category && !request.department)
+    );
+  });
 
   if (requestWithMissingDetails) {
     const missingFields = [
-      getRequestAmount(requestWithMissingDetails) === null
-        ? "amount"
-        : null,
-      !requestWithMissingDetails.requiredDate
-        ? "required-by date"
-        : null,
+      getRequestAmount(requestWithMissingDetails) === null ? "amount" : null,
+      !requestWithMissingDetails.requiredDate ? "required-by date" : null,
       !requestWithMissingDetails.category &&
       !requestWithMissingDetails.department
         ? "department or category"
@@ -544,14 +536,11 @@ export default function PurchaseRequest() {
     });
   }
 
-  if (
-    recommendations.length === 0 &&
-    waitingRequests.length > 0
-  ) {
+  if (!recommendations.length && waitingRequests.length) {
     const oldestWaiting = [...waitingRequests].sort(
-      (first, second) =>
-        (getRequestAgeDays(second, today) ?? 0) -
-        (getRequestAgeDays(first, today) ?? 0)
+      (a, b) =>
+        (getRequestAgeDays(b, today) ?? 0) -
+        (getRequestAgeDays(a, today) ?? 0)
     )[0];
 
     if (oldestWaiting) {
@@ -567,7 +556,53 @@ export default function PurchaseRequest() {
     setTableQuery("");
     setCreatedOnQuery("");
     setStatusQuery("All Status");
+    setCurrentPage(1);
     void loadRequests();
+  };
+
+  const exportCsv = () => {
+    const csvRows = [
+      [
+        "Status",
+        "PR Number",
+        "Title",
+        "PR Amount",
+        "Associated RFQ",
+        "Required Date",
+        "Created By",
+        "Priority",
+        "Created On",
+      ],
+      ...paginatedRequests.map((request) => [
+        request.status,
+        request.ref,
+        request.title,
+        request.totalAmount,
+        request.rfq || "Not Available",
+        request.requiredDate || "Not Available",
+        request.createdBy,
+        request.priority || "Normal",
+        request.date,
+      ]),
+    ];
+
+    const csv = csvRows
+      .map((row) =>
+        row
+          .map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`)
+          .join(",")
+      )
+      .join("\r\n");
+
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    );
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "purchase-requests.csv";
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -579,10 +614,7 @@ export default function PurchaseRequest() {
         </div>
       </div>
 
-      <section
-        className="xd-kpis purchase-stats"
-        aria-label="Purchase request metrics"
-      >
+      <section className="xd-kpis purchase-stats" aria-label="Purchase request metrics">
         {stats.map((stat) => (
           <article
             className={`xd-kpi xd-${stat.type} purchase-stat ${
@@ -607,11 +639,9 @@ export default function PurchaseRequest() {
               <span className="xd-kpi-label">{stat.title}</span>
               <span className="xd-kpi-icon">{stat.icon}</span>
             </div>
-
             <div className="xd-kpi-mid">
               <strong>{stat.value}</strong>
             </div>
-
             <div className="xd-kpi-progress-wrap">
               <span className="xd-kpi-cap">{stat.caption}</span>
               <div
@@ -622,11 +652,7 @@ export default function PurchaseRequest() {
                 aria-valuemax={100}
                 aria-valuenow={stat.progress}
               >
-                <span
-                  style={{
-                    width: `${Math.max(stat.progress, 2)}%`,
-                  }}
-                />
+                <span style={{ width: `${Math.max(stat.progress, 2)}%` }} />
               </div>
             </div>
           </article>
@@ -641,22 +667,14 @@ export default function PurchaseRequest() {
               <h2>Request aging</h2>
               <p>{waitingRequests.length} requests in review</p>
             </div>
-
-            <span
-              className={`pr-overdue-count ${
-                overdueRequests.length ? "active" : ""
-              }`}
-            >
+            <span className={`pr-overdue-count ${overdueRequests.length ? "active" : ""}`}>
               <CircleAlert size={13} />
               {overdueRequests.length} overdue
             </span>
           </div>
 
           <div className="pr-review-average">
-            <span>
-              <Clock3 size={14} />
-              Average review time
-            </span>
+            <span><Clock3 size={14} /> Average review time</span>
             <strong>{formatReviewDuration(averageReviewDays)}</strong>
             <small>
               {reviewDurations.length
@@ -680,11 +698,9 @@ export default function PurchaseRequest() {
                   <span
                     className={bucket.tone}
                     style={{
-                      width: `${
-                        waitingRequests.length
-                          ? (bucket.count / waitingRequests.length) * 100
-                          : 0
-                      }%`,
+                      width: `${waitingRequests.length
+                        ? (bucket.count / waitingRequests.length) * 100
+                        : 0}%`,
                     }}
                   />
                 </div>
@@ -699,14 +715,9 @@ export default function PurchaseRequest() {
             <div>
               <span className="pr-insight-kicker">CURRENT SCOPE</span>
               <h2>Spend intelligence</h2>
-              <p>
-                {spendRecords.length} requests with recorded amounts
-              </p>
+              <p>{spendRecords.length} requests with recorded amounts</p>
             </div>
-            <CircleDollarSign
-              size={19}
-              className="pr-insight-heading-icon"
-            />
+            <CircleDollarSign size={19} className="pr-insight-heading-icon" />
           </div>
 
           <div className="pr-spend-summary">
@@ -726,16 +737,12 @@ export default function PurchaseRequest() {
 
           <div className="pr-category-spend">
             <div className="pr-chart-label">
-              <Building2 size={13} />
-              Spend by category
+              <Building2 size={13} /> Spend by category
             </div>
-
             {spendByCategory.length ? (
               spendByCategory.map((category, index) => (
                 <div className="pr-category-row" key={category.category}>
-                  <span title={category.category}>
-                    {category.category}
-                  </span>
+                  <span title={category.category}>{category.category}</span>
                   <div
                     className="pr-category-track"
                     role="progressbar"
@@ -747,11 +754,9 @@ export default function PurchaseRequest() {
                     <span
                       className={`tone-${index}`}
                       style={{
-                        width: `${
-                          largestCategorySpend
-                            ? (category.amount / largestCategorySpend) * 100
-                            : 0
-                        }%`,
+                        width: `${largestCategorySpend
+                          ? (category.amount / largestCategorySpend) * 100
+                          : 0}%`,
                       }}
                     />
                   </div>
@@ -759,18 +764,14 @@ export default function PurchaseRequest() {
                 </div>
               ))
             ) : (
-              <p className="pr-insight-empty">
-                No request amounts in this view.
-              </p>
+              <p className="pr-insight-empty">No request amounts in this view.</p>
             )}
           </div>
 
           <div className="pr-budget-context">
             <div>
               <span>Dashboard allocation</span>
-              <strong>
-                {usdFormatter.format(PROCUREMENT_BUDGET_USD)}
-              </strong>
+              <strong>{usdFormatter.format(PROCUREMENT_BUDGET_USD)}</strong>
             </div>
             <div
               className="pr-budget-track"
@@ -780,32 +781,20 @@ export default function PurchaseRequest() {
               aria-valuemax={100}
               aria-valuenow={budgetShare}
             >
-              <span
-                style={{
-                  width: `${Math.max(
-                    budgetShare,
-                    requestedSpend ? 0.5 : 0
-                  )}%`,
-                }}
-              />
+              <span style={{ width: `${Math.max(budgetShare, requestedSpend ? 0.5 : 0)}%` }} />
             </div>
-            <small>
-              {budgetShare.toFixed(2)}% represented by requests in this view
-            </small>
+            <small>{budgetShare.toFixed(2)}% represented by requests in this view</small>
           </div>
         </article>
 
         <article className="pr-insight-panel pr-recommendations-panel">
           <div className="pr-insight-heading">
             <div>
-              <span className="pr-insight-kicker">
-                RECORD-BASED FOLLOW-UP
-              </span>
+              <span className="pr-insight-kicker">RECORD-BASED FOLLOW-UP</span>
               <h2>Action recommendations</h2>
               <p>Prioritized from the current request data</p>
             </div>
           </div>
-
           <div className="pr-recommendation-list">
             {recommendations.length ? (
               recommendations.map((recommendation) => (
@@ -813,15 +802,9 @@ export default function PurchaseRequest() {
                   className="pr-recommendation"
                   key={`${recommendation.request.ref}-${recommendation.title}`}
                   type="button"
-                  onClick={() =>
-                    navigate(
-                      `/purchase-requests/${recommendation.request.ref}`
-                    )
-                  }
+                  onClick={() => navigate(`/purchase-requests/${recommendation.request.ref}`)}
                 >
-                  <span className="pr-recommendation-icon">
-                    <CircleAlert size={15} />
-                  </span>
+                  <span className="pr-recommendation-icon"><CircleAlert size={15} /></span>
                   <span className="pr-recommendation-copy">
                     <strong>{recommendation.title}</strong>
                     <small>{recommendation.detail}</small>
@@ -833,9 +816,7 @@ export default function PurchaseRequest() {
             ) : (
               <div className="pr-recommendation-empty">
                 <CircleCheck size={17} />
-                <span>
-                  No follow-up actions identified for the current view.
-                </span>
+                <span>No follow-up actions identified for the current view.</span>
               </div>
             )}
           </div>
@@ -848,70 +829,14 @@ export default function PurchaseRequest() {
             <ShoppingCart size={12} />
             <div className="purchase-title-copy">
               <strong>Purchase Requests</strong>
-              <span>
-                {filteredRequests.length} of {requests.length} rows
-              </span>
+              <span>{filteredRequests.length} of {requests.length} rows</span>
             </div>
           </div>
 
           <div className="purchase-actions">
-            <button
-              type="button"
-              className="export-button"
-              aria-label="Export"
-              onClick={() => {
-                const csvRows = [
-                  [
-                    "Status",
-                    "PR Number",
-                    "Title",
-                    "PR Amount",
-                    "Associated RFQ",
-                    "Required Date",
-                    "Created By",
-                    "Priority",
-                    "Created On",
-                  ],
-                  ...filteredRequests.map((request) => [
-                    request.status,
-                    request.ref,
-                    request.title,
-                    request.totalAmount,
-                    request.rfq || "Not Available",
-                    request.requiredDate || "Not Available",
-                    request.createdBy,
-                    request.priority || "Normal",
-                    request.date,
-                  ]),
-                ];
-
-                const csv = csvRows
-                  .map((row) =>
-                    row
-                      .map(
-                        (value) =>
-                          `"${String(value ?? "").replace(/"/g, '""')}"`
-                      )
-                      .join(",")
-                  )
-                  .join("\r\n");
-
-                const url = URL.createObjectURL(
-                  new Blob([csv], {
-                    type: "text/csv;charset=utf-8;",
-                  })
-                );
-
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = "purchase-requests.csv";
-                link.click();
-                URL.revokeObjectURL(url);
-              }}
-            >
+            <button type="button" className="export-button" aria-label="Export CSV" onClick={exportCsv}>
               <Download size={12} />
             </button>
-
             <button
               type="button"
               className="dashboard-create-button"
@@ -931,7 +856,7 @@ export default function PurchaseRequest() {
               <input
                 value={tableQuery}
                 onChange={(event) => setTableQuery(event.target.value)}
-                placeholder="Search by ref no, title, RFQ, PO or created by..."
+                placeholder="Search PR ID & Title, Created By ...."
               />
             </div>
           </div>
@@ -942,9 +867,7 @@ export default function PurchaseRequest() {
               <input
                 type="date"
                 value={createdOnQuery}
-                onChange={(event) =>
-                  setCreatedOnQuery(event.target.value)
-                }
+                onChange={(event) => setCreatedOnQuery(event.target.value)}
                 aria-label="Created On"
               />
             </div>
@@ -955,11 +878,7 @@ export default function PurchaseRequest() {
             <div className="filter-input">
               <select
                 value={statusQuery}
-                onChange={(event) =>
-                  setStatusQuery(
-                    event.target.value as "All Status" | PRStatus
-                  )
-                }
+                onChange={(event) => setStatusQuery(event.target.value as "All Status" | PRStatus)}
               >
                 <option>All Status</option>
                 <option>In Review</option>
@@ -993,7 +912,6 @@ export default function PurchaseRequest() {
                 <th>Priority</th>
               </tr>
             </thead>
-
             <tbody>
               {isLoadingRequests ? (
                 <tr>
@@ -1002,7 +920,7 @@ export default function PurchaseRequest() {
                   </td>
                 </tr>
               ) : filteredRequests.length ? (
-                filteredRequests.map((request) => {
+                paginatedRequests.map((request) => {
                   const priority = request.priority || "Normal";
 
                   return (
@@ -1010,31 +928,20 @@ export default function PurchaseRequest() {
                       <td className="purchase-status-cell">
                         <StatusIndicator status={request.status} />
                       </td>
-
                       <td className="purchase-subject-cell">
-                        <strong className="purchase-request-title">
-                          {request.title}
-                        </strong>
+                        <strong className="purchase-request-title">{request.title}</strong>
                         <div className="purchase-subject-meta">
                           <button
                             type="button"
                             className="purchase-ref-link"
-                            onClick={() =>
-                              navigate(
-                                `/purchase-requests/${request.ref}`
-                              )
-                            }
+                            onClick={() => navigate(`/purchase-requests/${request.ref}`)}
                           >
                             {request.ref}
                           </button>
                           <span>Created {request.date || "—"}</span>
                         </div>
                       </td>
-
-                      <td className="purchase-amount">
-                        {request.totalAmount || "—"}
-                      </td>
-
+                      <td className="purchase-amount">{request.totalAmount || "—"}</td>
                       <td>
                         {request.rfq.startsWith("RFQ-") ? (
                           <button
@@ -1045,31 +952,22 @@ export default function PurchaseRequest() {
                             {request.rfq}
                           </button>
                         ) : (
-                          <span className="purchase-associated-ref empty">
-                            Not Available
-                          </span>
+                          <span className="purchase-associated-ref empty">Not Available</span>
                         )}
                       </td>
-
                       <td>
                         {request.requiredDate || (
-                          <span className="purchase-associated-ref empty">
-                            Not Available
-                          </span>
+                          <span className="purchase-associated-ref empty">Not Available</span>
                         )}
                       </td>
-
                       <td>
                         <span className="creator-pill">
                           <span>{getInitials(request.createdBy)}</span>
                           {request.createdBy}
                         </span>
                       </td>
-
                       <td>
-                        <span
-                          className={`purchase-priority ${priority.toLowerCase()}`}
-                        >
+                        <span className={`purchase-priority ${priority.toLowerCase()}`}>
                           {priority}
                         </span>
                       </td>
@@ -1089,24 +987,53 @@ export default function PurchaseRequest() {
 
         <div className="purchase-footer">
           <span>
-            Showing{" "}
-            <strong>
-              {filteredRequests.length ? `1-${filteredRequests.length}` : "0"}
-            </strong>{" "}
-            of <strong>{requests.length}</strong> results
+            Showing <strong>{startRecord}-{endRecord}</strong> of{" "}
+            <strong>{filteredRequests.length}</strong> results
           </span>
+          
+<div className="purchase-pagination">
+  <button
+    type="button"
+    aria-label="Previous page"
+    disabled={currentPage === 1}
+    onClick={() =>
+      setCurrentPage((page) => Math.max(1, page - 1))
+    }
+  >
+    <ChevronLeft size={14} />
+  </button>
 
-          <div className="purchase-pagination">
-            <button type="button" disabled>
-              <ChevronLeft size={11} />
-            </button>
-            <button type="button" className="selected">
-              1
-            </button>
-            <button type="button" disabled>
-              <ChevronRight size={11} />
-            </button>
-          </div>
+  {Array.from(
+    {
+      length: Math.min(2, totalPages - currentPage + 1),
+    },
+    (_, index) => currentPage + index
+  ).map((page) => (
+    <button
+      type="button"
+      key={page}
+      className={currentPage === page ? "selected" : ""}
+      aria-current={currentPage === page ? "page" : undefined}
+      onClick={() => setCurrentPage(page)}
+    >
+      {page}
+    </button>
+  ))}
+
+  <button
+    type="button"
+    aria-label="Next page"
+    disabled={currentPage >= totalPages}
+    onClick={() =>
+      setCurrentPage((page) =>
+        Math.min(totalPages, page + 1)
+      )
+    }
+  >
+    <ChevronRight size={14} />
+  </button>
+</div>
+
         </div>
       </section>
 
