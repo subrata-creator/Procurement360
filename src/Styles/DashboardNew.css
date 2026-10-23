@@ -2529,7 +2529,7 @@
    CREATE PURCHASE REQUEST MODAL
 ========================================================= */
 
-.pr-modal-backdrop {
+/* .pr-modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1100;
@@ -2564,9 +2564,9 @@
 
 .pr-modal-header {
   border-bottom: 1px solid var(--border-hex);
-}
+} */
 
-.pr-modal-eyebrow {
+/* .pr-modal-eyebrow {
   color: var(--primary-hex);
   font-size: 10px;
   font-weight: 700;
@@ -2621,9 +2621,9 @@
 
 .pr-form-field textarea {
   resize: vertical;
-}
+} */
 
-.pr-form-field input:focus,
+/* .pr-form-field input:focus,
 .pr-form-field textarea:focus,
 .pr-quantity-field input:focus {
   border-color: var(--primary-hex);
@@ -2807,7 +2807,7 @@
   .pr-modal-total {
     grid-column: 1;
   }
-}
+} */
 
 /* =========================================================
    CONVERSATIONAL PR BUILDER
