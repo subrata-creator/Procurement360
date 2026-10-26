@@ -592,7 +592,7 @@
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--stage-color) 55%, var(--border-hex));
   border-radius: 50%;
-  background: rgba(8, 15, 23, 0.72);
+  background: var(--muted-hex);
   color: var(--stage-color);
   font-size: 9px;
   font-weight: 700;
@@ -624,7 +624,7 @@
   padding: 10px 12px;
   border: 1px solid var(--border-hex);
   border-radius: 0 0 12px 12px;
-  background: rgba(11, 17, 23, 0.74);
+  background: var(--card-hex);
 }
 
 .xd-stage-icon { width: 28px; height: 28px; }

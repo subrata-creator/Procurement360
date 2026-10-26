@@ -981,6 +981,8 @@
 
 .task-badge.purchase {
   background: var(--secondary-hex);
+
+  color: var(--foreground-hex);
 }
 
 
@@ -1019,7 +1021,7 @@
 
   background: var(--secondary-hex);
 
-  color: #ffffff;
+  color: var(--foreground-hex);
 
   font-size: 8px;
 
@@ -1099,7 +1101,7 @@
 
 
 .task-footer button.page-active {
-  color: #0B1117;
+  color: var(--primary-foreground-hex);
 
   background: var(--primary-hex);
 
@@ -1531,7 +1533,7 @@
 }
 
 .xd-kpi.xd-blue { --tone: var(--accent-hex); --tone-bg: rgba(56, 189, 248, 0.18); }
-.xd-kpi.xd-violet { --tone: var(--secondary-hex); --tone-bg: rgba(23, 34, 44, 0.18); }
+.xd-kpi.xd-violet { --tone: #8B5CF6; --tone-bg: rgba(139, 92, 246, 0.14); }
 .xd-kpi.xd-green { --tone: var(--success-hex); --tone-bg: rgba(34, 197, 94, 0.14); }
 .xd-kpi.xd-amber { --tone: var(--warning-hex); --tone-bg: rgba(245, 158, 11, 0.15); }
 
@@ -1934,7 +1936,7 @@
   padding: 8px;
   border: 1px solid var(--border-hex);
   border-radius: 7px;
-  background: rgba(11, 17, 23, 0.5);
+  background: var(--card-hex);
 }
 
 .xd-stage-icon {
