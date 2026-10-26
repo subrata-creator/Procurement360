@@ -5,6 +5,13 @@
  */
 
 export const dataSourcesInfo = {
+  "cr49f_productses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_productsid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr49f_purchaserequestlines": {
     "tableId": "",
     "version": "",

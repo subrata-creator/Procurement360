@@ -33,6 +33,10 @@
         "requestforqoutations": {
           "entitySetName": "cr49f_requestforqoutations",
           "logicalName": "cr49f_requestforqoutation"
+        },
+        "productcatalogs": {
+          "entitySetName": "cr49f_productses",
+          "logicalName": "cr49f_products"
         }
       },
       "environmentVariableName": ""
