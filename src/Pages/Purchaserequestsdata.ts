@@ -52,7 +52,7 @@ export interface PurchaseRequestRecord {
   lineItems?: LineItem[];
 }
 
-export const purchaseRequests: PurchaseRequestRecord[] = [
+const seedPurchaseRequests: PurchaseRequestRecord[] = [
   {
     ref: "PR-2026-090",
     title: "PR for First Aid Kit",
@@ -131,6 +131,61 @@ export const purchaseRequests: PurchaseRequestRecord[] = [
   { ref: "PR-2026-084", title: "PR for Document Trays", rfq: "No RFQ available", po: "No PO available", createdBy: "Sakshi Paliwal", date: "2/3/2026", status: "In Review", department: "Administration", requiredDate: "2/18/2026", totalAmount: "USD 590.00", category: "Office Supplies", priority: "Normal", costCenter: "ADM-OFF-205", justification: "Add document trays to shared workstations to improve records handling.", deliveryAddress: "Administration, Floor 2" },
   { ref: "PR-2026-083", title: "PR for Laptop", rfq: "RFQ-2026-041", po: "PO-2026-018", createdBy: "Sakshi Paliwal", date: "1/28/2026", status: "Rejected", department: "Information Technology", requiredDate: "2/10/2026", totalAmount: "USD 4,200.00", category: "IT Hardware", priority: "High", costCenter: "IT-CAPEX-110", justification: "Replacement laptop request for a field support role; returned for budget clarification.", deliveryAddress: "IT Operations, Building A" },
 ];
+
+const CREATED_REQUESTS_KEY = "procurement360.createdPurchaseRequests";
+
+function isPurchaseRequestRecord(value: unknown): value is PurchaseRequestRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const request = value as Partial<PurchaseRequestRecord>;
+  return typeof request.ref === "string" &&
+    typeof request.title === "string" &&
+    typeof request.rfq === "string" &&
+    typeof request.po === "string" &&
+    typeof request.createdBy === "string" &&
+    typeof request.date === "string" &&
+    (request.status === "In Review" || request.status === "Approved" || request.status === "Rejected");
+}
+
+function readCreatedPurchaseRequests(): PurchaseRequestRecord[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const stored = window.localStorage.getItem(CREATED_REQUESTS_KEY);
+    const parsed: unknown = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed) ? parsed.filter(isPurchaseRequestRecord) : [];
+  } catch {
+    return [];
+  }
+}
+
+export const purchaseRequests: PurchaseRequestRecord[] = [
+  ...readCreatedPurchaseRequests(),
+  ...seedPurchaseRequests,
+];
+
+export function addPurchaseRequest(request: PurchaseRequestRecord): PurchaseRequestRecord {
+  const existing = purchaseRequests.find((current) => current.ref === request.ref);
+  if (existing) return existing;
+
+  purchaseRequests.unshift(request);
+  const savedRequests = readCreatedPurchaseRequests().filter((current) => current.ref !== request.ref);
+  try {
+    window.localStorage.setItem(CREATED_REQUESTS_KEY, JSON.stringify([request, ...savedRequests]));
+  } catch {
+    // Keep the request available for this session if browser storage is unavailable.
+  }
+  return request;
+}
+
+export function getNextPurchaseRequestRef(): string {
+  const prefix = `PR-${new Date().getFullYear()}-`;
+  const latestNumber = purchaseRequests.reduce((latest, request) => {
+    if (!request.ref.startsWith(prefix)) return latest;
+    const number = Number(request.ref.slice(prefix.length));
+    return Number.isFinite(number) ? Math.max(latest, number) : latest;
+  }, 0);
+  return `${prefix}${String(latestNumber + 1).padStart(3, "0")}`;
+}
 
 const STEP_LABELS = ["PR Creation", "Review & Approval", "Approved", "RFQ Initiated", "PO Created", "Invoice Created", "Closed"];
 

@@ -18,8 +18,8 @@ body,
 
 body {
   font-family: "Segoe UI", Arial, Helvetica, sans-serif;
-  background: #0B1117;
-  color: #F8FAFC;
+  background: var(--background-hex, #12181F);
+  color: var(--foreground-hex, #E8ECF1);
 }
 
 button,
@@ -81,16 +81,16 @@ a {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0B1117;
+  background: var(--background-hex, #12181F);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #243240;
+  background: var(--border-hex, #2A3744);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #115E59;
+  background: var(--primary-800, #115E59);
 }
 
 
@@ -99,8 +99,8 @@ a {
 ========================================================= */
 
 ::selection {
-  background: #14B8A6;
-  color: #0B1117;
+  background: var(--primary-hex, #14B8A6);
+  color: var(--background-hex, #12181F);
 }
 
 
@@ -113,6 +113,6 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 a:focus-visible {
-  outline: 2px solid #14B8A6;
+  outline: 2px solid var(--primary-hex, #14B8A6);
   outline-offset: 2px;
 }

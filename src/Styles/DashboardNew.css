@@ -110,6 +110,15 @@
   flex-shrink: 0;
 }
 
+.command-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
 
 /* =========================================================
    HEADER ICON BUTTONS
@@ -1386,6 +1395,11 @@
     justify-content: flex-end;
   }
 
+  .command-tools {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .dashboard-middle {
     grid-template-columns: 1fr;
   }
@@ -1427,6 +1441,11 @@
     flex-wrap: wrap;
   }
 
+  .command-tools {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .dashboard-create-button {
     flex: 1;
   }
@@ -1449,6 +1468,11 @@
 
   .dashboard-actions {
     width: 100%;
+  }
+
+  .command-tools {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .dashboard-create-button {
@@ -2505,7 +2529,7 @@
    CREATE PURCHASE REQUEST MODAL
 ========================================================= */
 
-.pr-modal-backdrop {
+/* .pr-modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1100;
@@ -2540,9 +2564,9 @@
 
 .pr-modal-header {
   border-bottom: 1px solid var(--border-hex);
-}
+} */
 
-.pr-modal-eyebrow {
+/* .pr-modal-eyebrow {
   color: var(--primary-hex);
   font-size: 10px;
   font-weight: 700;
@@ -2597,9 +2621,9 @@
 
 .pr-form-field textarea {
   resize: vertical;
-}
+} */
 
-.pr-form-field input:focus,
+/* .pr-form-field input:focus,
 .pr-form-field textarea:focus,
 .pr-quantity-field input:focus {
   border-color: var(--primary-hex);
@@ -2783,7 +2807,7 @@
   .pr-modal-total {
     grid-column: 1;
   }
-}
+} */
 
 /* =========================================================
    CONVERSATIONAL PR BUILDER

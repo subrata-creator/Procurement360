@@ -1,88 +1,532 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  CircleX,
+  ClipboardList,
+  Clock3,
+  Plus,
+  Search,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-type RfqStatus = "Rewarded" | "Approved";
+import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 
-interface RfqRow {
-  refNo: string;
-  title: string;
-  pr: string;
-  po: string;
-  responses: string;
-  supplier: string;
-  createdBy: string;
-  createdDate: string;
-  status: RfqStatus;
+import "../Styles/Styles.css";
+import "../Styles/RFQPage.css";
+
+const PAGE_SIZE = 10;
+
+const STATUS_FILTER_OPTIONS = [
+  "All Status",
+  "Pending",
+  "Approved",
+  "ChangesNeeded",
+  "Rejected",
+] as const;
+type StatusFilter = (typeof STATUS_FILTER_OPTIONS)[number];
+
+type RawRfq = Cr49f_requestforqoutations & {
+  "_createdby_value@OData.Community.Display.V1.FormattedValue"?: string;
+  "_cr49f_prrfq_value@OData.Community.Display.V1.FormattedValue"?: string;
+};
+
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "numeric",
+  day: "numeric",
+  year: "numeric",
+});
+
+function formatDate(value?: string | null): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "—" : dateFormatter.format(parsed);
 }
 
-const rfqs: RfqRow[] = [
-  { refNo: "RFQ-2026-052", title: "RFQ - IT Equipments", pr: "PR-2026-088", po: "PO-2026-032", responses: "3/3", supplier: "Logitech", createdBy: "Ashish Bhatia", createdDate: "01/04/2026", status: "Rewarded" },
-  { refNo: "RFQ-2026-051", title: "RFQ for Printer", pr: "No PR available", po: "No PO available", responses: "1/2", supplier: "N/A", createdBy: "Ashish Bhatia", createdDate: "18/03/2026", status: "Approved" },
-  { refNo: "RFQ-2026-050", title: "RFQ", pr: "No PR available", po: "No PO available", responses: "1/2", supplier: "N/A", createdBy: "Ashish Bhatia", createdDate: "17/03/2026", status: "Approved" },
-  { refNo: "RFQ-2026-049", title: "RFQ", pr: "No PR available", po: "No PO available", responses: "0/2", supplier: "N/A", createdBy: "Ashish Bhatia", createdDate: "17/03/2026", status: "Approved" },
-  { refNo: "RFQ-2026-048", title: "RFQ", pr: "PR-2026-087", po: "No PO available", responses: "1/2", supplier: "Dell Inc.", createdBy: "Ashish Bhatia", createdDate: "03/02/2026", status: "Rewarded" },
-  { refNo: "RFQ-2026-047", title: "RFQ Pens", pr: "PR-2026-085", po: "PO-2026-028", responses: "2/2", supplier: "ITC", createdBy: "Ashish Bhatia", createdDate: "03/02/2026", status: "Rewarded" },
-  { refNo: "RFQ-2026-046", title: "RFQ ST - IT", pr: "No PR available", po: "No PO available", responses: "1/2", supplier: "Dell Inc.", createdBy: "Ashish Bhatia", createdDate: "30/01/2026", status: "Rewarded" },
-];
+function toIsoDate(value?: string | null): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  // Use local calendar date rather than shifting a date-only value through UTC.
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-const metrics = [
-  { label: "Rewarded Suppliers", value: "24", icon: "♧", tone: "blue" },
-  { label: "Published To Suppliers", value: "43", icon: "▣", tone: "purple" },
-  { label: "Response Due This Week", value: "0", icon: "⇆", tone: "amber" },
-  { label: "Overdue RFQs", value: "39", icon: "▣", tone: "pink" },
-];
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function getStatusLabel(row: RawRfq): string {
+  const formatted = row.cr49f_statusname?.trim();
+  if (formatted) {
+    const normalized = formatted.replace(/\s+/g, "").toLowerCase();
+    if (normalized === "changesneeded") return "Changes Needed";
+    if (normalized === "pending") return "Pending";
+    if (normalized === "approved") return "Approved";
+    if (normalized === "rejected") return "Rejected";
+  }
+
+  switch (Number(row.cr49f_status)) {
+    case 0: return "Pending";
+    case 1: return "Approved";
+    case 2: return "Changes Needed";
+    case 3: return "Rejected";
+    default: return "Pending";
+  }
+}
+
+function getStatusFilterValue(row: RawRfq): string {
+  return getStatusLabel(row).replace(/\s+/g, "").toLowerCase();
+}
+
+function getCreatedBy(row: RawRfq): string {
+  return (
+    row["_createdby_value@OData.Community.Display.V1.FormattedValue"]?.trim() ||
+    row.createdbyname?.trim() ||
+    "Unknown"
+  );
+}
+
+function getAssociatedPr(row: RawRfq): string {
+  return (
+    row["_cr49f_prrfq_value@OData.Community.Display.V1.FormattedValue"]?.trim() ||
+    row.cr49f_prrfqname?.trim() ||
+    ""
+  );
+}
+
+// ---------------------------------------------------------------------
+// Status ring — replaces the plain dot + separate "Status" text column.
+// Per your reference screenshot: one ring, colored by status, with the
+// progress percentage inside it (same visual language the old mock
+// RfqStatusRing/PR StatusIndicator used), and no separate status word
+// anywhere else in the row.
+//
+// Percentages below are a judgment call, not something Dataverse
+// stores — cr49f_status only gives the 4 discrete states, not a
+// progress number. Pending=50 matches your screenshot; Changes
+// Needed=70 (further along than Pending, still open); Approved and
+// Rejected both ring fully closed (100) since the RFQ's workflow has
+// ended either way, just colored green vs. red. Tell me if you want
+// different numbers.
+// ---------------------------------------------------------------------
+const STATUS_RING_PROGRESS: Record<string, number> = {
+  Pending: 50,
+  "Changes Needed": 70,
+  Approved: 100,
+  Rejected: 100,
+};
+
+function statusRingTone(label: string): string {
+  const normalized = label.replace(/\s+/g, "").toLowerCase();
+  if (normalized === "approved") return "approved";
+  if (normalized === "rejected") return "rejected";
+  if (normalized === "changesneeded") return "changes-needed";
+  return "pending";
+}
+
+function RfqStatusRing({ label }: { label: string }) {
+  const progress = STATUS_RING_PROGRESS[label] ?? 25;
+  const tone = statusRingTone(label);
+  return (
+    <span
+      className={`rfq-status-ring ${tone}`}
+      role="img"
+      aria-label={`${label}, ${progress}% complete`}
+      title={`${label} · ${progress}% complete`}
+      style={{ "--ring-progress": progress } as React.CSSProperties}
+    >
+      <span aria-hidden="true">{progress}<small>%</small></span>
+    </span>
+  );
+}
 
 const RfqPage: React.FC = () => {
+  const navigate = useNavigate();
+  const [records, setRecords] = useState<RawRfq[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [createdOnQuery, setCreatedOnQuery] = useState("");
+  const [statusQuery, setStatusQuery] = useState<StatusFilter>("All Status");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const loadRfqs = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const result = await Cr49f_requestforqoutationsService.getAll();
+      if (!result.success) {
+        throw new Error("Dataverse did not return the RFQ records successfully.");
+      }
+      setRecords((result.data ?? []) as RawRfq[]);
+    } catch (error) {
+      console.error("Failed to load RFQs from Dataverse:", error);
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't load RFQs from Dataverse. Check the browser console for details."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRfqs();
+  }, [loadRfqs]);
+
   const visibleRows = useMemo(() => {
-    const query = search.toLowerCase();
-    return rfqs.filter((row) => Object.values(row).some((value) => value.toLowerCase().includes(query)));
-  }, [search]);
+    const query = search.trim().toLowerCase();
+
+    return records.filter((row) => {
+      const createdBy = getCreatedBy(row);
+      const associatedPr = getAssociatedPr(row);
+      const statusLabel = getStatusLabel(row);
+
+      const haystack = [
+        row.cr49f_rfqnumber,
+        row.cr49f_rfqtitle,
+        row.cr49f_description,
+        createdBy,
+        statusLabel,
+        associatedPr,
+        row.cr49f_deliverylocation,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = haystack.includes(query);
+      const matchesCreatedOn =
+        !createdOnQuery ||
+        toIsoDate(row.createdon ?? row.cr49f_requestdate) === createdOnQuery;
+      const matchesStatus =
+        statusQuery === "All Status" ||
+        getStatusFilterValue(row) === statusQuery.replace(/\s+/g, "").toLowerCase();
+
+      return matchesSearch && matchesCreatedOn && matchesStatus;
+    });
+  }, [records, search, createdOnQuery, statusQuery]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, createdOnQuery, statusQuery]);
+
+  const counts = useMemo(() => ({
+    total: records.length,
+    approved: records.filter((row) => getStatusLabel(row) === "Approved").length,
+    pending: records.filter((row) => {
+      const label = getStatusLabel(row);
+      return label === "Pending" || label === "Changes Needed";
+    }).length,
+    rejected: records.filter((row) => getStatusLabel(row) === "Rejected").length,
+  }), [records]);
+
+  const percentOf = (count: number) =>
+    counts.total ? Math.round((count / counts.total) * 100) : 0;
+
+  const metrics = [
+    {
+      label: "Total RFQs",
+      value: counts.total,
+      caption: "All RFQ records",
+      progress: 100,
+      icon: <ClipboardList size={18} />,
+      tone: "blue",
+      filter: "All Status" as const,
+    },
+    {
+      label: "Approved RFQs",
+      value: counts.approved,
+      caption: `${percentOf(counts.approved)}% of RFQs`,
+      progress: percentOf(counts.approved),
+      icon: <CircleCheck size={18} />,
+      tone: "green",
+      filter: "Approved" as const,
+    },
+    {
+      label: "Pending RFQs",
+      value: counts.pending,
+      caption: `${percentOf(counts.pending)}% of RFQs`,
+      progress: percentOf(counts.pending),
+      icon: <Clock3 size={18} />,
+      tone: "amber",
+      filter: "Pending" as const,
+    },
+    {
+      label: "Rejected RFQs",
+      value: counts.rejected,
+      caption: `${percentOf(counts.rejected)}% of RFQs`,
+      progress: percentOf(counts.rejected),
+      icon: <CircleX size={18} />,
+      tone: "red",
+      filter: "Rejected" as const,
+    },
+  ];
+
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedRows = visibleRows.slice(
+    (safeCurrentPage - 1) * PAGE_SIZE,
+    safeCurrentPage * PAGE_SIZE
+  );
+  const startRecord = visibleRows.length
+    ? (safeCurrentPage - 1) * PAGE_SIZE + 1
+    : 0;
+  const endRecord = Math.min(safeCurrentPage * PAGE_SIZE, visibleRows.length);
 
   return (
-    <main className="rfq-page">
-      <div className="rfq-heading">
+    <main className="purchase-page rfq-page">
+      <div className="purchase-heading">
         <div>
           <h1>Request For Quotations</h1>
           <p>Manage and track all RFQs</p>
         </div>
-        <label className="rfq-global-search"><span>⌕</span><input placeholder="Search RFQs..." /></label>
-        <button className="rfq-notification" type="button" aria-label="Notifications">♧<i /></button>
       </div>
 
-      <section className="rfq-metrics">
+      <section className="xd-kpis rfq-metrics" aria-label="RFQ metrics">
         {metrics.map((metric) => (
-          <article className={`rfq-metric ${metric.tone}`} key={metric.label}>
-            <div className="rfq-metric-icon">{metric.icon}</div>
-            <div><span>{metric.label}</span><strong>{metric.value}</strong></div>
-            <div className="metric-spark" aria-hidden="true" />
+          <article
+            className={`xd-kpi xd-${metric.tone} ${statusQuery === metric.filter ? "selected" : ""}`}
+            key={metric.label}
+            role="button"
+            tabIndex={0}
+            aria-pressed={statusQuery === metric.filter}
+            onClick={() => setStatusQuery(metric.filter)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setStatusQuery(metric.filter);
+              }
+            }}
+          >
+            <div className="xd-kpi-top">
+              <span className="xd-kpi-label">{metric.label}</span>
+              <span className="xd-kpi-icon">{metric.icon}</span>
+            </div>
+            <div className="xd-kpi-mid">
+              <strong>{metric.value}</strong>
+            </div>
+            <div className="xd-kpi-progress-wrap">
+              <span className="xd-kpi-cap">{metric.caption}</span>
+              <div
+                className="xd-progress"
+                role="progressbar"
+                aria-label={metric.label}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={metric.progress}
+              >
+                <span style={{ width: `${Math.max(metric.progress, 2)}%` }} />
+              </div>
+            </div>
           </article>
         ))}
       </section>
 
-      <section className="rfq-card">
-        <div className="rfq-card-heading">
-          <h2><span>➤</span> Request For Quotations</h2>
-          <div className="rfq-card-actions"><button type="button" className="export-button" aria-label="Export RFQs">▣</button><button type="button" className="create-rfq">＋ Create RFQ</button></div>
+      <section id="rfq-records-card" className="purchase-card rfq-records-card">
+        <div className="purchase-card-heading">
+          <div className="purchase-title">
+            <span className="rfq-title-icon" aria-hidden="true">
+              <ClipboardList size={14} />
+            </span>
+            <div className="purchase-title-copy">
+              <strong>Request For Quotations</strong>
+              <span>{visibleRows.length} of {records.length} RFQs</span>
+            </div>
+          </div>
+          <div className="purchase-actions">
+            <button
+              type="button"
+              className="dashboard-create-button"
+              onClick={() => navigate("/rfqs/new")}
+            >
+              <span className="create-plus"><Plus size={16} /></span>
+              Create RFQ
+            </button>
+          </div>
         </div>
+
         <div className="rfq-filters">
-          {[
-            ["Ref No", "Search..."], ["Title", "Search..."], ["Associated PR", "Search..."], ["Associated PO", "Search..."], ["Responses", "Search..."], ["Rewarded Supplier", "Search..."], ["Created By", "Search..."],
-          ].map(([label, placeholder], index) => (
-            <label key={label}><span>{label}</span><input value={index === 0 ? search : undefined} onChange={index === 0 ? (event) => setSearch(event.target.value) : undefined} placeholder={placeholder} /></label>
-          ))}
-          <label><span>Created Date</span><div className="date-filter"><b>▣</b><input placeholder="Select date" /><i>⚱</i></div></label>
-          <label><span>Status</span><select defaultValue="All"><option>All Status</option><option>Rewarded</option><option>Approved</option></select></label>
+          <div className="rfq-filter-field rfq-search-filter">
+            <label>Search</label>
+            <div className="rfq-filter-input">
+              <Search size={13} />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search RFQ ID, title, PR, Created By..."
+              />
+            </div>
+          </div>
+          <div className="rfq-filter-field">
+            <label>Created On</label>
+            <div className="rfq-filter-input rfq-date-input">
+              <input
+                type="date"
+                aria-label="Filter by created date"
+                value={createdOnQuery}
+                onChange={(event) => setCreatedOnQuery(event.target.value)}
+              />
+              {createdOnQuery && (
+                <button
+                  type="button"
+                  className="rfq-filter-clear-btn"
+                  aria-label="Clear date filter"
+                  onClick={() => setCreatedOnQuery("")}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="rfq-filter-field">
+            <label>Status</label>
+            <div className="rfq-filter-input">
+              <select
+                value={statusQuery}
+                onChange={(event) => setStatusQuery(event.target.value as StatusFilter)}
+              >
+                {STATUS_FILTER_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option === "ChangesNeeded" ? "Changes Needed" : option}</option>
+                ))}
+              </select>
+              <ChevronDown size={11} />
+            </div>
+          </div>
         </div>
-        <div className="rfq-table-wrap">
-          <table className="rfq-table">
-            <thead><tr><th>#</th><th>Ref No <b>↕</b></th><th>Title</th><th>Associated PR <b>↕</b></th><th>Associated PO <b>↕</b></th><th>Responses <b>↕</b></th><th>Rewarded Supplier <b>↕</b></th><th>Created By <b>↕</b></th><th>Created Date <b>↕</b></th><th>Status <b>↕</b></th></tr></thead>
-            <tbody>{visibleRows.map((row, index) => <tr key={row.refNo}>
-              <td>{index + 1}</td><td className="link-cell">{row.refNo}</td><td>{row.title}</td><td className={row.pr.startsWith("PR-") ? "link-cell" : "muted-cell"}>{row.pr}</td><td className={row.po.startsWith("PO-") ? "link-cell" : "muted-cell"}>{row.po}</td><td>{row.responses}</td>
-              <td><span className={`supplier-cell ${row.supplier === "N/A" ? "supplier-na" : ""}`}>{row.supplier !== "N/A" && <b>{row.supplier === "Logitech" ? "G" : row.supplier === "ITC" ? "△" : "D"}</b>}{row.supplier}</span></td><td><span className="creator-cell"><b>👤</b>{row.createdBy}</span></td><td><span className="date-cell">▣ {row.createdDate}</span></td><td><span className={`status-pill ${row.status.toLowerCase()}`}>{row.status === "Rewarded" ? "▣" : "◉"} {row.status}</span></td>
-            </tr>)}</tbody>
+
+        {loadError && !isLoading && (
+          <div className="purchase-empty-state" role="alert">
+            <p>{loadError}</p>
+            <button type="button" onClick={() => void loadRfqs()}>Retry loading</button>
+          </div>
+        )}
+
+        <div className="purchase-table-wrap">
+          <table className="purchase-table rfq-table">
+            <thead>
+              <tr>
+                <th aria-label="Status"></th>
+                <th>RFQ ID &amp; Title</th>
+                <th>Associated PR</th>
+                <th>Associated PO</th>
+                <th>Request Date</th>
+                <th>Submission Deadline</th>
+                <th>Award Date</th>
+                <th>Closed Date</th>
+                <th>Delivery Location</th>
+                <th>Created By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td className="purchase-empty-state" colSpan={10}>
+                    Loading RFQs from Dataverse...
+                  </td>
+                </tr>
+              ) : loadError ? null : paginatedRows.length ? (
+                paginatedRows.map((row) => {
+                  const statusLabel = getStatusLabel(row);
+                  const createdBy = getCreatedBy(row);
+                  const associatedPr = getAssociatedPr(row);
+
+                  return (
+                    <tr key={row.cr49f_requestforqoutationid}>
+                      <td className="purchase-status-cell">
+                        <RfqStatusRing label={statusLabel} />
+                      </td>
+                      <td className="purchase-subject-cell">
+                        <strong className="purchase-request-title">
+                          {row.cr49f_rfqtitle?.trim() || "Untitled RFQ"}
+                        </strong>
+                        <div className="purchase-subject-meta">
+                          <button
+                            type="button"
+                            className="purchase-ref-link"
+                            onClick={() => navigate(`/rfqs/${row.cr49f_rfqnumber || row.cr49f_requestforqoutationid}`)}
+                          >
+                            {row.cr49f_rfqnumber?.trim() || row.cr49f_requestforqoutationid}
+                          </button>
+                          <span>Created {formatDate(row.createdon)}</span>
+                        </div>
+                      </td>
+                      <td className={associatedPr ? "purchase-link" : "purchase-muted"}>
+                        {associatedPr || "Not linked"}
+                      </td>
+                      {/*
+                        Associated PO: there is no PO lookup field on
+                        cr49f_requestforqoutations (only cr49f_PRRFQ,
+                        the PR lookup, exists) — this will read "Not
+                        linked" for every row until that relationship
+                        is added in Dataverse. Not faked as a real link.
+                      */}
+                      <td className="purchase-muted">Not linked</td>
+                      <td>{formatDate(row.cr49f_requestdate)}</td>
+                      <td>{formatDate(row.cr49f_submissiondeadline)}</td>
+                      <td>{formatDate(row.cr49f_awarddate)}</td>
+                      <td>{formatDate(row.cr49f_closeddate)}</td>
+                      <td>{row.cr49f_deliverylocation?.trim() || "—"}</td>
+                      <td>
+                        <span className="creator-pill">
+                          <span>{getInitials(createdBy === "Unknown" ? "U" : createdBy)}</span>
+                          {createdBy}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td className="purchase-empty-state" colSpan={10}>
+                    No RFQs match these filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
           </table>
         </div>
-        <div className="rfq-footer"><span>Showing <strong>1-{visibleRows.length}</strong> of <strong>39</strong> results</span><div className="rfq-pagination"><button type="button">‹</button><button type="button" className="selected">1</button><button type="button">›</button></div></div>
+
+        <div className="purchase-footer">
+          <span>
+            Showing <strong>{startRecord}-{endRecord}</strong> of{" "}
+            <strong>{visibleRows.length}</strong> RFQs
+          </span>
+          <div className="purchase-pagination">
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button type="button" className="selected" aria-current="page">
+              {safeCurrentPage}
+            </button>
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
       </section>
     </main>
   );

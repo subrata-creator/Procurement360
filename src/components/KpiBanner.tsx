@@ -2,9 +2,10 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { KpiItem } from "../types/dashboard";
 import { ShoppingCart, ClipboardList, PackageCheck, FileText, BarChart3, FileCheck2, TrendingUp, TrendingDown, Sparkles, AlertCircle } from "lucide-react";
+import { PROCUREMENT_BUDGET_REMAINING_USD, PROCUREMENT_BUDGET_USD } from "../data/procurementBudget";
 
-const ALLOCATED = 10.0; // USD millions
-const REMAINING = 9.9;
+const ALLOCATED = PROCUREMENT_BUDGET_USD / 1_000_000;
+const REMAINING = PROCUREMENT_BUDGET_REMAINING_USD / 1_000_000;
 const usedPct = Math.round(((ALLOCATED - REMAINING) / ALLOCATED) * 100);
 
 const kpis: KpiItem[] = [

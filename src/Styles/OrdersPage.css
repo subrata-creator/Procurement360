@@ -1,0 +1,556 @@
+/* =========================================================
+   ORDERS PAGE (list/overview)
+   Mirrors the PurchaseRequest.tsx / RfqPage.tsx list-page pattern:
+   `.purchase-page` shell, `.xd-kpis` KPI band, an insights grid,
+   an AI-summary + Ask-AI band, and a `.purchase-card` records table.
+   Everything here reads from the shared Theme.css variable tokens —
+   no hardcoded hex — so it tracks dark/light mode like the other
+   pages already fixed in this app.
+
+   Note: `.xd-kpi.xd-violet` / `.xd-kpi.xd-cyan` are defined below as a
+   fallback in case the Dashboard's `.xd-kpis` tone set doesn't already
+   include them (it was built around 6 fixed tones for the Dashboard's
+   own metrics). If `xd-violet`/`xd-cyan` already exist elsewhere with
+   different colors, these rules will simply be redundant — worth a
+   quick visual check once this is wired in.
+========================================================= */
+
+.orders-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.orders-page .xd-kpi.xd-violet {
+  --kpi-accent: #8B5CF6;
+}
+.orders-page .xd-kpi.xd-cyan {
+  --kpi-accent: #22D3EE;
+}
+.orders-page .xd-kpi.xd-violet .xd-kpi-icon,
+.orders-page .xd-kpi.xd-cyan .xd-kpi-icon {
+  color: var(--kpi-accent);
+}
+.orders-page .xd-kpi.xd-violet .xd-progress span {
+  background: var(--kpi-accent);
+}
+.orders-page .xd-kpi.xd-cyan .xd-progress span {
+  background: var(--kpi-accent);
+}
+
+/* ---------------------------------------------------------
+   Insights grid: status breakdown / supplier spend / AI follow-ups
+--------------------------------------------------------- */
+.orders-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.orders-insight-panel {
+  background: var(--card-hex, #1B232D);
+  border: 1px solid var(--border-hex, #2A3542);
+  border-radius: var(--radius-lg, 14px);
+  padding: 16px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.orders-insight-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.orders-insight-kicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground-hex, #8694A3);
+}
+
+.orders-insight-heading h2 {
+  margin: 2px 0 2px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+.orders-insight-heading p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-foreground-hex, #8694A3);
+}
+
+.orders-insight-heading-icon {
+  color: var(--primary-hex, #4F8CFF);
+  flex-shrink: 0;
+}
+
+/* Status breakdown rows */
+.orders-aging-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.orders-aging-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 28px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+.orders-aging-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--muted-hex, #232D38);
+  overflow: hidden;
+}
+
+.orders-aging-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.25s ease;
+}
+
+.orders-aging-track span.fresh { background: var(--success-hex, #22C55E); }
+.orders-aging-track span.watch { background: var(--warning-hex, #F59E0B); }
+.orders-aging-track span.critical { background: var(--destructive-hex, #EF4444); }
+
+.orders-aging-row strong {
+  text-align: right;
+  font-weight: 700;
+}
+
+/* Supplier spend rows */
+.orders-category-spend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.orders-category-row {
+  display: grid;
+  grid-template-columns: 92px 1fr 90px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+.orders-category-row span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-category-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--muted-hex, #232D38);
+  overflow: hidden;
+}
+
+.orders-category-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.25s ease;
+}
+
+.orders-category-track span.tone-0 { background: var(--primary-hex, #4F8CFF); }
+.orders-category-track span.tone-1 { background: var(--accent-hex, #22D3EE); }
+.orders-category-track span.tone-2 { background: var(--warning-hex, #F59E0B); }
+.orders-category-track span.tone-3 { background: #8B5CF6; }
+
+.orders-category-row strong {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.orders-insight-empty {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted-foreground-hex, #8694A3);
+}
+
+/* AI recommendations */
+.orders-recommendations-panel {
+  gap: 10px;
+}
+
+.orders-recommendation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.orders-recommendation {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-hex, #2A3542);
+  background: var(--elevated-hex, #202A35);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.orders-recommendation:hover {
+  border-color: var(--primary-hex, #4F8CFF);
+  background: color-mix(in srgb, var(--primary-hex, #4F8CFF) 10%, var(--elevated-hex, #202A35));
+}
+
+.orders-recommendation-icon {
+  color: var(--warning-hex, #F59E0B);
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.orders-recommendation-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.orders-recommendation-copy strong {
+  font-size: 12.5px;
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+.orders-recommendation-copy small {
+  font-size: 11.5px;
+  color: var(--muted-foreground-hex, #8694A3);
+  line-height: 1.4;
+}
+
+.orders-recommendation-copy em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--primary-hex, #4F8CFF);
+  font-weight: 600;
+}
+
+.orders-recommendation-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted-foreground-hex, #8694A3);
+  padding: 8px 2px;
+}
+
+.orders-recommendation-empty svg {
+  color: var(--success-hex, #22C55E);
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------
+   AI summary + Ask Procurement AI band
+--------------------------------------------------------- */
+.orders-ai-summary-band {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 14px;
+  background: var(--card-hex, #1B232D);
+  border: 1px solid var(--border-hex, #2A3542);
+  border-radius: var(--radius-lg, 14px);
+  padding: 16px;
+}
+
+.orders-ai-summary-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.orders-ai-summary-heading span {
+  display: inline-flex;
+  color: var(--primary-hex, #4F8CFF);
+}
+
+.orders-ai-summary-heading h2 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+.orders-ai-summary-heading small {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--success-hex, #22C55E);
+  background: color-mix(in srgb, var(--success-hex, #22C55E) 14%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.orders-ai-summary-copy p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--foreground-hex, #D7DEE6);
+}
+
+.orders-ask-ai {
+  border-left: 1px solid var(--border-hex, #2A3542);
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.orders-ask-ai h2 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+.orders-ask-ai-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--elevated-hex, #202A35);
+  border: 1px solid var(--border-hex, #2A3542);
+  border-radius: var(--radius-md, 10px);
+  padding: 7px 8px 7px 12px;
+}
+
+.orders-ask-ai-input input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--foreground-hex, #E7ECF2);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.orders-ask-ai-input input::placeholder {
+  color: var(--muted-foreground-hex, #6E7B8A);
+}
+
+.orders-ask-ai-input button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm, 8px);
+  border: none;
+  background: var(--primary-hex, #4F8CFF);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.orders-ask-ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.orders-ask-ai-chips button {
+  border: 1px solid var(--border-hex, #2A3542);
+  background: var(--elevated-hex, #202A35);
+  color: var(--foreground-hex, #C9D2DC);
+  font-size: 11.5px;
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.orders-ask-ai-chips button:hover {
+  border-color: var(--primary-hex, #4F8CFF);
+  color: var(--primary-hex, #4F8CFF);
+}
+
+/* ---------------------------------------------------------
+   Records card: title icon, filters, table
+--------------------------------------------------------- */
+.orders-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--primary-hex, #4F8CFF) 16%, transparent);
+  color: var(--primary-hex, #4F8CFF);
+  flex-shrink: 0;
+}
+
+.orders-filters {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0 12px;
+}
+
+.orders-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.orders-filter-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground-hex, #8694A3);
+}
+
+.orders-filter-input {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border-hex, #2A3542);
+  background: var(--elevated-hex, #202A35);
+  color: var(--muted-foreground-hex, #8694A3);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.orders-filter-input:focus-within {
+  border-color: var(--primary-hex, #4F8CFF);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-hex, #4F8CFF) 18%, transparent);
+}
+
+/* Same global Theme.css `input:focus-visible` outline collision fixed
+   earlier in RFQPage.css / PurchaseRequest.css — suppress it here too
+   so a new, second focus ring doesn't visibly overlap this wrapper's
+   own `:focus-within` ring. */
+.orders-filter-input input:focus-visible,
+.orders-filter-input select:focus-visible {
+  outline: none;
+}
+
+.orders-filter-input input,
+.orders-filter-input select {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--foreground-hex, #E7ECF2);
+  font-size: 12.5px;
+}
+
+.orders-filter-input input::placeholder {
+  color: var(--muted-foreground-hex, #6E7B8A);
+}
+
+.orders-filter-input select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2px;
+  cursor: pointer;
+}
+
+.orders-filter-input select option {
+  background: var(--card-hex, #1B232D);
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+.orders-filter-input svg {
+  flex-shrink: 0;
+  color: var(--muted-foreground-hex, #8694A3);
+}
+
+.orders-date-input input[type="date"] {
+  color-scheme: dark;
+}
+:root[data-theme="light"] .orders-date-input input[type="date"] {
+  color-scheme: light;
+}
+
+.orders-filter-clear-btn {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--muted-foreground-hex, #8694A3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.orders-filter-clear-btn:hover {
+  color: var(--foreground-hex, #E7ECF2);
+}
+
+/* Status ring in the table — same conic-gradient pattern used for RFQ
+   response completion, reused here for PO approval state so all three
+   list pages (PR / RFQ / Orders) share one visual language. */
+.po-status-ring {
+  --ring-progress: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ring-color, var(--primary-hex, #4F8CFF)) calc(var(--ring-progress) * 1%), var(--muted-hex, #232D38) 0);
+  flex-shrink: 0;
+}
+
+.po-status-ring::after {
+  content: "";
+  position: absolute;
+}
+
+.po-status-ring svg {
+  background: var(--card-hex, #1B232D);
+  border-radius: 50%;
+  padding: 3px;
+  box-sizing: border-box;
+}
+
+.po-status-ring.approved { --ring-color: var(--success-hex, #22C55E); }
+.po-status-ring.approved svg { color: var(--success-hex, #22C55E); }
+
+.po-status-ring.in-review { --ring-color: var(--warning-hex, #F59E0B); }
+.po-status-ring.in-review svg { color: var(--warning-hex, #F59E0B); }
+
+.po-status-ring.rejected { --ring-color: var(--destructive-hex, #EF4444); }
+.po-status-ring.rejected svg { color: var(--destructive-hex, #EF4444); }
+
+.orders-table .purchase-status-cell {
+  width: 36px;
+}
+
+@media (max-width: 1100px) {
+  .orders-insights-grid {
+    grid-template-columns: 1fr;
+  }
+  .orders-ai-summary-band {
+    grid-template-columns: 1fr;
+  }
+  .orders-ask-ai {
+    border-left: none;
+    border-top: 1px solid var(--border-hex, #2A3542);
+    padding-left: 0;
+    padding-top: 14px;
+  }
+}
+
+@media (max-width: 760px) {
+  .orders-filters {
+    grid-template-columns: 1fr;
+  }
+}

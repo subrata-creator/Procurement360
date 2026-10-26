@@ -7,22 +7,22 @@
   --secondary-hex: #243240;
   --accent: 199 92% 60%;
   --accent-hex: #38BDF8;
-  --background: 210 36% 7%;
-  --background-hex: #0B1117;
-  --foreground: 210 40% 98%;
-  --foreground-hex: #F8FAFC;
-  --muted: 210 25% 15%;
-  --muted-hex: #17222C;
-  --muted-foreground: 215 20% 65%;
-  --muted-foreground-hex: #94A3B8;
-  --card: 207 35% 10%;
-  --card-hex: #111A22;
-  --card-foreground: 210 40% 98%;
-  --card-foreground-hex: #F8FAFC;
-  --border: 207 28% 20%;
-  --border-hex: #243240;
-  --elevated: 210 25% 15%;
-  --elevated-hex: #17222C;
+  --background: 213 22% 13%;
+  --background-hex: #171E26;
+  --foreground: 210 20% 90%;
+  --foreground-hex: #DDE3EA;
+  --muted: 212 19% 19%;
+  --muted-hex: #242D36;
+  --muted-foreground: 215 14% 66%;
+  --muted-foreground-hex: #93A1AF;
+  --card: 212 20% 16%;
+  --card-hex: #1F2830;
+  --card-foreground: 210 20% 90%;
+  --card-foreground-hex: #DDE3EA;
+  --border: 212 18% 25%;
+  --border-hex: #303C48;
+  --elevated: 212 19% 19%;
+  --elevated-hex: #242D36;
   --destructive: 0 84% 60%;
   --destructive-hex: #EF4444;
   --success: 142 71% 45%;
@@ -686,105 +686,6 @@ textarea:focus-visible {
 [data-theme="light"] .orders-pagination .selected,
 [data-theme="light"] .create-rfq,
 [data-theme="light"] .create-order {
-  color: var(--primary-foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-card,
-[data-theme="light"] .task-detail-card,
-[data-theme="light"] .task-detail-empty {
-  border-color: var(--border-hex);
-  background: var(--card-hex);
-  color: var(--card-foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-page .pr-detail-card,
-[data-theme="light"] .pr-detail-page .pr-rfq-section,
-[data-theme="light"] .pr-detail-page .pr-rfq-card-header,
-[data-theme="light"] .pr-detail-page .pr-detail-justification,
-[data-theme="light"] .pr-detail-page .pr-detail-field,
-[data-theme="light"] .pr-detail-page .pr-summary-approval-card,
-[data-theme="light"] .pr-detail-page .pr-summary-approval-step,
-[data-theme="light"] .task-detail-page .rfq-review-panel,
-[data-theme="light"] .task-detail-page .rfq-info-tile,
-[data-theme="light"] .task-detail-page .assignee-panel,
-[data-theme="light"] .task-detail-page .rfq-data-panel,
-[data-theme="light"] .task-detail-page .comments-panel,
-[data-theme="light"] .task-detail-page .rfq-task-notice,
-[data-theme="light"] .task-detail-page .rfq-decision-bar {
-  border-color: var(--border-hex);
-  background: var(--card-hex);
-  color: var(--card-foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-page .pr-detail-card-title h2,
-[data-theme="light"] .pr-detail-page .pr-detail-card-title p,
-[data-theme="light"] .pr-detail-page .pr-summary-title,
-[data-theme="light"] .pr-detail-page .pr-detail-field strong,
-[data-theme="light"] .pr-detail-page .pr-detail-justification,
-[data-theme="light"] .task-detail-page .rfq-review-panel-heading,
-[data-theme="light"] .task-detail-page .rfq-info-tile strong,
-[data-theme="light"] .task-detail-page .rfq-assignee-row,
-[data-theme="light"] .task-detail-page .rfq-comment,
-[data-theme="light"] .task-detail-page .rfq-data-panel {
-  color: var(--foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-page .pr-detail-grid,
-[data-theme="light"] .pr-detail-page .pr-detail-table-wrapper,
-[data-theme="light"] .pr-detail-page .pr-summary-approval-list,
-[data-theme="light"] .task-detail-page .rfq-review-columns,
-[data-theme="light"] .task-detail-page .rfq-basic-grid {
-  background: var(--card-hex);
-}
-
-[data-theme="light"] .pr-detail-page .pr-detail-table th,
-[data-theme="light"] .pr-detail-page .pr-detail-table td,
-[data-theme="light"] .pr-detail-page .pr-rfq-table th,
-[data-theme="light"] .pr-detail-page .pr-rfq-table td,
-[data-theme="light"] .task-detail-page .rfq-review-table th,
-[data-theme="light"] .task-detail-page .rfq-review-table td {
-  border-color: var(--border-hex);
-  color: var(--card-foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-page .pr-detail-table th,
-[data-theme="light"] .pr-detail-page .pr-rfq-table th,
-[data-theme="light"] .task-detail-page .rfq-review-table th {
-  background: var(--muted-hex);
-  color: var(--muted-foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-page .pr-detail-table tbody tr:hover,
-[data-theme="light"] .pr-detail-page .pr-rfq-table tbody tr:hover,
-[data-theme="light"] .task-detail-page .rfq-review-table tbody tr:hover {
-  background: rgba(15, 118, 110, 0.06);
-}
-
-[data-theme="light"] .pr-detail-page input,
-[data-theme="light"] .pr-detail-page select,
-[data-theme="light"] .pr-detail-page textarea,
-[data-theme="light"] .task-detail-page input,
-[data-theme="light"] .task-detail-page select,
-[data-theme="light"] .task-detail-page textarea {
-  border-color: var(--border-hex);
-  background: var(--card-hex);
-  color: var(--foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-page input::placeholder,
-[data-theme="light"] .task-detail-page input::placeholder {
-  color: var(--muted-foreground-hex);
-}
-
-[data-theme="light"] .pr-detail-primary-btn,
-[data-theme="light"] .rfq-comment-form button,
-[data-theme="light"] .create-button,
-[data-theme="light"] .create-rfq,
-[data-theme="light"] .create-order,
-[data-theme="light"] .dashboard-create-button,
-[data-theme="light"] .xt-tabs button.on,
-[data-theme="light"] .rfq-pagination .selected,
-[data-theme="light"] .orders-pagination .selected {
   color: var(--primary-foreground-hex);
 }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   ArrowLeft,
@@ -10,31 +10,176 @@ import {
   Coins,
   FileText,
   Flag,
-  Hash,
-  PackageCheck,
+  Paperclip,
+  Plus,
   ShieldCheck,
+  Sparkles,
   Tag,
   User,
+  X,
 } from "lucide-react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
   buildApprovalSteps,
-  buildDefaultLineItems,
+  buildDefaultSubTasks,
   buildMilestoneSubTasks,
   getInitials,
-  getPurchaseRequestByRef,
   type ApprovalStep,
+  type LineItem,
+  type PurchaseRequestRecord,
 } from "./Purchaserequestsdata";
+import { rfqs } from "../data/rfqs";
+
+// ---------------------------------------------------------------------
+// Live Dataverse read, same services/shape your working version
+// (262b53a5) already uses. Everything else on this page — PR Journey,
+// milestone sub-tasks, RFQs/Associated Tasks/Notes/Attachments tabs,
+// Approval History sidebar — is unchanged from the original rich
+// layout and still runs on buildApprovalSteps / buildDefaultSubTasks /
+// buildMilestoneSubTasks from Purchaserequestsdata.ts. Those functions
+// only need a PurchaseRequestRecord-shaped object, so the live record
+// is mapped into that shape below (mapLiveRecordToPurchaseRequest)
+// instead of rewriting the generators.
+// ---------------------------------------------------------------------
+import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
+import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
 
 import "../Styles/PRSummary.css";
 
-const TABS = ["Summary", "RFQs", "Orders", "Associated Tasks", "Notes", "Attachments"];
+const TABS = ["Summary", "RFQs", "Associated Tasks", "Notes", "Attachments"];
+
+// Milestones hidden from both the PR Journey timeline and the Approval
+// History sidebar, per request: "Review & Approval" and "Approved" are
+// dropped everywhere the journey's milestone list is shown.
+const HIDDEN_MILESTONES = ["Review & Approval", "Approved"];
+
+type LivePurchaseRequest = {
+  cr49f_purchaserequestid: string;
+  cr49f_prnumber?: string;
+  cr49f_prtitle?: string;
+  cr49f_status?: number;
+  cr49f_statusname?: string;
+  cr49f_priority?: number;
+  cr49f_priorityname?: string;
+  cr49f_totalamount?: number;
+  cr49f_businessjustification?: string;
+  cr49f_deliverylocation?: string;
+  cr49f_requireddeliverydate?: string;
+  createdon?: string;
+  createdbyname?: string;
+};
+
+type LivePurchaseRequestLine = {
+  cr49f_purchaserequestlineid: string;
+  cr49f_prlinenumber?: string;
+  cr49f_itemname?: string;
+  cr49f_itemdescription?: string;
+  cr49f_quantity?: number;
+  cr49f_unitprice?: number;
+  _cr49f_purchaserequest_value?: string;
+};
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
+function normalizeId(value?: string): string {
+  return (value ?? "").replace(/[{}]/g, "").trim().toLowerCase();
+}
+
+// Kept in the original "M/D/YYYY" short form the rest of this page's
+// mock dates used (buildApprovalSteps/buildMilestoneSubTasks print
+// record.date verbatim), rather than switching to a spelled-out format.
+function toUsDate(value?: string): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+}
+
+// cr49f_status: 0 Pending, 1 Approved, 2 ChangesNeeded, 3 Rejected.
+// The journey/milestone generators only understand the original
+// 3-value PRStatus, so Pending and ChangesNeeded both fold into
+// "In Review" for that logic. The real 4-value label (cr49f_statusname)
+// is still shown as-is in the status pill/KPI — only the journey
+// bucket is collapsed.
+function mapToPRStatus(status?: number): PurchaseRequestRecord["status"] {
+  if (status === 1) return "Approved";
+  if (status === 3) return "Rejected";
+  return "In Review";
+}
+
+function getStatusLabel(request: LivePurchaseRequest): string {
+  if (request.cr49f_statusname) return request.cr49f_statusname;
+  switch (request.cr49f_status) {
+    case 0: return "Pending";
+    case 1: return "Approved";
+    case 2: return "Changes Needed";
+    case 3: return "Rejected";
+    default: return "Unknown";
+  }
+}
+
+function getPriorityLabel(request: LivePurchaseRequest): string {
+  if (request.cr49f_priorityname) return request.cr49f_priorityname;
+  switch (request.cr49f_priority) {
+    case 0: return "Low";
+    case 1: return "Medium";
+    case 2: return "High";
+    default: return "Not set";
+  }
+}
+
+type RequestNote = {
+  id: string;
+  title: string;
+  type: "Public" | "Private";
+  description: string;
+  attachmentName: string;
+  taggedUsers: string[];
+  author: string;
+  createdAt: string;
+};
+
+function notesStorageKey(ref?: string): string {
+  return `procurement360.notes.${ref ?? "unknown"}`;
+}
+
+function readRequestNotes(ref?: string): RequestNote[] {
+  if (typeof window === "undefined" || !ref) return [];
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(notesStorageKey(ref)) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((note): note is RequestNote =>
+      typeof note?.id === "string" &&
+      typeof note?.title === "string" &&
+      (note?.type === "Public" || note?.type === "Private") &&
+      typeof note?.description === "string" &&
+      Array.isArray(note?.taggedUsers) &&
+      typeof note?.author === "string" &&
+      typeof note?.createdAt === "string"
+    ) : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatNoteDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function createNoteId(): string {
+  return `${Date.now()}`;
+}
 
 function statusPillClass(status: string) {
-  if (status === "Approved") return "approved";
-  if (status === "Rejected") return "rejected";
+  const normalized = status.toLowerCase();
+  if (normalized === "approved") return "approved";
+  if (normalized === "rejected") return "rejected";
   return "review";
 }
 
@@ -63,12 +208,133 @@ export default function PurchaseRequestDetail() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("Summary");
+  const [noteCollection, setNoteCollection] = useState(() => ({ ref, notes: readRequestNotes(ref) }));
+  const notes = noteCollection.ref === ref ? noteCollection.notes : readRequestNotes(ref);
+  const [isNoteFormOpen, setIsNoteFormOpen] = useState(false);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteType, setNoteType] = useState<RequestNote["type"]>("Public");
+  const [noteDescription, setNoteDescription] = useState("");
+  const [noteTaggedUsers, setNoteTaggedUsers] = useState("");
+  const [noteAttachment, setNoteAttachment] = useState<File | null>(null);
   const [subTasksOpen, setSubTasksOpen] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<ApprovalStep | null>(null);
 
-  const record = ref ? getPurchaseRequestByRef(ref) : undefined;
+  const [liveRequests, setLiveRequests] = useState<LivePurchaseRequest[]>([]);
+  const [liveLines, setLiveLines] = useState<LivePurchaseRequestLine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
-  if (!record) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const [requestResult, lineResult] = await Promise.all([
+          Cr49f_purchaserequestsService.getAll(),
+          Cr49f_purchaserequestlinesService.getAll(),
+        ]);
+        if (cancelled) return;
+        if (!requestResult.success) throw new Error("Unable to load purchase requests from Dataverse.");
+        if (!lineResult.success) throw new Error("Unable to load purchase request line items from Dataverse.");
+        setLiveRequests((requestResult.data ?? []) as LivePurchaseRequest[]);
+        setLiveLines((lineResult.data ?? []) as LivePurchaseRequestLine[]);
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load purchase request summary:", err);
+          setLoadError(err instanceof Error ? err.message : "An unexpected error occurred while loading the purchase request.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadData();
+    return () => { cancelled = true; };
+  }, []);
+
+  const liveRecord = useMemo(() => {
+    if (!ref) return undefined;
+    const routeRef = normalizeId(ref);
+    return liveRequests.find((request) =>
+      normalizeId(request.cr49f_prnumber) === routeRef ||
+      normalizeId(request.cr49f_purchaserequestid) === routeRef
+    );
+  }, [liveRequests, ref]);
+
+  const mappedLineItems: LineItem[] = useMemo(() => {
+    if (!liveRecord) return [];
+    const requestId = normalizeId(liveRecord.cr49f_purchaserequestid);
+    return liveLines
+      .filter((line) => normalizeId(line._cr49f_purchaserequest_value) === requestId)
+      .map((line, index) => {
+        const quantity = Number(line.cr49f_quantity) || 0;
+        const unitPrice = Number(line.cr49f_unitprice) || 0;
+        return {
+          id: index + 1,
+          itemCode: line.cr49f_prlinenumber || `LINE-${index + 1}`,
+          itemName: line.cr49f_itemname || line.cr49f_itemdescription || "Unnamed item",
+          quantity,
+          // Not modeled on cr49f_purchaserequestlines today:
+          previousContract: "USD -",
+          unitPrice: currencyFormatter.format(unitPrice),
+          totalAmount: currencyFormatter.format(quantity * unitPrice),
+          deliveryDate: "—",
+          deliveryAddress: "—",
+        };
+      });
+  }, [liveRecord, liveLines]);
+
+  // The old mock PurchaseRequestRecord shape, filled from the live
+  // Dataverse record so buildApprovalSteps/buildDefaultSubTasks/
+  // buildMilestoneSubTasks keep working unchanged. rfq/po are forced
+  // to "not available" — cr49f_purchaserequests has no RFQ/PO lookup
+  // yet, so the journey's RFQ Initiated/PO Created steps stay Pending
+  // until that linkage exists. department/category/costCenter are
+  // intentionally left unset (not on this table, and dropped from the
+  // grid below per your request).
+  const record: PurchaseRequestRecord | undefined = useMemo(() => {
+    if (!liveRecord) return undefined;
+    return {
+      ref: liveRecord.cr49f_prnumber || liveRecord.cr49f_purchaserequestid,
+      title: liveRecord.cr49f_prtitle || "Untitled Purchase Request",
+      rfq: "No RFQ available",
+      po: "No PO available",
+      createdBy: liveRecord.createdbyname || "Unknown",
+      date: toUsDate(liveRecord.createdon),
+      status: mapToPRStatus(liveRecord.cr49f_status),
+      requester: liveRecord.createdbyname,
+      requiredDate: toUsDate(liveRecord.cr49f_requireddeliverydate),
+      totalAmount: liveRecord.cr49f_totalamount != null ? currencyFormatter.format(liveRecord.cr49f_totalamount) : undefined,
+      justification: liveRecord.cr49f_businessjustification,
+      deliveryAddress: liveRecord.cr49f_deliverylocation,
+      lineItems: mappedLineItems,
+    };
+  }, [liveRecord, mappedLineItems]);
+
+  if (loading) {
+    return (
+      <div className="pr-detail-page">
+        <div className="pr-detail-notfound">
+          <p>Loading purchase request from Dataverse…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="pr-detail-page">
+        <div className="pr-detail-notfound">
+          <p>{loadError}</p>
+          <button type="button" onClick={() => navigate("/purchase-requests")}>Back to Purchase Requests</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!record || !liveRecord) {
     return (
       <div className="pr-detail-page">
         <div className="pr-detail-notfound">
@@ -79,20 +345,76 @@ export default function PurchaseRequestDetail() {
     );
   }
 
+  const statusLabel = getStatusLabel(liveRecord);
+  const priorityLabel = getPriorityLabel(liveRecord);
+
   const approvalSteps = buildApprovalSteps(record);
-  const creationStep = approvalSteps.find((step) => /^PR creation/i.test(step.title));
-  const approvalHistory = approvalSteps.filter((step) =>
-    (step.status === "Completed" || step.status === "Rejected") &&
-    /(approval|rejected)/i.test(step.title)
+  // PR Journey timeline: drop the Review & Approval and Approved stages,
+  // renumbering what's left so the circles read 1..n with no gaps.
+  const visibleApprovalSteps = approvalSteps.filter(
+    (step) => !HIDDEN_MILESTONES.some((hidden) => step.title.startsWith(hidden))
   );
-  const historyEvents = [
-    ...(creationStep ? [creationStep] : []),
-    ...approvalHistory.filter((step) => step.step !== creationStep?.step),
-  ];
+  // Approval History (sidebar) stays in sync with the timeline by
+  // sourcing from the same visibleApprovalSteps list.
+  const historyEvents = visibleApprovalSteps.filter(
+    (step) => step.status === "Completed" || step.status === "Current" || step.status === "Rejected"
+  );
   const subTasks = selectedMilestone ? buildMilestoneSubTasks(record, selectedMilestone) : [];
-  const lineItems = buildDefaultLineItems(record);
+  const lineItems = record.lineItems ?? [];
+  const associatedRfqs = record.rfq.startsWith("RFQ-")
+    ? rfqs.filter((rfq) => rfq.refNo === record.rfq)
+    : [];
+  // Associated Tasks: only the PR Creation stage's tasks that are still
+  // In Progress or Pending (not the completed ones).
+  const prCreationActiveTasks = buildDefaultSubTasks(record).filter(
+    (task) => task.status === "In Progress" || task.status === "Pending"
+  );
+  const summaryItems = lineItems.length
+    ? lineItems.map((item) => `${item.quantity} × ${item.itemName}`).join(", ")
+    : undefined;
+  const aiSummary = [
+    summaryItems ? `This request covers ${summaryItems}.` : record.title,
+    `${record.totalAmount ? `Recorded amount is ${record.totalAmount}. ` : "Amount is not recorded. "}${record.status === "In Review" ? "It is awaiting review." : `Current status is ${statusLabel.toLowerCase()}.`}`,
+  ].join(" ");
 
   const subTasksCompleted = subTasks.length > 0 && subTasks.every((task) => task.status === "Completed");
+
+  const saveNote = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const note: RequestNote = {
+      id: createNoteId(),
+      title: noteTitle.trim(),
+      type: noteType,
+      description: noteDescription.trim(),
+      attachmentName: noteAttachment?.name ?? "",
+      taggedUsers: [...new Set(noteTaggedUsers.split(",").map((user) => user.trim()).filter(Boolean))],
+      author: record.requester || record.createdBy,
+      createdAt: new Date().toISOString(),
+    };
+    const updatedNotes = [note, ...notes];
+    setNoteCollection({ ref: record.ref, notes: updatedNotes });
+    try {
+      window.localStorage.setItem(notesStorageKey(record.ref), JSON.stringify(updatedNotes));
+    } catch {
+      // Keep the new note available for this session if browser storage is unavailable.
+    }
+    setNoteTitle("");
+    setNoteType("Public");
+    setNoteDescription("");
+    setNoteTaggedUsers("");
+    setNoteAttachment(null);
+    setIsNoteFormOpen(false);
+  };
+
+  const removeNote = (noteId: string) => {
+    const updatedNotes = notes.filter((note) => note.id !== noteId);
+    setNoteCollection({ ref: record.ref, notes: updatedNotes });
+    try {
+      window.localStorage.setItem(notesStorageKey(record.ref), JSON.stringify(updatedNotes));
+    } catch {
+      // Note stays removed for this session even if browser storage is unavailable.
+    }
+  };
 
   const toggleMilestone = (step: ApprovalStep) => {
     if (subTasksOpen && selectedMilestone?.step === step.step) {
@@ -116,14 +438,13 @@ export default function PurchaseRequestDetail() {
           <div>
             <div className="pr-detail-title-row">
               <h1>{record.ref}</h1>
-              <span className={`pr-detail-status-pill ${statusPillClass(record.status)}`}>{record.status}</span>
+              <span className={`pr-detail-status-pill ${statusPillClass(statusLabel)}`}>{statusLabel}</span>
             </div>
             <p className="pr-detail-subtitle">{record.title}</p>
           </div>
         </div>
 
         <div className="pr-detail-actions">
-          
           <button type="button" className="pr-detail-primary-btn">
             <FileText size={11} />
             Initiate RFQ
@@ -145,7 +466,7 @@ export default function PurchaseRequestDetail() {
         </div>
 
         <div className="approval-timeline">
-          {approvalSteps.map((step) => (
+          {visibleApprovalSteps.map((step, index) => (
             <button
               className={`approval-step ${selectedMilestone?.step === step.step ? "selected" : ""}`}
               key={step.step}
@@ -156,7 +477,7 @@ export default function PurchaseRequestDetail() {
               onClick={() => toggleMilestone(step)}
             >
               <div className={`approval-step-line ${step.status === "Completed" ? "done" : ""}`} />
-              <div className={`approval-step-circle ${stepCircleClass(step.status)}`}>{step.step}</div>
+              <div className={`approval-step-circle ${stepCircleClass(step.status)}`}>{index + 1}</div>
 
               <div className="approval-step-label">
                 <strong>{step.title}</strong>
@@ -207,7 +528,7 @@ export default function PurchaseRequestDetail() {
                 <table className="pr-detail-table">
                   <thead>
                     <tr>
-                      <th>#</th>
+                      <th></th>
                       <th>Task</th>
                       <th>Status</th>
                       <th>Assigned To</th>
@@ -261,103 +582,235 @@ export default function PurchaseRequestDetail() {
               <div>
                 <div className="pr-rfq-title-row">
                   <span className="pr-rfq-icon">✦</span>
-                  <h3>Request For Quotations (1)</h3>
+                  <h3>Request For Quotations ({associatedRfqs.length})</h3>
                 </div>
-                <p>RFQs created from this purchase request</p>
+                <p>RFQ records linked to this purchase request</p>
               </div>
             </div>
 
-            <div className="pr-rfq-filters">
-              <label className="pr-rfq-filter">
-                <span>Ref No</span>
-                <input value={record.rfq || ""} readOnly />
-              </label>
-              <label className="pr-rfq-filter">
-                <span>Start Date</span>
-                <input value="4/6/2026" readOnly />
-              </label>
-              <label className="pr-rfq-filter">
-                <span>Reward Date</span>
-                <input value="4/3/2026" readOnly />
-              </label>
-              <label className="pr-rfq-filter">
-                <span>Rewarded Supplier</span>
-                <input value="Logitech" readOnly />
-              </label>
-              <label className="pr-rfq-filter">
-                <span>Status</span>
-                <select defaultValue="All Status">
-                  <option>All Status</option>
-                  <option>Rewarded</option>
-                  <option>Approved</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="pr-rfq-table-wrap">
-              <table className="pr-rfq-table">
-                <thead>
-                  <tr>
-                    <th>Ref No</th>
-                    <th>Start Date</th>
-                    <th>Reward Date</th>
-                    <th>Rewarded Supplier</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="pr-rfq-ref">{record.rfq}</td>
-                    <td>4/6/2026</td>
-                    <td>4/3/2026</td>
-                    <td className="pr-rfq-supplier">
-                      <span className="pr-rfq-supplier-badge">G</span>
-                      Logitech
-                    </td>
-                    <td><span className="pr-rfq-status">Rewarded</span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div className="pr-rfq-footer">
-              <span>Showing <strong>1-1</strong> of <strong>1</strong> results</span>
-              <div className="pr-rfq-pagination">
-                <button type="button" aria-label="Previous page">‹</button>
-                <button type="button" className="selected" aria-label="Page 1">1</button>
-                <button type="button" aria-label="Next page">›</button>
+            {associatedRfqs.length ? (
+              <div className="pr-rfq-table-wrap">
+                <table className="pr-rfq-table">
+                  <thead>
+                    <tr>
+                      <th>Ref No</th>
+                      <th>Title</th>
+                      <th>Associated PR</th>
+                      <th>Associated PO</th>
+                      <th>Responses</th>
+                      <th>Supplier</th>
+                      <th>Created By</th>
+                      <th>Created Date</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {associatedRfqs.map((rfq) => (
+                      <tr key={rfq.refNo}>
+                        <td className="pr-rfq-ref">{rfq.refNo}</td>
+                        <td>{rfq.title}</td>
+                        <td>{rfq.pr.startsWith("PR-") ? rfq.pr : "—"}</td>
+                        <td>{rfq.po.startsWith("PO-") ? rfq.po : "—"}</td>
+                        <td>{rfq.responses}</td>
+                        <td>{rfq.supplier === "N/A" ? "—" : rfq.supplier}</td>
+                        <td>{rfq.createdBy}</td>
+                        <td>{rfq.createdDate}</td>
+                        <td><span className={`pr-rfq-status ${rfq.status.toLowerCase()}`}>{rfq.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            ) : (
+              <div className="pr-rfq-empty">
+                <FileText size={19} />
+                <strong>No RFQ linked</strong>
+                <span>This purchase request does not have an associated RFQ.</span>
+              </div>
+            )}
           </div>
         )}
 
-        {activeTab !== "Summary" && activeTab !== "RFQs" && (
+        {activeTab === "Associated Tasks" && (
+          <div className="pr-associated-tasks">
+            <div className="pr-associated-tasks-heading">
+              <div>
+                <h3>PR Creation — Pending Tasks</h3>
+                <p>Tasks still in progress or pending for the PR Creation stage</p>
+              </div>
+              <span>{prCreationActiveTasks.length} pending</span>
+            </div>
+            {prCreationActiveTasks.length ? (
+              <div className="pr-detail-table-wrapper">
+                <table className="pr-detail-table">
+                  <thead>
+                    <tr>
+                      <th>Task</th>
+                      <th>Status</th>
+                      <th>Assigned To</th>
+                      <th>Completed On</th>
+                      <th>Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prCreationActiveTasks.map((task) => (
+                      <tr key={task.id}>
+                        <td>{task.task}</td>
+                        <td><span className={`subtask-status ${subtaskStatusClass(task.status)}`}>{task.status}</span></td>
+                        <td>
+                          <div className="pr-detail-table-avatar">
+                            <span>{getInitials(task.assignedTo)}</span>
+                            {task.assignedTo}
+                          </div>
+                        </td>
+                        <td>{task.completedOn || "—"}</td>
+                        <td>{task.remarks}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="pr-associated-tasks-empty">No in-progress or pending tasks recorded for the PR Creation stage.</div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "Notes" && (
+          <div className="pr-notes-section">
+            <div className="pr-notes-heading">
+              <div>
+                <h3>Notes</h3>
+                <p>Notes and updates for {record.ref}</p>
+              </div>
+              <button type="button" className="pr-note-create-btn" onClick={() => setIsNoteFormOpen(true)}>
+                <Plus size={14} />New note
+              </button>
+            </div>
+
+            {notes.length ? (
+              <div className="pr-note-list">
+                {notes.map((note) => (
+                  <article className="pr-note-card" key={note.id}>
+                    <div className="pr-note-card-top">
+                      <span className="pr-note-author-avatar">{getInitials(note.author)}</span>
+                      <div className="pr-note-author">
+                        <strong>{note.author}</strong>
+                        <time dateTime={note.createdAt}>{formatNoteDate(note.createdAt)}</time>
+                      </div>
+                      <span className={`pr-note-visibility ${note.type.toLowerCase()}`}>{note.type}</span>
+                      <button
+                        type="button"
+                        className="pr-note-remove-btn"
+                        aria-label={`Remove note: ${note.title}`}
+                        onClick={() => removeNote(note.id)}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <h4>{note.title}</h4>
+                    {note.description && <p>{note.description}</p>}
+                    {note.attachmentName && <span className="pr-note-attachment"><Paperclip size={12} />{note.attachmentName}</span>}
+                    {note.taggedUsers.length > 0 && (
+                      <div className="pr-note-tags">
+                        <span>Tagged</span>
+                        {note.taggedUsers.map((user) => <span className="pr-note-tag" key={user}>{user}</span>)}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="pr-notes-empty">
+                <ClipboardList size={20} />
+                <strong>No notes yet</strong>
+                <span>Add a note to keep request context with this PR.</span>
+              </div>
+            )}
+
+            {isNoteFormOpen && (
+              <div className="pr-note-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsNoteFormOpen(false); }}>
+                <section className="pr-note-modal" role="dialog" aria-modal="true" aria-labelledby="pr-note-modal-title">
+                  <header className="pr-note-modal-header">
+                    <h2 id="pr-note-modal-title">New note</h2>
+                    <button type="button" onClick={() => setIsNoteFormOpen(false)} aria-label="Close new note form"><X size={16} /></button>
+                  </header>
+                  <form onSubmit={saveNote}>
+                    <label className="pr-note-field">
+                      <span>Title <b>*</b></span>
+                      <input autoFocus required maxLength={120} value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} />
+                    </label>
+                    <label className="pr-note-field">
+                      <span>Type <b>*</b></span>
+                      <select value={noteType} onChange={(event) => setNoteType(event.target.value as RequestNote["type"])}>
+                        <option value="Public">Public</option>
+                        <option value="Private">Private</option>
+                      </select>
+                    </label>
+                    <label className="pr-note-field">
+                      <span>Attachment</span>
+                      <input type="file" onChange={(event) => setNoteAttachment(event.target.files?.[0] ?? null)} />
+                    </label>
+                    <label className="pr-note-field">
+                      <span>Description <b>*</b></span>
+                      <textarea required rows={4} maxLength={2000} value={noteDescription} onChange={(event) => setNoteDescription(event.target.value)} />
+                    </label>
+                    <label className="pr-note-field">
+                      <span>Tag users</span>
+                      <input placeholder="Enter names separated by commas" value={noteTaggedUsers} onChange={(event) => setNoteTaggedUsers(event.target.value)} />
+                    </label>
+                    <footer className="pr-note-modal-actions">
+                      <button type="button" className="secondary" onClick={() => setIsNoteFormOpen(false)}>Cancel</button>
+                      <button type="submit" className="primary">Save note</button>
+                    </footer>
+                  </form>
+                </section>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "Attachments" && (
           <div className="pr-detail-tab-empty">No {activeTab.toLowerCase()} linked to this purchase request yet.</div>
         )}
 
         {activeTab === "Summary" && (
           <>
+            <section className="pr-summary-kpis" aria-label="Purchase request summary metrics">
+              <article className="pr-summary-kpi amount">
+                <span className="pr-summary-kpi-icon"><Coins size={15} /></span>
+                <span className="pr-summary-kpi-copy"><small>Request Amount</small><strong>{record.totalAmount || "Not recorded"}</strong></span>
+              </article>
+              <article className={`pr-summary-kpi ${statusPillClass(statusLabel)}`}>
+                <span className="pr-summary-kpi-icon"><ShieldCheck size={15} /></span>
+                <span className="pr-summary-kpi-copy"><small>Current Status</small><strong>{statusLabel}</strong></span>
+              </article>
+              <article className="pr-summary-kpi priority">
+                <span className="pr-summary-kpi-icon"><Flag size={15} /></span>
+                <span className="pr-summary-kpi-copy"><small>Priority</small><strong>{priorityLabel}</strong></span>
+              </article>
+              <article className="pr-summary-kpi due-date">
+                <span className="pr-summary-kpi-icon"><CalendarDays size={15} /></span>
+                <span className="pr-summary-kpi-copy"><small>Required By</small><strong>{record.requiredDate || "Not set"}</strong></span>
+              </article>
+            </section>
+
             <div className="pr-summary-layout">
               <div className="pr-summary-main-column">
+            <section className="pr-ai-summary" aria-labelledby="pr-ai-summary-title">
+              <div className="pr-ai-summary-heading">
+                <span><Sparkles size={14} /></span>
+                <h2 id="pr-ai-summary-title">AI Summary</h2>
+                <small>Record-backed</small>
+              </div>
+              <p>{aiSummary}</p>
+              <span className="pr-ai-summary-note">Generated from the fields and procurement links recorded on this request.</span>
+            </section>
+
             <div className="pr-summary-top">
               <div className="pr-summary-title">
                 <ClipboardList size={13} />
                 Purchase Request Details
-              </div>
-
-              <div className="pr-summary-badges">
-                <div className="pr-summary-badge amount">
-                  <span>Total Amount</span>
-                  <strong>{record.totalAmount || "USD -"}</strong>
-                </div>
-
-                <div className="pr-summary-badge status">
-                  <span>Status</span>
-                  <strong>
-                    <ShieldCheck size={10} />
-                    {record.status}
-                  </strong>
-                </div>
               </div>
             </div>
 
@@ -411,42 +864,10 @@ export default function PurchaseRequestDetail() {
               </div>
 
               <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><PackageCheck size={11} /></div>
-                <div>
-                  <span>Category</span>
-                  <strong>{record.category || "—"}</strong>
-                </div>
-              </div>
-
-              <div className="pr-detail-field">
                 <div className="pr-detail-field-icon"><Flag size={11} /></div>
                 <div>
                   <span>Priority</span>
-                  <strong>{record.priority || "—"}</strong>
-                </div>
-              </div>
-
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><Hash size={11} /></div>
-                <div>
-                  <span>Cost Center</span>
-                  <strong>{record.costCenter || "—"}</strong>
-                </div>
-              </div>
-
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><ClipboardList size={11} /></div>
-                <div>
-                  <span>Associated RFQ</span>
-                  <strong>{record.rfq}</strong>
-                </div>
-              </div>
-
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><FileText size={11} /></div>
-                <div>
-                  <span>Associated PO</span>
-                  <strong>{record.po}</strong>
+                  <strong>{priorityLabel}</strong>
                 </div>
               </div>
             </div>
@@ -478,7 +899,7 @@ export default function PurchaseRequestDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {lineItems.map((item, index) => (
+                  {lineItems.length ? lineItems.map((item, index) => (
                     <tr key={item.id}>
                       <td>{index + 1}</td>
                       <td>{item.itemCode}</td>
@@ -490,7 +911,11 @@ export default function PurchaseRequestDetail() {
                       <td>{item.deliveryDate}</td>
                       <td>{item.deliveryAddress}</td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan={9}>No line items are linked to this purchase request.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -518,6 +943,9 @@ export default function PurchaseRequestDetail() {
                       </span>
                       <span className="pr-summary-approval-copy">
                         <strong>{step.title}</strong>
+                          <span className={`pr-summary-approval-badge ${step.status.toLowerCase()}`}>
+                            {step.status === "Current" ? "In progress" : step.status}
+                          </span>
                         {actor && <span><b>{actor}</b>{role && <>: <em>{role}</em></>}</span>}
                         {step.department && <span>{step.department}</span>}
                         {step.date && <small>{step.date}</small>}
