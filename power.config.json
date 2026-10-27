@@ -37,6 +37,10 @@
         "productcatalogs": {
           "entitySetName": "cr49f_productses",
           "logicalName": "cr49f_products"
+        },
+        "userroles": {
+          "entitySetName": "cr49f_userroleses",
+          "logicalName": "cr49f_userroles"
         }
       },
       "environmentVariableName": ""

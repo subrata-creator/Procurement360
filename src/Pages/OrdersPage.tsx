@@ -21,7 +21,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { getAvatarUrl } from "../assets/utils/avatars";
-import { getInitials } from "./Purchaserequestsdata";
+import { getInitials } from "../data/Purchaserequestsdata";
 // `orders` moved to Ordersdata.ts — the same module the new order detail
 // page (orderdetail.tsx) reads from, so the list and the detail page
 // share one source of truth instead of two separate arrays going stale

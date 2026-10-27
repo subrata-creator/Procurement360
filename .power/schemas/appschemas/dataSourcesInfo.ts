@@ -33,6 +33,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cr49f_userroleses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_userrolesid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "microsoftcopilotstudio": {
     "tableId": "",
     "version": "",

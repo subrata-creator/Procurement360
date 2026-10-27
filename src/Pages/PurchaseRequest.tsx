@@ -24,7 +24,7 @@ import {
   getInitials,
   type PRStatus,
   type PurchaseRequestRecord,
-} from "./Purchaserequestsdata";
+} from "../data/Purchaserequestsdata";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
 import "../Styles/PurchaseRequest.css";

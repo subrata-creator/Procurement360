@@ -29,7 +29,7 @@ import {
   type ApprovalStep,
   type LineItem,
   type PurchaseRequestRecord,
-} from "./Purchaserequestsdata";
+} from "../data/Purchaserequestsdata";
 import { rfqs } from "../data/rfqs";
 
 // ---------------------------------------------------------------------
@@ -797,128 +797,128 @@ export default function PurchaseRequestDetail() {
 
             <div className="pr-summary-layout">
               <div className="pr-summary-main-column">
-            <section className="pr-ai-summary" aria-labelledby="pr-ai-summary-title">
-              <div className="pr-ai-summary-heading">
-                <span><Sparkles size={14} /></span>
-                <h2 id="pr-ai-summary-title">AI Summary</h2>
-                <small>Record-backed</small>
-              </div>
-              <p>{aiSummary}</p>
-              <span className="pr-ai-summary-note">Generated from the fields and procurement links recorded on this request.</span>
-            </section>
+                <section className="pr-ai-summary" aria-labelledby="pr-ai-summary-title">
+                  <div className="pr-ai-summary-heading">
+                    <span><Sparkles size={14} /></span>
+                    <h2 id="pr-ai-summary-title">AI Summary</h2>
+                    <small>Record-backed</small>
+                  </div>
+                  <p>{aiSummary}</p>
+                  <span className="pr-ai-summary-note">Generated from the fields and procurement links recorded on this request.</span>
+                </section>
 
-            <div className="pr-summary-top">
-              <div className="pr-summary-title">
-                <ClipboardList size={13} />
-                Purchase Request Details
-              </div>
-            </div>
-
-            <div className="pr-detail-grid">
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><FileText size={11} /></div>
-                <div>
-                  <span>PR Number</span>
-                  <strong>{record.ref}</strong>
+                <div className="pr-summary-top">
+                  <div className="pr-summary-title">
+                    <ClipboardList size={13} />
+                    Purchase Request Details
+                  </div>
                 </div>
-              </div>
 
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><User size={11} /></div>
-                <div>
-                  <span>Requester</span>
-                  <strong>{record.requester || record.createdBy}</strong>
+                <div className="pr-detail-grid">
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon"><FileText size={11} /></div>
+                    <div>
+                      <span>PR Number</span>
+                      <strong>{record.ref}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon"><User size={11} /></div>
+                    <div>
+                      <span>Requester</span>
+                      <strong>{record.requester || record.createdBy}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon"><Tag size={11} /></div>
+                    <div>
+                      <span>Title</span>
+                      <strong>{record.title}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon"><Building2 size={11} /></div>
+                    <div>
+                      <span>Department</span>
+                      <strong>{record.department || "—"}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon"><CalendarDays size={11} /></div>
+                    <div>
+                      <span>Request Date</span>
+                      <strong>{record.date}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon"><CalendarDays size={11} /></div>
+                    <div>
+                      <span>Required Date</span>
+                      <strong>{record.requiredDate || "—"}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon"><Flag size={11} /></div>
+                    <div>
+                      <span>Priority</span>
+                      <strong>{priorityLabel}</strong>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><Tag size={11} /></div>
-                <div>
-                  <span>Title</span>
-                  <strong>{record.title}</strong>
+                <div className="pr-detail-justification">
+                  <span>Business Justification</span>
+                  <p>{record.justification || "No business justification provided."}</p>
+                  <small>Delivery location: {record.deliveryAddress || "—"}</small>
                 </div>
-              </div>
 
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><Building2 size={11} /></div>
-                <div>
-                  <span>Department</span>
-                  <strong>{record.department || "—"}</strong>
+                <div className="pr-detail-lineitems-heading">
+                  <Coins size={11} />
+                  Purchase Request Line Items ({lineItems.length})
                 </div>
-              </div>
 
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><CalendarDays size={11} /></div>
-                <div>
-                  <span>Request Date</span>
-                  <strong>{record.date}</strong>
+                <div className="pr-detail-table-wrapper">
+                  <table className="pr-detail-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Item Code</th>
+                        <th>Item Name</th>
+                        <th>Quantity</th>
+                        <th>Previous Contract</th>
+                        <th>Unit Price</th>
+                        <th>Total Amount</th>
+                        <th>Delivery Date</th>
+                        <th>Delivery Address</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineItems.length ? lineItems.map((item, index) => (
+                        <tr key={item.id}>
+                          <td>{index + 1}</td>
+                          <td>{item.itemCode}</td>
+                          <td>{item.itemName}</td>
+                          <td>{item.quantity}</td>
+                          <td>{item.previousContract}</td>
+                          <td>{item.unitPrice}</td>
+                          <td>{item.totalAmount}</td>
+                          <td>{item.deliveryDate}</td>
+                          <td>{item.deliveryAddress}</td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={9}>No line items are linked to this purchase request.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><CalendarDays size={11} /></div>
-                <div>
-                  <span>Required Date</span>
-                  <strong>{record.requiredDate || "—"}</strong>
-                </div>
-              </div>
-
-              <div className="pr-detail-field">
-                <div className="pr-detail-field-icon"><Flag size={11} /></div>
-                <div>
-                  <span>Priority</span>
-                  <strong>{priorityLabel}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="pr-detail-justification">
-              <span>Business Justification</span>
-              <p>{record.justification || "No business justification provided."}</p>
-              <small>Delivery location: {record.deliveryAddress || "—"}</small>
-            </div>
-
-            <div className="pr-detail-lineitems-heading">
-              <Coins size={11} />
-              Purchase Request Line Items ({lineItems.length})
-            </div>
-
-            <div className="pr-detail-table-wrapper">
-              <table className="pr-detail-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Item Code</th>
-                    <th>Item Name</th>
-                    <th>Quantity</th>
-                    <th>Previous Contract</th>
-                    <th>Unit Price</th>
-                    <th>Total Amount</th>
-                    <th>Delivery Date</th>
-                    <th>Delivery Address</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineItems.length ? lineItems.map((item, index) => (
-                    <tr key={item.id}>
-                      <td>{index + 1}</td>
-                      <td>{item.itemCode}</td>
-                      <td>{item.itemName}</td>
-                      <td>{item.quantity}</td>
-                      <td>{item.previousContract}</td>
-                      <td>{item.unitPrice}</td>
-                      <td>{item.totalAmount}</td>
-                      <td>{item.deliveryDate}</td>
-                      <td>{item.deliveryAddress}</td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={9}>No line items are linked to this purchase request.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
               </div>
 
               <aside className="pr-summary-approval-card">
@@ -930,27 +930,27 @@ export default function PurchaseRequestDetail() {
                   {historyEvents.length > 0 ? historyEvents.map((step, index) => {
                     const [actor, role] = (step.by ?? "").split("|").map((part) => part.trim());
                     return (
-                    <button
-                      type="button"
-                      className={`pr-summary-approval-step ${step.status.toLowerCase()} ${selectedMilestone?.step === step.step ? "selected" : ""}`}
-                      key={step.step}
-                      aria-label={`${step.title}, ${step.status}. View milestone tasks`}
-                      aria-expanded={subTasksOpen && selectedMilestone?.step === step.step}
-                      onClick={() => toggleMilestone(step)}
-                    >
-                      <span className="pr-summary-approval-rail">
-                        <span className="pr-summary-approval-node">{step.status === "Completed" ? "✓" : index + 1}</span>
-                      </span>
-                      <span className="pr-summary-approval-copy">
-                        <strong>{step.title}</strong>
+                      <button
+                        type="button"
+                        className={`pr-summary-approval-step ${step.status.toLowerCase()} ${selectedMilestone?.step === step.step ? "selected" : ""}`}
+                        key={step.step}
+                        aria-label={`${step.title}, ${step.status}. View milestone tasks`}
+                        aria-expanded={subTasksOpen && selectedMilestone?.step === step.step}
+                        onClick={() => toggleMilestone(step)}
+                      >
+                        <span className="pr-summary-approval-rail">
+                          <span className="pr-summary-approval-node">{step.status === "Completed" ? "✓" : index + 1}</span>
+                        </span>
+                        <span className="pr-summary-approval-copy">
+                          <strong>{step.title}</strong>
                           <span className={`pr-summary-approval-badge ${step.status.toLowerCase()}`}>
                             {step.status === "Current" ? "In progress" : step.status}
                           </span>
-                        {actor && <span><b>{actor}</b>{role && <>: <em>{role}</em></>}</span>}
-                        {step.department && <span>{step.department}</span>}
-                        {step.date && <small>{step.date}</small>}
-                      </span>
-                    </button>
+                          {actor && <span><b>{actor}</b>{role && <>: <em>{role}</em></>}</span>}
+                          {step.department && <span>{step.department}</span>}
+                          {step.date && <small>{step.date}</small>}
+                        </span>
+                      </button>
                     );
                   }) : <p className="pr-summary-approval-empty">No approval actions recorded yet.</p>}
                 </div>

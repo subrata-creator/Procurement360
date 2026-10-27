@@ -9,6 +9,7 @@ export * as Cr49f_productsesModel from './models/Cr49f_productsesModel';
 export * as Cr49f_purchaserequestlinesModel from './models/Cr49f_purchaserequestlinesModel';
 export * as Cr49f_purchaserequestsModel from './models/Cr49f_purchaserequestsModel';
 export * as Cr49f_requestforqoutationsModel from './models/Cr49f_requestforqoutationsModel';
+export * as Cr49f_userrolesesModel from './models/Cr49f_userrolesesModel';
 export * as MicrosoftCopilotStudioModel from './models/MicrosoftCopilotStudioModel';
 
 // Services
@@ -16,4 +17,5 @@ export * from './services/Cr49f_productsesService';
 export * from './services/Cr49f_purchaserequestlinesService';
 export * from './services/Cr49f_purchaserequestsService';
 export * from './services/Cr49f_requestforqoutationsService';
+export * from './services/Cr49f_userrolesesService';
 export * from './services/MicrosoftCopilotStudioService';

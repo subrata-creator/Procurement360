@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bell, CalendarDays, ChevronDown, Search } from "lucide-react";
-import { purchaseRequests } from "../Pages/Purchaserequestsdata";
+import { purchaseRequests } from "../data/Purchaserequestsdata";
 import { taskInboxItems } from "../data/tasks";
 import "../Styles/CommandCenter.css";
 

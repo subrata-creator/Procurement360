@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Bot, HelpCircle } from "lucide-react";
+import { Bot } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import CreatePRModal from "../components/CreatePRModal";
 import CommandCenterPanels from "../components/CommandCenterPanels";
@@ -35,8 +35,6 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="command-tools">
-          <button type="button" className="dashboard-icon-button command-notifications" aria-label="Notifications"><Bell size={17} strokeWidth={1.8} /><i /></button>
-          <button type="button" className="dashboard-icon-button" aria-label="Help"><HelpCircle size={17} strokeWidth={1.8} /></button>
           <button type="button" className="dashboard-create-button" onClick={() => setIsCreatePROpen(true)}>
             <span className="create-plus">+</span>Create Purchase Request
           </button>
