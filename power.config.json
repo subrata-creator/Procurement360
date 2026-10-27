@@ -41,6 +41,10 @@
         "userroles": {
           "entitySetName": "cr49f_userroleses",
           "logicalName": "cr49f_userroles"
+        },
+        "users": {
+          "entitySetName": "cr49f_userses",
+          "logicalName": "cr49f_users"
         }
       },
       "environmentVariableName": ""
