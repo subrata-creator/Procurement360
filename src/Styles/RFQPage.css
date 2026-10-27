@@ -5,7 +5,7 @@
   --rfq-border-soft: color-mix(in srgb, var(--border-hex, #243240) 72%, transparent);
   --rfq-text: var(--foreground-hex, #F8FAFC);
   --rfq-muted: var(--muted-foreground-hex, #94A3B8);
-  --rfq-teal: var(--primary-hex, #14B8A6);
+  --rfq-teal: var(--primary-hex);
   --rfq-green: var(--success-hex, #22C55E);
   --rfq-amber: var(--warning-hex, #F59E0B);
   --rfq-blue: var(--accent-hex, #38BDF8);

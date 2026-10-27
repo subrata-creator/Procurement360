@@ -10,7 +10,7 @@
 .rfq-detail-page {
   min-height: calc(100vh - 32px);
   padding: 16px 18px 28px;
-  background: var(--background-hex);
+  background: transparent;
   color: var(--foreground-hex);
   font-family: "Segoe UI", Arial, sans-serif;
   box-sizing: border-box;
@@ -112,7 +112,7 @@
   border: none;
   border-radius: 6px;
   background: var(--primary-hex);
-  color: var(--background-hex);
+  color: var(--primary-foreground-hex);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -190,7 +190,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 7px;
-  background: rgba(20, 184, 166, 0.14);
+  background: rgba(37, 99, 235, 0.14);
   color: var(--primary-hex);
 }
 
@@ -271,7 +271,7 @@
 .rfq-approval-step-circle.completed {
   background: var(--success-hex);
   border-color: var(--success-hex);
-  color: var(--background-hex);
+  color: #ffffff;
 }
 
 .rfq-approval-step-circle.current {
@@ -551,7 +551,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  background: rgba(20, 184, 166, 0.12);
+  background: rgba(37, 99, 235, 0.12);
   color: var(--primary-hex);
 }
 
@@ -641,7 +641,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(20, 184, 166, 0.12);
+  background: rgba(37, 99, 235, 0.12);
   color: var(--primary-hex);
   font-size: 10px;
   font-weight: 700;
@@ -802,7 +802,7 @@
 
 .rfq-summary-approval-step.completed .rfq-summary-approval-node {
   background: var(--success-hex);
-  color: var(--background-hex);
+  color: #ffffff;
 }
 
 .rfq-summary-approval-step.current .rfq-summary-approval-node {

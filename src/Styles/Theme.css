@@ -1,87 +1,95 @@
+@import "./TailwindTheme.css";
+
 :root {
-  color-scheme: dark;
-  --primary: 174 80% 40%;
-  --primary-hex: #14B8A6;
-  --primary-foreground-hex: #042F2E;
-  --secondary: 210 24% 24%;
-  --secondary-hex: #2B3742;
-  --accent: 199 92% 60%;
-  --accent-hex: #38BDF8;
-  --background: 212 20% 17%;
-  --background-hex: #222A33;
-  --foreground: 210 20% 93%;
-  --foreground-hex: #E5EBF0;
-  --muted: 212 19% 23%;
-  --muted-hex: #2D3741;
-  --muted-foreground: 212 15% 72%;
-  --muted-foreground-hex: #A5B1BD;
-  --card: 212 20% 20%;
-  --card-hex: #29333D;
-  --card-foreground: 210 20% 93%;
-  --card-foreground-hex: #E5EBF0;
-  --border: 212 18% 30%;
-  --border-hex: #3A4652;
-  --elevated: 212 19% 23%;
-  --elevated-hex: #2D3741;
-  --destructive: 0 84% 60%;
-  --destructive-hex: #EF4444;
-  --success: 142 71% 45%;
-  --success-hex: #22C55E;
-  --warning: 38 92% 50%;
-  --warning-hex: #F59E0B;
-  --info: 199 89% 60%;
-  --info-hex: #38BDF8;
-  --primary-50: #F0FDFA;
-  --primary-100: #CCFBF1;
-  --primary-200: #99F6E4;
-  --primary-300: #5EEAD4;
-  --primary-400: #2DD4BF;
-  --primary-500: #14B8A6;
-  --primary-600: #0D9488;
-  --primary-700: #0F766E;
-  --primary-800: #115E59;
-  --primary-900: #134E4A;
-  --primary-950: #042F2E;
-  --radius-sm: 6px;
-  --radius-md: 9px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  color-scheme: light;
+  --primary-hex: oklch(54.6% 0.215 262.9);
+  --primary-foreground-hex: oklch(99% 0 0);
+  --secondary-hex: oklch(95.5% 0.03 293);
+  --accent-hex: oklch(54.6% 0.215 262.9);
+  --background-hex: oklch(98.4% 0.003 247.86);
+  --foreground-hex: oklch(23.5% 0.035 264);
+  --muted-hex: oklch(96.5% 0.006 255);
+  --muted-foreground-hex: oklch(55.4% 0.04 257);
+  --card-hex: oklch(100% 0 0);
+  --card-foreground-hex: oklch(23.5% 0.035 264);
+  --border-hex: oklch(92.5% 0.01 255);
+  --elevated-hex: oklch(96.5% 0.006 255);
+  --destructive-hex: oklch(60% 0.2 25);
+  --success-hex: oklch(64% 0.15 155);
+  --warning-hex: oklch(72% 0.15 70);
+  --info-hex: oklch(54.6% 0.215 262.9);
+
+  --primary-50: oklch(97% 0.02 262.9);
+  --primary-100: oklch(94% 0.05 262.9);
+  --primary-200: oklch(88% 0.09 262.9);
+  --primary-300: oklch(78% 0.14 262.9);
+  --primary-400: oklch(66% 0.18 262.9);
+  --primary-500: oklch(54.6% 0.215 262.9);
+  --primary-600: oklch(48% 0.22 262.9);
+  --primary-700: oklch(42% 0.20 262.9);
+  --primary-800: oklch(35% 0.17 262.9);
+  --primary-900: oklch(28% 0.13 262.9);
+  --primary-950: oklch(18% 0.08 262.9);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --primary: 173 80% 26%;
-  --primary-hex: #0F766E;
-  --primary-foreground-hex: #FFFFFF;
-  --secondary: 210 24% 92%;
-  --secondary-hex: #E2E8F0;
-  --accent: 199 89% 40%;
-  --accent-hex: #0284C7;
-  --background: 210 40% 98%;
-  --background-hex: #F1F5F9;
-  --foreground: 222 47% 11%;
-  --foreground-hex: #0F172A;
-  --muted: 210 24% 94%;
-  --muted-hex: #E8EEF4;
-  --muted-foreground: 215 16% 39%;
-  --muted-foreground-hex: #526174;
-  --card: 0 0% 100%;
-  --card-hex: #FFFFFF;
-  --card-foreground: 222 47% 11%;
-  --card-foreground-hex: #0F172A;
-  --border: 214 24% 84%;
-  --border-hex: #CBD5E1;
-  --elevated: 210 24% 94%;
-  --elevated-hex: #E8EEF4;
-  --destructive: 0 74% 42%;
-  --destructive-hex: #B91C1C;
-  --success: 142 72% 29%;
-  --success-hex: #15803D;
-  --warning: 32 95% 35%;
-  --warning-hex: #B45309;
-  --info: 199 95% 31%;
-  --info-hex: #0369A1;
-  --primary-foreground: 0 0% 100%;
+  --primary-hex: oklch(54.6% 0.215 262.9);
+  --primary-foreground-hex: oklch(99% 0 0);
+  --secondary-hex: oklch(95.5% 0.03 293);
+  --accent-hex: oklch(54.6% 0.215 262.9);
+  --background-hex: oklch(98.4% 0.003 247.86);
+  --foreground-hex: oklch(23.5% 0.035 264);
+  --muted-hex: oklch(96.5% 0.006 255);
+  --muted-foreground-hex: oklch(55.4% 0.04 257);
+  --card-hex: oklch(100% 0 0);
+  --card-foreground-hex: oklch(23.5% 0.035 264);
+  --border-hex: oklch(92.5% 0.01 255);
+  --elevated-hex: oklch(96.5% 0.006 255);
+  --destructive-hex: oklch(60% 0.2 25);
+  --success-hex: oklch(64% 0.15 155);
+  --warning-hex: oklch(72% 0.15 70);
+  --info-hex: oklch(54.6% 0.215 262.9);
+  --primary-foreground: oklch(99% 0 0);
+}
+
+.dark,
+[data-theme="dark"],
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --primary-hex: oklch(62% 0.20 262.9);
+  --primary-foreground-hex: oklch(99% 0 0);
+  --secondary-hex: oklch(33% 0.026 264);
+  --accent-hex: oklch(62% 0.20 262.9);
+  --background-hex: oklch(23% 0.022 264);
+  --foreground-hex: oklch(96% 0.008 260);
+  --muted-hex: oklch(31% 0.022 264);
+  --muted-foreground-hex: oklch(74% 0.025 260);
+  --card-hex: oklch(28% 0.024 264);
+  --card-foreground-hex: oklch(96% 0.008 260);
+  --border-hex: oklch(100% 0 0 / 0.12);
+  --elevated-hex: oklch(31% 0.022 264);
+  --destructive-hex: oklch(70.4% .191 22.216);
+  --success-hex: oklch(69.6% 0.17 162.48);
+  --warning-hex: oklch(76.9% 0.188 70.08);
+  --info-hex: oklch(62% 0.20 262.9);
+
+  --primary-50: oklch(30% 0.08 262.9);
+  --primary-100: oklch(36% 0.10 262.9);
+  --primary-200: oklch(44% 0.14 262.9);
+  --primary-300: oklch(52% 0.18 262.9);
+  --primary-400: oklch(60% 0.20 262.9);
+  --primary-500: oklch(66% 0.20 262.9);
+  --primary-600: oklch(73% 0.18 262.9);
+  --primary-700: oklch(80% 0.14 262.9);
+  --primary-800: oklch(88% 0.09 262.9);
+  --primary-900: oklch(94% 0.05 262.9);
+  --primary-950: oklch(98% 0.02 262.9);
 }
 
 html,
@@ -99,7 +107,7 @@ body {
 
 ::selection {
   background: var(--primary-hex);
-  color: var(--background-hex);
+  color: var(--primary-foreground-hex);
 }
 
 button,
@@ -144,7 +152,7 @@ textarea:focus-visible {
 
 .sidebar {
   background:
-    radial-gradient(ellipse at 0 0, rgba(20, 184, 166, 0.08), transparent 42%),
+    radial-gradient(ellipse at 0 0, rgba(37, 99, 235, 0.08), transparent 42%),
     var(--card-hex);
   border-right: 1px solid var(--border-hex);
   color: var(--foreground-hex);
@@ -210,7 +218,7 @@ textarea:focus-visible {
   color: var(--foreground-hex);
   background:
     radial-gradient(ellipse at 88% 0, rgba(56, 189, 248, 0.07), transparent 32%),
-    radial-gradient(ellipse at 12% 0, rgba(20, 184, 166, 0.045), transparent 30%),
+    radial-gradient(ellipse at 12% 0, rgba(37, 99, 235, 0.045), transparent 30%),
     var(--background-hex);
 }
 .rfq-heading h1,
@@ -332,7 +340,7 @@ textarea:focus-visible {
 
 .rfq-table tbody tr:hover,
 .orders-table tbody tr:hover {
-  background: rgba(20, 184, 166, 0.045);
+  background: rgba(37, 99, 235, 0.045);
 }
 
 .link-cell,
@@ -382,7 +390,7 @@ textarea:focus-visible {
 .create-rfq:hover,
 .create-order:hover {
   background: var(--primary-700);
-  box-shadow: 0 5px 18px rgba(20, 184, 166, 0.2);
+  box-shadow: 0 5px 18px rgba(37, 99, 235, 0.2);
   transform: translateY(-1px);
 }
 
@@ -497,7 +505,7 @@ textarea:focus-visible {
 
 .purchase-table tbody tr:hover,
 .pr-detail-table tbody tr:hover {
-  background: rgba(20, 184, 166, 0.045);
+  background: rgba(37, 99, 235, 0.045);
 }
 
 .purchase-link {
@@ -564,7 +572,7 @@ textarea:focus-visible {
 
 .dashboard-page .xd-pie-dot,
 .dashboard-page .xd-chart-head .xd-badge-icon {
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.08);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .dashboard-page .xd-pred.violet,
@@ -584,7 +592,7 @@ textarea:focus-visible {
 .dashboard-page .xd-chatbot-button {
   border: 1px solid var(--primary-400);
   background: linear-gradient(135deg, var(--secondary-hex), var(--primary-700));
-  box-shadow: 0 8px 26px rgba(20, 184, 166, 0.2);
+  box-shadow: 0 8px 26px rgba(37, 99, 235, 0.2);
 }
 
 .dashboard-page .dashboard-chatbot-button:hover,
@@ -612,7 +620,7 @@ textarea:focus-visible {
 
 [data-theme="light"] .side-navigation .nav-item:hover,
 [data-theme="light"] .side-navigation .nav-item.active {
-  background: rgba(15, 118, 110, 0.09);
+  background: rgba(29, 78, 216, 0.09);
   color: var(--primary-hex);
   box-shadow: inset 2px 0 var(--primary-hex);
 }
@@ -645,8 +653,8 @@ textarea:focus-visible {
 [data-theme="light"] .orders-pagination .selected,
 [data-theme="light"] .pr-detail-primary-btn:hover,
 [data-theme="light"] .dashboard-page .dashboard-create-button:hover {
-  border-color: #0B625B;
-  background: #0B625B;
+  border-color: var(--primary-800);
+  background: var(--primary-800);
   color: #FFFFFF;
 }
 
@@ -876,7 +884,7 @@ textarea:focus-visible {
 }
 
 [data-theme="light"] .purchase-table tbody tr:hover {
-  background: rgba(15, 118, 110, 0.06);
+  background: rgba(29, 78, 216, 0.06);
 }
 
 [data-theme="light"] .purchase-status.approved,

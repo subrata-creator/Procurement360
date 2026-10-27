@@ -242,7 +242,7 @@
   place-items: center;
   border-radius: 50%;
   background: conic-gradient(var(--primary-hex) var(--health-score), rgba(148, 163, 184, 0.13) 0);
-  box-shadow: 0 0 22px rgba(20, 184, 166, 0.1);
+  box-shadow: 0 0 22px rgba(37, 99, 235, 0.1);
 }
 
 .cc-health-ring-inner {
@@ -499,7 +499,7 @@
 }
 
 .work-queue-task-icon.inv { background: rgba(245, 158, 11, 0.09); color: var(--warning-hex); }
-.work-queue-task-icon.pr { background: rgba(20, 184, 166, 0.1); color: var(--primary-hex); }
+.work-queue-task-icon.pr { background: rgba(37, 99, 235, 0.1); color: var(--primary-hex); }
 .work-queue-task-icon.po { background: rgba(34, 197, 94, 0.09); color: var(--success-hex); }
 
 .work-queue-task-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
@@ -555,7 +555,7 @@
 
 .xa-group + .xa-group { margin-top: 4px; }
 .xa-group h3 { margin: 6px 0 2px; color: var(--accent-hex); font-size: 8px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.06em; }
-.xa-dot.pr { background: rgba(20, 184, 166, 0.14); color: var(--primary-hex); }
+.xa-dot.pr { background: rgba(37, 99, 235, 0.14); color: var(--primary-hex); }
 .xa-dot.invoice { background: rgba(245, 158, 11, 0.13); color: var(--warning-hex); }
 
 .xd-journey { position: relative; }

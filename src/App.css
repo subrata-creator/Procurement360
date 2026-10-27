@@ -99,7 +99,7 @@ a {
 ========================================================= */
 
 ::selection {
-  background: var(--primary-hex, #14B8A6);
+  background: var(--primary-hex, var(--primary-hex));
   color: var(--background-hex, #12181F);
 }
 
@@ -113,6 +113,6 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--primary-hex, #14B8A6);
+  outline: 2px solid var(--primary-hex, var(--primary-hex));
   outline-offset: 2px;
 }

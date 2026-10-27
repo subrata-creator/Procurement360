@@ -446,11 +446,7 @@ export default function CreatePRModal({
               {createdItemCount === 1 ? "item" : "items"}.
             </p>
 
-            {createdPRRecordId && (
-              <span className="create-pr-success-id">
-                Request ID: {createdPRRecordId}
-              </span>
-            )}
+
 
             <div className="create-pr-success-actions">
               <button

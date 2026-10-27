@@ -162,9 +162,9 @@
 }
 
 .copilot-message.user .copilot-message-body > p {
-  border-color: rgba(20, 184, 166, 0.25);
+  border-color: rgba(37, 99, 235, 0.25);
   border-radius: 11px 11px 3px 11px;
-  background: rgba(20, 184, 166, 0.1);
+  background: rgba(37, 99, 235, 0.1);
 }
 
 .copilot-sources {
@@ -196,15 +196,15 @@
   gap: 5px;
   margin: 7px 2px 0;
   padding: 0 9px;
-  border: 1px solid rgba(20, 184, 166, 0.3);
+  border: 1px solid rgba(37, 99, 235, 0.3);
   border-radius: 6px;
-  background: rgba(20, 184, 166, 0.1);
+  background: rgba(37, 99, 235, 0.1);
   color: var(--primary-400);
   font-size: 9px;
   font-weight: 700;
 }
 
-.copilot-action:hover { background: rgba(20, 184, 166, 0.17); }
+.copilot-action:hover { background: rgba(37, 99, 235, 0.17); }
 
 .copilot-suggestions {
   display: flex;

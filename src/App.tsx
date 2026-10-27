@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Header from "./components/Header";
 import Dashboard from "./Pages/Dashboard";
@@ -13,13 +13,6 @@ import "./Styles/Styles.css";
 
 const AppContent: React.FC = () => {
   const [fallbackNavigation, setFallbackNavigation] = useState("Dashboard");
-  const [themeMode, setThemeMode] = useState<"dark" | "light">(() => {
-    try {
-      return window.localStorage.getItem("procurement-theme") === "light" ? "light" : "dark";
-    } catch {
-      return "dark";
-    }
-  });
   const location = useLocation();
   const navigate = useNavigate();
   const isPurchaseRequestRoute = location.pathname.startsWith("/purchase-requests");
@@ -35,13 +28,22 @@ const AppContent: React.FC = () => {
         : undefined;
   const activeNavigation = routeNavigation ?? fallbackNavigation;
 
-  useEffect(() => {
+  const [themeMode, setThemeMode] = useState<"dark" | "light">(() => {
+    try {
+      return (window.localStorage.getItem("procurement-theme") as "dark" | "light") || "light";
+    } catch {
+      return "light";
+    }
+  });
+
+  React.useEffect(() => {
+    document.documentElement.classList.toggle("dark", themeMode === "dark");
     document.documentElement.dataset.theme = themeMode;
     document.documentElement.style.colorScheme = themeMode;
     try {
       window.localStorage.setItem("procurement-theme", themeMode);
     } catch {
-      // Theme still applies for this session when storage is unavailable.
+      // storage unavailable
     }
   }, [themeMode]);
 
@@ -56,11 +58,12 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="app">
+      <div className="ambient" aria-hidden="true" />
       <Header
         activeItem={activeNavigation}
         onNavigate={handleNavigation}
         themeMode={themeMode}
-        onToggleTheme={() => setThemeMode((mode) => mode === "dark" ? "light" : "dark")}
+        onToggleTheme={() => setThemeMode((m) => (m === "dark" ? "light" : "dark"))}
       />
       <main className="dashboard">
         {isPurchaseRequestRoute ? (

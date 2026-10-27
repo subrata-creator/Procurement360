@@ -11,13 +11,9 @@ body,
 }
 
 body {
-  font-family:
-    "Segoe UI",
-    Arial,
-    Helvetica,
-    sans-serif;
-  background: #f5f8fc;
-  color: #13294b;
+  font-family: var(--default-font-family, "Figtree", sans-serif);
+  background: var(--background-hex);
+  color: var(--foreground-hex);
 }
 
 button,
@@ -36,7 +32,10 @@ button {
 
 .app {
   min-height: 100vh;
-  background: #f5f8fc;
+  background: var(--background-hex);
+  color: var(--foreground-hex);
+  position: relative;
+  isolation: isolate;
 }
 
 .brand-section {
@@ -82,8 +81,8 @@ button {
 }
 
 .nav-item.active {
-  color: #ffffff;
-  background: #2f61d5;
+  color: var(--primary-foreground-hex, #ffffff);
+  background: var(--primary-hex);
 }
 
 .user-section {
@@ -1031,8 +1030,10 @@ button {
   width: 142px;
   display: flex;
   flex-direction: column;
-  background: #0c173d;
-  color: #fff;
+  background: var(--sidebar);
+  border-right: 1px solid var(--sidebar-border);
+  color: var(--sidebar-foreground);
+  box-shadow: 1px 0 12px rgba(0, 0, 0, 0.03);
 }
 
 .sidebar-brand {
@@ -1046,7 +1047,7 @@ button {
 }
 
 .brand-mark {
-  color: #2682ff;
+  color: var(--primary-hex);
   font-size: 27px;
   font-weight: 800;
 }
@@ -1065,15 +1066,22 @@ button {
   align-items: center;
   gap: 10px;
   padding: 0 11px;
-  border-radius: 8px;
-  color: #f2f5ff;
+  border-radius: var(--radius-sm, 8px);
+  color: var(--muted-foreground-hex);
   font-size: 10px;
   font-weight: 500;
   text-align: left;
 }
 
-.side-navigation .nav-item:hover,
-.side-navigation .nav-item.active { color: #fff; background: #1768e8; }
+.side-navigation .nav-item:hover {
+  color: var(--foreground-hex);
+  background: var(--sidebar-accent);
+}
+.side-navigation .nav-item.active {
+  color: var(--primary-foreground-hex, #ffffff);
+  background: var(--primary-hex);
+  box-shadow: 0 4px 14px -2px oklch(54.6% 0.215 262.9 / 0.35);
+}
 .nav-icon { width: 15px; font-size: 15px; text-align: center; }
 
 .sidebar-user {
@@ -1083,7 +1091,8 @@ button {
   align-items: center;
   gap: 7px;
   padding: 8px 9px;
-  background: rgba(255, 255, 255, .08);
+  background: var(--muted-hex);
+  border-top: 1px solid var(--border-hex);
 }
 
 .sidebar-user .user-avatar {
