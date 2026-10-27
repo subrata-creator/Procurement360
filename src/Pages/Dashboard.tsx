@@ -35,7 +35,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="command-tools">
-             <button type="button" className="dashboard-icon-button command-notifications" aria-label="Notifications"><Bell size={17} strokeWidth={1.8} /><i /></button>
+          <button type="button" className="dashboard-icon-button command-notifications" aria-label="Notifications"><Bell size={17} strokeWidth={1.8} /><i /></button>
           <button type="button" className="dashboard-icon-button" aria-label="Help"><HelpCircle size={17} strokeWidth={1.8} /></button>
           <button type="button" className="dashboard-create-button" onClick={() => setIsCreatePROpen(true)}>
             <span className="create-plus">+</span>Create Purchase Request
@@ -117,7 +117,9 @@ export default function Dashboard() {
       )}
 
       {isCreatePROpen && (
-        <CreatePRModal onClose={() => setIsCreatePROpen(false)} />
+        <CreatePRModal
+          onClose={() => setIsCreatePROpen(false)}
+          onViewPurchaseRequest={() => navigate("/purchase-requests")} />
       )}
 
     </main>

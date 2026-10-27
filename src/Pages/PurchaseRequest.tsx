@@ -432,7 +432,7 @@ export default function PurchaseRequest() {
 
   const averageReviewDays = reviewDurations.length
     ? reviewDurations.reduce((sum, duration) => sum + duration, 0) /
-      reviewDurations.length
+    reviewDurations.length
     : null;
 
   const spendRecords = filteredRequests.flatMap((request) => {
@@ -524,7 +524,7 @@ export default function PurchaseRequest() {
       getRequestAmount(requestWithMissingDetails) === null ? "amount" : null,
       !requestWithMissingDetails.requiredDate ? "required-by date" : null,
       !requestWithMissingDetails.category &&
-      !requestWithMissingDetails.department
+        !requestWithMissingDetails.department
         ? "department or category"
         : null,
     ].filter((field): field is string => field !== null);
@@ -617,15 +617,13 @@ export default function PurchaseRequest() {
       <section className="xd-kpis purchase-stats" aria-label="Purchase request metrics">
         {stats.map((stat) => (
           <article
-            className={`xd-kpi xd-${stat.type} purchase-stat ${
-              statusQuery === stat.filter ? "selected" : ""
-            }`}
+            className={`xd-kpi xd-${stat.type} purchase-stat ${statusQuery === stat.filter ? "selected" : ""
+              }`}
             key={stat.title}
             role="button"
             tabIndex={0}
-            aria-label={`${stat.title}: ${stat.value}. Filter requests by ${
-              stat.filter === "All Status" ? "all statuses" : stat.filter
-            }`}
+            aria-label={`${stat.title}: ${stat.value}. Filter requests by ${stat.filter === "All Status" ? "all statuses" : stat.filter
+              }`}
             aria-pressed={statusQuery === stat.filter}
             onClick={() => setStatusQuery(stat.filter)}
             onKeyDown={(event) => {
@@ -990,59 +988,57 @@ export default function PurchaseRequest() {
             Showing <strong>{startRecord}-{endRecord}</strong> of{" "}
             <strong>{filteredRequests.length}</strong> results
           </span>
-          
-<div className="purchase-pagination">
-  <button
-    type="button"
-    aria-label="Previous page"
-    disabled={currentPage === 1}
-    onClick={() =>
-      setCurrentPage((page) => Math.max(1, page - 1))
-    }
-  >
-    <ChevronLeft size={14} />
-  </button>
 
-  {Array.from(
-    {
-      length: Math.min(2, totalPages - currentPage + 1),
-    },
-    (_, index) => currentPage + index
-  ).map((page) => (
-    <button
-      type="button"
-      key={page}
-      className={currentPage === page ? "selected" : ""}
-      aria-current={currentPage === page ? "page" : undefined}
-      onClick={() => setCurrentPage(page)}
-    >
-      {page}
-    </button>
-  ))}
+          <div className="purchase-pagination">
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={currentPage === 1}
+              onClick={() =>
+                setCurrentPage((page) => Math.max(1, page - 1))
+              }
+            >
+              <ChevronLeft size={14} />
+            </button>
 
-  <button
-    type="button"
-    aria-label="Next page"
-    disabled={currentPage >= totalPages}
-    onClick={() =>
-      setCurrentPage((page) =>
-        Math.min(totalPages, page + 1)
-      )
-    }
-  >
-    <ChevronRight size={14} />
-  </button>
-</div>
+            {Array.from(
+              {
+                length: Math.min(2, totalPages - currentPage + 1),
+              },
+              (_, index) => currentPage + index
+            ).map((page) => (
+              <button
+                type="button"
+                key={page}
+                className={currentPage === page ? "selected" : ""}
+                aria-current={currentPage === page ? "page" : undefined}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={currentPage >= totalPages}
+              onClick={() =>
+                setCurrentPage((page) =>
+                  Math.min(totalPages, page + 1)
+                )
+              }
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
 
         </div>
       </section>
 
       {isCreatePROpen && (
         <CreatePRModal
-          onClose={() => {
-            setIsCreatePROpen(false);
-            handleRequestCreated();
-          }}
+          onClose={() => setIsCreatePROpen(false)}
+          onViewPurchaseRequest={() => navigate("/purchase-requests")}
         />
       )}
     </div>
