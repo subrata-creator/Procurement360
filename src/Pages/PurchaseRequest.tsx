@@ -1038,7 +1038,8 @@ export default function PurchaseRequest() {
       {isCreatePROpen && (
         <CreatePRModal
           onClose={() => setIsCreatePROpen(false)}
-          onViewPurchaseRequest={() => navigate("/purchase-requests")}
+          onCreated={handleRequestCreated}
+          onViewPurchaseRequest={handleRequestCreated}
         />
       )}
     </div>
