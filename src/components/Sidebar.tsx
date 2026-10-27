@@ -8,9 +8,17 @@ import {
   ShoppingBag,
   ShoppingCart,
   Truck,
+  Users,
+  Workflow,
 } from "lucide-react";
 
-export const navigationItems = [
+export const adminNavigationItems = [
+  { label: "Dashboard", icon: Home },
+  { label: "Users", icon: Users },
+  { label: "Approval Cycle", icon: Workflow },
+];
+
+export const userNavigationItems = [
   { label: "Dashboard", icon: Home },
   { label: "Purchase Requests", icon: ShoppingCart },
   { label: "RFQs", icon: ClipboardList },
@@ -24,9 +32,16 @@ export const navigationItems = [
 export interface SidebarProps {
   activeItem: string;
   onNavigate?: (item: string) => void;
+  isAdmin?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  activeItem,
+  onNavigate,
+  isAdmin = false,
+}) => {
+  const items = isAdmin ? adminNavigationItems : userNavigationItems;
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -34,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate }) => {
         <strong>Xebia</strong>
       </div>
       <nav className="side-navigation" aria-label="Main navigation">
-        {navigationItems.map(({ label, icon: Icon }) => (
+        {items.map(({ label, icon: Icon }) => (
           <button
             key={label}
             type="button"

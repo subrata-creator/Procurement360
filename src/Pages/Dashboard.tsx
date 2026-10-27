@@ -11,7 +11,11 @@ import TaskInbox from "../components/TaskInbox";
 import ActivityTimeline from "../components/ActivityTimeline";
 import "../Styles/DashboardNew.css";
 
-export default function Dashboard() {
+interface DashboardProps {
+  isAdmin?: boolean;
+}
+
+export default function Dashboard({ isAdmin = false }: DashboardProps) {
   const navigate = useNavigate();
   const [isCreatePROpen, setIsCreatePROpen] = useState(false);
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
@@ -34,11 +38,17 @@ export default function Dashboard() {
             <span className="command-context-chip intelligence"><i />3 AI recommendations</span>
           </div>
         </div>
-        <div className="command-tools">
-          <button type="button" className="dashboard-create-button" onClick={() => setIsCreatePROpen(true)}>
-            <span className="create-plus">+</span>Create Purchase Request
-          </button>
-        </div>
+        {!isAdmin && (
+          <div className="command-tools">
+            <button
+              type="button"
+              className="dashboard-create-button"
+              onClick={() => setIsCreatePROpen(true)}
+            >
+              <span className="create-plus">+</span>Create Purchase Request
+            </button>
+          </div>
+        )}
       </header>
 
 

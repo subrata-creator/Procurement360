@@ -19,6 +19,8 @@ import PurchaseRequest from "./Pages/PurchaseRequest";
 import PurchaseRequestDetail from "./Pages/PRSummary";
 import TaskDetail from "./Pages/TaskDetail";
 import RfqDetail from "./Pages/rfqdetail";
+import UsersPage from "./Pages/Admin/UsersPage";
+import ApprovalCycleConfigPage from "./Pages/Admin/ApprovalCycleConfigPage";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
@@ -67,6 +69,11 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const isUsersRoute = location.pathname.startsWith("/users");
+  const isApprovalCycleRoute =
+    location.pathname.startsWith("/approval-cycle-configuration") ||
+    location.pathname.startsWith("/approval-cycles");
+
   const isPurchaseRequestRoute =
     location.pathname.startsWith("/purchase-requests");
 
@@ -74,13 +81,17 @@ const AppContent: React.FC = () => {
   const isOrdersRoute = location.pathname.startsWith("/orders");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
 
-  const routeNavigation = isPurchaseRequestRoute
-    ? "Purchase Requests"
-    : isRfqRoute
-      ? "RFQs"
-      : isOrdersRoute
-        ? "Orders"
-        : undefined;
+  const routeNavigation = isUsersRoute
+    ? "Users"
+    : isApprovalCycleRoute
+      ? "Approval Cycle"
+      : isPurchaseRequestRoute
+        ? "Purchase Requests"
+        : isRfqRoute
+          ? "RFQs"
+          : isOrdersRoute
+            ? "Orders"
+            : undefined;
 
   const activeNavigation = routeNavigation ?? fallbackNavigation;
 
@@ -207,12 +218,22 @@ const AppContent: React.FC = () => {
     }
   }, [themeMode]);
 
-  // Existing navigation remains unchanged.
+  const isAdmin =
+    loggedInUser.userRole?.trim().toLowerCase() === "admin";
+
+  // Navigation handler
   const handleNavigation = (item: string) => {
     setFallbackNavigation(item);
 
     if (item === "Dashboard") {
       navigate("/");
+    } else if (item === "Users") {
+      navigate("/users");
+    } else if (
+      item === "Approval Cycle" ||
+      item === "Approval Cycle Configuration"
+    ) {
+      navigate("/approval-cycle-configuration");
     } else if (item === "Purchase Requests") {
       navigate("/purchase-requests");
     } else if (item === "RFQs") {
@@ -231,6 +252,7 @@ const AppContent: React.FC = () => {
       <Sidebar
         activeItem={activeNavigation}
         onNavigate={handleNavigation}
+        isAdmin={isAdmin}
       />
 
       <div className="app-main-layout">
@@ -249,7 +271,22 @@ const AppContent: React.FC = () => {
         />
 
         <main className="dashboard">
-          {isPurchaseRequestRoute ? (
+          {isUsersRoute ? (
+            <Routes>
+              <Route path="/users" element={<UsersPage />} />
+            </Routes>
+          ) : isApprovalCycleRoute ? (
+            <Routes>
+              <Route
+                path="/approval-cycle-configuration"
+                element={<ApprovalCycleConfigPage />}
+              />
+              <Route
+                path="/approval-cycles"
+                element={<ApprovalCycleConfigPage />}
+              />
+            </Routes>
+          ) : isPurchaseRequestRoute ? (
             <Routes>
               <Route
                 path="/purchase-requests"
@@ -284,7 +321,7 @@ const AppContent: React.FC = () => {
               />
             </Routes>
           ) : (
-            <Dashboard />
+            <Dashboard isAdmin={isAdmin} />
           )}
         </main>
       </div>
