@@ -24,7 +24,7 @@ import "../Styles/CreatePRModal.css";
 interface CreatePRModalProps {
   onClose: () => void;
   onCreated?: () => void;
-  onViewPurchaseRequest?: () => void;
+  onViewPurchaseRequest?: (id?: string) => void;
 }
 
 interface RequestForm {
@@ -445,6 +445,13 @@ export default function CreatePRModal({
               <strong>{createdPRTitle}</strong> was created with {createdItemCount}{" "}
               {createdItemCount === 1 ? "item" : "items"}.
             </p>
+
+            {createdPRRecordId && (
+              <span className="create-pr-success-id">
+                Request ID: {createdPRRecordId}
+              </span>
+            )}
+
             <div className="create-pr-success-actions">
               <button
                 type="button"
@@ -471,7 +478,7 @@ export default function CreatePRModal({
                 className="create-pr-view-request"
                 onClick={() => {
                   onClose();
-                  onViewPurchaseRequest?.();
+                  onViewPurchaseRequest?.(createdPRRecordId || undefined);
                 }}
               >
                 View Purchase Request
