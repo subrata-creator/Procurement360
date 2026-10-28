@@ -316,6 +316,7 @@ const AppContent: React.FC = () => {
           ) : isRfqRoute ? (
             <Routes>
               <Route path="/rfqs" element={<RfqPage />} />
+              <Route path="/rfqs/new" element={<RfqPage openCreateModal />} />
               <Route
                 path="/rfqs/:ref"
                 element={<RfqDetail />}

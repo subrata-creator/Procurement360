@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
+import CreateRFQModal from "../components/CreateRFQModal";
 
 import "../Styles/Styles.css";
 import "../Styles/RFQPage.css";
@@ -151,7 +152,11 @@ function RfqStatusRing({ label }: { label: string }) {
   );
 }
 
-const RfqPage: React.FC = () => {
+export interface RfqPageProps {
+  openCreateModal?: boolean;
+}
+
+const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
   const navigate = useNavigate();
   const [records, setRecords] = useState<RawRfq[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -160,6 +165,13 @@ const RfqPage: React.FC = () => {
   const [createdOnQuery, setCreatedOnQuery] = useState("");
   const [statusQuery, setStatusQuery] = useState<StatusFilter>("All Status");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(openCreateModal);
+
+  useEffect(() => {
+    if (openCreateModal) {
+      setIsCreateModalOpen(true);
+    }
+  }, [openCreateModal]);
 
   const loadRfqs = useCallback(async () => {
     setIsLoading(true);
@@ -351,7 +363,7 @@ const RfqPage: React.FC = () => {
             <button
               type="button"
               className="dashboard-create-button"
-              onClick={() => navigate("/rfqs/new")}
+              onClick={() => setIsCreateModalOpen(true)}
             >
               <span className="create-plus"><Plus size={16} /></span>
               Create RFQ
@@ -528,6 +540,20 @@ const RfqPage: React.FC = () => {
           </div>
         </div>
       </section>
+
+      <CreateRFQModal
+        isOpen={isCreateModalOpen}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          // If URL is /rfqs/new, return to /rfqs
+          if (window.location.pathname === "/rfqs/new") {
+            navigate("/rfqs", { replace: true });
+          }
+        }}
+        onCreated={() => {
+          void loadRfqs();
+        }}
+      />
     </main>
   );
 };
