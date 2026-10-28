@@ -38,8 +38,6 @@ export interface Cr49f_productsesBase {
   cr49f_unitofmeasure?: string;
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
   statecode: Cr49f_productsesstatecode;
   statuscode?: Cr49f_productsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -51,23 +49,10 @@ export interface Cr49f_productses extends Cr49f_productsesBase {
   cr49f_product_image_url?: string;
   cr49f_product_imageid?: string;
   cr49f_producttypename?: string;
-  cr49f_purchaseorderlineitemname?: string;
-  cr49f_purchaserequestlinename?: string;
-  cr49f_rfqlineitemname?: string;
   cr49f_statusname?: string;
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
@@ -92,4 +77,6 @@ export interface Cr49f_productses extends Cr49f_productsesBase {
   owninguser?: object;
   _owninguser_value?: string;
 }
-export type Cr49f_productsesUploadColumnName = 'cr49f_product_image';
+export type Cr49f_productsesImageColumnName = 'cr49f_product_image';
+
+export type Cr49f_productsesUploadColumnName = Cr49f_productsesImageColumnName;

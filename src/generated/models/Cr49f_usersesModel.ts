@@ -11,9 +11,9 @@ export const Cr49f_usersescr49f_department = {
 export type Cr49f_usersescr49f_department = keyof typeof Cr49f_usersescr49f_department;
 export const Cr49f_usersescr49f_role = {
   1: 'Requester',
-  2: 'ProcurementAdmin',
-  3: 'FinanceApprover',
-  4: 'ProcurementOfficer'
+  2: 'Procurement Admin',
+  3: 'Finance Approver',
+  4: 'Procurement Officer'
 } as const;
 export type Cr49f_usersescr49f_role = keyof typeof Cr49f_usersescr49f_role;
 export const Cr49f_usersesstatecode = {
@@ -36,8 +36,6 @@ export interface Cr49f_usersesBase {
   cr49f_usersid: string;
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
   statecode: Cr49f_usersesstatecode;
   statuscode?: Cr49f_usersesstatuscode;
   timezoneruleversionnumber?: number;
@@ -47,19 +45,9 @@ export interface Cr49f_usersesBase {
 export interface Cr49f_userses extends Cr49f_usersesBase {
   cr49f_departmentname?: string;
   cr49f_rolename?: string;
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;

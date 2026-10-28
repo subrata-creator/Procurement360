@@ -16,6 +16,8 @@ export const adminNavigationItems = [
   { label: "Dashboard", icon: Home },
   { label: "Users", icon: Users },
   { label: "Approval Cycle", icon: Workflow },
+  { label: "Products / Services", icon: PackageSearch },
+  { label: "Suppliers", icon: Truck },
 ];
 
 export const userNavigationItems = [

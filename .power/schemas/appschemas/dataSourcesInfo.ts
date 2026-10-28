@@ -5,6 +5,20 @@
  */
 
 export const dataSourcesInfo = {
+  "cr49f_procurementapprovalcycle": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_procurementapprovalcycleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr49f_procurementapprovalcycles": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_procurementapprovalcycleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr49f_productses": {
     "tableId": "",
     "version": "",
@@ -30,6 +44,34 @@ export const dataSourcesInfo = {
     "tableId": "",
     "version": "",
     "primaryKey": "cr49f_requestforqoutationid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr49f_supplierproducts": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_supplierproductid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr49f_suppliers": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_supplierid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr49f_tasks": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_tasksid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr49f_taskses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_tasksid",
     "dataSourceType": "Dataverse",
     "apis": {}
   },
@@ -308,5 +350,19 @@ export const dataSourcesInfo = {
         }
       }
     }
+  },
+  "procurementapprovalcycles": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_procurementapprovalcycleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "tasks": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_tasksid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
   }
 };

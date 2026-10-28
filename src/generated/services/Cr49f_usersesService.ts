@@ -24,19 +24,22 @@ export class Cr49f_usersesService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Cr49f_usersesBase, 'cr49f_usersid'>>): Promise<IOperationResult<Cr49f_userses>> {
+  public static async update(id: string, changedFields: Partial<Omit<Cr49f_usersesBase, 'cr49f_usersid'>>, partitionId?: string): Promise<IOperationResult<Cr49f_userses>> {
     const result = await Cr49f_usersesService.client.updateRecordAsync<Partial<Omit<Cr49f_usersesBase, 'cr49f_usersid'>>, Cr49f_userses>(
       Cr49f_usersesService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
-    await Cr49f_usersesService.client.deleteRecordAsync(
+  public static async delete(id: string, partitionId?: string): Promise<IOperationResult<void>> {
+    const result = await Cr49f_usersesService.client.deleteRecordAsync(
       Cr49f_usersesService.dataSourceName,
-      id);
+      id,
+      partitionId);
+    return result;
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Cr49f_userses>> {

@@ -21,6 +21,8 @@ import TaskDetail from "./Pages/TaskDetail";
 import RfqDetail from "./Pages/rfqdetail";
 import UsersPage from "./Pages/Admin/UsersPage";
 import ApprovalCycleConfigPage from "./Pages/Admin/ApprovalCycleConfigPage";
+import SuppliersPage from "./Pages/SuppliersPage";
+import ProductsPage from "./Pages/ProductsPage";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
@@ -74,6 +76,9 @@ const AppContent: React.FC = () => {
     location.pathname.startsWith("/approval-cycle-configuration") ||
     location.pathname.startsWith("/approval-cycles");
 
+  const isSuppliersRoute = location.pathname.startsWith("/suppliers");
+  const isProductsRoute = location.pathname.startsWith("/products-services") || location.pathname.startsWith("/products");
+
   const isPurchaseRequestRoute =
     location.pathname.startsWith("/purchase-requests");
 
@@ -83,9 +88,7 @@ const AppContent: React.FC = () => {
 
   const routeNavigation = isUsersRoute
     ? "Users"
-    : isApprovalCycleRoute
-      ? "Approval Cycle"
-      : isPurchaseRequestRoute
+    : isApprovalCycleRoute ? "Approval Cycle" : isSuppliersRoute ? "Suppliers" : isProductsRoute ? "Products / Services" : isPurchaseRequestRoute
         ? "Purchase Requests"
         : isRfqRoute
           ? "RFQs"
@@ -238,6 +241,10 @@ const AppContent: React.FC = () => {
       navigate("/purchase-requests");
     } else if (item === "RFQs") {
       navigate("/rfqs");
+    } else if (item === "Suppliers") {
+      navigate("/suppliers");
+    } else if (item === "Products / Services" || item === "Products") {
+      navigate("/products-services");
     } else if (item === "Orders") {
       navigate("/orders");
     } else {
@@ -285,6 +292,15 @@ const AppContent: React.FC = () => {
                 path="/approval-cycles"
                 element={<ApprovalCycleConfigPage />}
               />
+            </Routes>
+          ) : isSuppliersRoute ? (
+            <Routes>
+              <Route path="/suppliers" element={<SuppliersPage />} />
+            </Routes>
+          ) : isProductsRoute ? (
+            <Routes>
+              <Route path="/products-services" element={<ProductsPage />} />
+              <Route path="/products" element={<ProductsPage />} />
             </Routes>
           ) : isPurchaseRequestRoute ? (
             <Routes>

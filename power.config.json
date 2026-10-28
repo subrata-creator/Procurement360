@@ -45,6 +45,32 @@
         "users": {
           "entitySetName": "cr49f_userses",
           "logicalName": "cr49f_users"
+        },
+        "procurementapprovalcycles": {
+          "entitySetName": "cr49f_procurementapprovalcycles",
+          "logicalName": "cr49f_procurementapprovalcycle"
+        },
+        "cr49f_procurementapprovalcycles": {
+          "entitySetName": "cr49f_procurementapprovalcycles",
+          "logicalName": "cr49f_procurementapprovalcycle"
+        },
+        "tasks": {
+          "entitySetName": "cr49f_taskses",
+          "logicalName": "cr49f_tasks"
+        },
+        "cr49f_taskses": {
+          "entitySetName": "cr49f_taskses",
+          "logicalName": "cr49f_tasks"
+        },
+        "suppliers": {
+          "entitySetName": "cr49f_suppliers",
+          "logicalName": "cr49f_supplier",
+          "isHidden": false
+        },
+        "supplierproducts": {
+          "entitySetName": "cr49f_supplierproducts",
+          "logicalName": "cr49f_supplierproduct",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""
