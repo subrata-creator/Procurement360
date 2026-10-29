@@ -5,6 +5,7 @@
 
 // Models
 export * as CommonModels from './models/CommonModels';
+export * as Cr49f_approvaltasksesModel from './models/Cr49f_approvaltasksesModel';
 export * as Cr49f_procurementapprovalcyclesModel from './models/Cr49f_procurementapprovalcyclesModel';
 export * as Cr49f_productsesModel from './models/Cr49f_productsesModel';
 export * as Cr49f_purchaserequestlinesModel from './models/Cr49f_purchaserequestlinesModel';
@@ -13,11 +14,13 @@ export * as Cr49f_requestforqoutationsModel from './models/Cr49f_requestforqouta
 export * as Cr49f_supplierproductsModel from './models/Cr49f_supplierproductsModel';
 export * as Cr49f_suppliersModel from './models/Cr49f_suppliersModel';
 export * as Cr49f_tasksesModel from './models/Cr49f_tasksesModel';
+export * as Cr49f_tasksModel from './models/Cr49f_tasksModel';
 export * as Cr49f_userrolesesModel from './models/Cr49f_userrolesesModel';
 export * as Cr49f_usersesModel from './models/Cr49f_usersesModel';
 export * as MicrosoftCopilotStudioModel from './models/MicrosoftCopilotStudioModel';
 
 // Services
+export * from './services/Cr49f_approvaltasksesService';
 export * from './services/Cr49f_procurementapprovalcyclesService';
 export * from './services/Cr49f_productsesService';
 export * from './services/Cr49f_purchaserequestlinesService';
@@ -26,6 +29,7 @@ export * from './services/Cr49f_requestforqoutationsService';
 export * from './services/Cr49f_supplierproductsService';
 export * from './services/Cr49f_suppliersService';
 export * from './services/Cr49f_tasksesService';
+export * from './services/Cr49f_tasksService';
 export * from './services/Cr49f_userrolesesService';
 export * from './services/Cr49f_usersesService';
 export * from './services/MicrosoftCopilotStudioService';

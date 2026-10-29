@@ -3,6 +3,7 @@ import {
   AlertCircle,
   Building2,
   CheckCircle2,
+  Loader2,
   Mail,
   MapPin,
   Package,
@@ -11,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   Truck,
   User,
   X,
@@ -25,6 +27,11 @@ import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersSer
 import { Cr49f_supplierproductsService } from "../generated/services/Cr49f_supplierproductsService";
 import SupplierModal from "../components/SupplierModal";
 import ModernSelect, { type ModernSelectOption } from "../components/ModernSelect";
+import {
+  seedSuppliersToDataverse,
+  seedMissingSupplierProductsOnly,
+} from "../Services/SupplierSeedingService";
+import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 import "../Styles/AdminPages.css";
 
 // Helper to get friendly supplier type
@@ -50,6 +57,17 @@ const SuppliersPage: React.FC = () => {
   const [products, setProducts] = useState<Cr49f_supplierproducts[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Seeding state
+  const [seeding, setSeeding] = useState(false);
+  const [seedProgress, setSeedProgress] = useState<string | null>(null);
+  const [addingProductsForSupId, setAddingProductsForSupId] = useState<string | null>(null);
+
+  // Helper to normalize GUIDs across OData casing / braces
+  const normalizeId = (id?: string): string => {
+    if (!id) return "";
+    return String(id).replace(/[{}]/g, "").toLowerCase().trim();
+  };
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -101,13 +119,111 @@ const SuppliersPage: React.FC = () => {
 
   useEffect(() => {
     void fetchSuppliersData();
+    const w = window as unknown as {
+      seedSuppliers: typeof seedSuppliersToDataverse;
+      seedSupplierProductsOnly: typeof seedMissingSupplierProductsOnly;
+    };
+    w.seedSuppliers = seedSuppliersToDataverse;
+    w.seedSupplierProductsOnly = seedMissingSupplierProductsOnly;
   }, []);
 
-  // Map products by supplier id
+  // Sync / Add 10 sample suppliers & products matching Dataverse
+  const handleAddSampleSuppliers = async () => {
+    setSeeding(true);
+    setSeedProgress("Checking suppliers & products in Dataverse...");
+    try {
+      const result = await seedSuppliersToDataverse((msg) => setSeedProgress(msg));
+      await fetchSuppliersData();
+      setToastMessage(
+        `Successfully synced ${result.createdSuppliers.length} suppliers and ${result.createdProducts.length} catalog products in Dataverse!`
+      );
+    } catch (err: unknown) {
+      console.error("Failed to add sample suppliers:", err);
+      const msg = err instanceof Error ? err.message : "Failed to add sample suppliers.";
+      setLoadError(`Error adding sample suppliers: ${msg}`);
+    } finally {
+      setSeeding(false);
+      setSeedProgress(null);
+    }
+  };
+
+  // Add catalog products specifically for one supplier
+  const handleAddProductsForSupplier = async (sup: Cr49f_suppliers) => {
+    const cleanId = normalizeId(sup.cr49f_supplierid);
+    if (!cleanId) return;
+
+    setAddingProductsForSupId(sup.cr49f_supplierid);
+    try {
+      const targetName = (sup.cr49f_name || "").toLowerCase().trim();
+      const targetCode = (sup.cr49f_supplierid1 || "").toLowerCase().trim();
+
+      const matchedSample =
+        INITIAL_SAMPLE_SUPPLIERS.find((item) => {
+          const sName = (item.supplier.cr49f_name || "").toLowerCase().trim();
+          const sCode = (item.supplier.cr49f_supplierid1 || "").toLowerCase().trim();
+          return (targetName && sName === targetName) || (targetCode && sCode === targetCode);
+        }) || INITIAL_SAMPLE_SUPPLIERS[0];
+
+      const existingForSup = productsBySupplier[cleanId] ?? [];
+      const addedList: Cr49f_supplierproducts[] = [];
+      for (const prod of matchedSample.products) {
+        const prodName = prod.cr49f_productname.trim().toLowerCase();
+        const alreadyHas = existingForSup.some(
+          (ep) => (ep.cr49f_productname || "").trim().toLowerCase() === prodName
+        );
+        if (alreadyHas) continue;
+
+        const prodPayload = {
+          "cr49f_Supplier@odata.bind": `/cr49f_suppliers(${cleanId})`,
+          cr49f_productname: prod.cr49f_productname.slice(0, 95),
+          cr49f_supplierproductnumber: prod.cr49f_supplierproductnumber.slice(0, 95),
+          cr49f_producttype: prod.cr49f_producttype,
+          cr49f_category: (prod.cr49f_category || "").slice(0, 95),
+          cr49f_unitprice: String(prod.cr49f_unitprice || "").slice(0, 95),
+          cr49f_warranty: String(prod.cr49f_warranty || "").slice(0, 95),
+          cr49f_availability: prod.cr49f_availability,
+          cr49f_productdescription: (prod.cr49f_productdescription || "").slice(0, 95),
+          statecode: 0 as const,
+          statuscode: 1 as const,
+        };
+
+        const res = await Cr49f_supplierproductsService.create(prodPayload);
+        if (res.error || !res.data) {
+          throw new Error(
+            res.error?.message || `Failed to create product "${prod.cr49f_productname}"`
+          );
+        }
+        addedList.push({
+          ...res.data,
+          _cr49f_supplier_value: cleanId,
+        });
+      }
+
+      await fetchSuppliersData();
+      if (addedList.length > 0) {
+        setToastMessage(`Added ${addedList.length} new catalog products to "${sup.cr49f_name || "Supplier"}"!`);
+      } else {
+        setToastMessage(`All catalog products are already present for "${sup.cr49f_name || "Supplier"}".`);
+      }
+    } catch (err: unknown) {
+      console.error("Failed to add products for supplier:", err);
+      const msg = err instanceof Error ? err.message : "Failed to add products.";
+      setLoadError(`Error adding products: ${msg}`);
+    } finally {
+      setAddingProductsForSupId(null);
+    }
+  };
+
+  // Map products by normalized supplier id
   const productsBySupplier = useMemo(() => {
     const map: Record<string, Cr49f_supplierproducts[]> = {};
     for (const p of products) {
-      const supId = p._cr49f_supplier_value;
+      const rawId =
+        p._cr49f_supplier_value ||
+        (p as unknown as Record<string, string>)._cr49f_Supplier_value ||
+        (p as unknown as Record<string, { cr49f_supplierid?: string }>).cr49f_supplier?.cr49f_supplierid ||
+        "";
+      const supId = normalizeId(rawId);
       if (supId) {
         if (!map[supId]) map[supId] = [];
         map[supId].push(p);
@@ -133,24 +249,34 @@ const SuppliersPage: React.FC = () => {
     savedSupplier: Cr49f_suppliers,
     savedProducts: Cr49f_supplierproducts[]
   ) => {
+    const savedNormId = normalizeId(savedSupplier.cr49f_supplierid);
     setSuppliers((prev) => {
       const exists = prev.some(
-        (s) => s.cr49f_supplierid === savedSupplier.cr49f_supplierid
+        (s) => normalizeId(s.cr49f_supplierid) === savedNormId
       );
       if (exists) {
         return prev.map((s) =>
-          s.cr49f_supplierid === savedSupplier.cr49f_supplierid ? savedSupplier : s
+          normalizeId(s.cr49f_supplierid) === savedNormId ? savedSupplier : s
         );
       }
       return [savedSupplier, ...prev];
     });
 
-    // Update products state
+    // Update products state with normalized supplier reference
+    const enrichedProducts = savedProducts.map((p) => ({
+      ...p,
+      _cr49f_supplier_value: savedSupplier.cr49f_supplierid,
+    }));
+
     setProducts((prev) => {
       const otherProducts = prev.filter(
-        (p) => p._cr49f_supplier_value !== savedSupplier.cr49f_supplierid
+        (p) =>
+          normalizeId(
+            p._cr49f_supplier_value ||
+            (p as unknown as Record<string, string>)._cr49f_Supplier_value
+          ) !== savedNormId
       );
-      return [...savedProducts, ...otherProducts];
+      return [...enrichedProducts, ...otherProducts];
     });
 
     setToastMessage(
@@ -275,8 +401,28 @@ const SuppliersPage: React.FC = () => {
           </button>
           <button
             type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={handleAddSampleSuppliers}
+            disabled={seeding || loading}
+            title="Seed 10 new suppliers & catalog products matching present products in Dataverse"
+          >
+            {seeding ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                <span>{seedProgress || "Adding..."}</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} />
+                <span>Seed 10 Suppliers</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
             className="admin-btn admin-btn-primary"
             onClick={handleOpenCreate}
+            disabled={seeding}
           >
             <Plus size={15} />
             <span>New Supplier</span>
@@ -424,15 +570,43 @@ const SuppliersPage: React.FC = () => {
                     ) : (
                       <div>
                         <p>No suppliers found in Dataverse.</p>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-primary"
-                          style={{ margin: "8px auto 0" }}
-                          onClick={handleOpenCreate}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 10,
+                            margin: "12px auto 0",
+                            flexWrap: "wrap",
+                          }}
                         >
-                          <Plus size={14} />
-                          <span>Register First Supplier</span>
-                        </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-secondary"
+                            onClick={handleAddSampleSuppliers}
+                            disabled={seeding}
+                          >
+                            {seeding ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Sparkles size={14} />
+                            )}
+                            <span>
+                              {seeding
+                                ? (seedProgress || "Adding 10 Suppliers...")
+                                : "Add 10 Suppliers & Products"}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-primary"
+                            onClick={handleOpenCreate}
+                            disabled={seeding}
+                          >
+                            <Plus size={14} />
+                            <span>Register First Supplier</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                   </td>
@@ -440,7 +614,8 @@ const SuppliersPage: React.FC = () => {
               ) : (
                 filteredSuppliers.map((s) => {
                   const typeInfo = getSupplierTypeName(s);
-                  const supplierProducts = productsBySupplier[s.cr49f_supplierid] ?? [];
+                  const normId = normalizeId(s.cr49f_supplierid);
+                  const supplierProducts = productsBySupplier[normId] ?? [];
                   const prodCount = supplierProducts.length;
 
                   return (
@@ -625,7 +800,8 @@ const SuppliersPage: React.FC = () => {
 
             <div className="admin-modal-body" style={{ maxHeight: 420, overflowY: "auto" }}>
               {(() => {
-                const suppProducts = productsBySupplier[viewProductsSupplier.cr49f_supplierid] ?? [];
+                const normViewId = normalizeId(viewProductsSupplier.cr49f_supplierid);
+                const suppProducts = productsBySupplier[normViewId] ?? [];
                 if (suppProducts.length === 0) {
                   return (
                     <div
@@ -639,9 +815,27 @@ const SuppliersPage: React.FC = () => {
                       <strong style={{ fontSize: 13, display: "block", marginBottom: 4 }}>
                         No Products Registered
                       </strong>
-                      <p style={{ fontSize: 11.5, margin: 0 }}>
+                      <p style={{ fontSize: 11.5, margin: "0 0 12px" }}>
                         No catalog items have been added for this supplier yet.
                       </p>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-secondary"
+                        style={{ margin: "0 auto" }}
+                        onClick={() => void handleAddProductsForSupplier(viewProductsSupplier)}
+                        disabled={addingProductsForSupId === viewProductsSupplier.cr49f_supplierid}
+                      >
+                        {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Sparkles size={13} />
+                        )}
+                        <span>
+                          {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid
+                            ? "Adding Products..."
+                            : "Add Catalog Products"}
+                        </span>
+                      </button>
                     </div>
                   );
                 }
@@ -727,6 +921,24 @@ const SuppliersPage: React.FC = () => {
                 onClick={() => setViewProductsSupplier(null)}
               >
                 Close
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn-secondary"
+                onClick={() => handleAddProductsForSupplier(viewProductsSupplier)}
+                disabled={addingProductsForSupId === viewProductsSupplier.cr49f_supplierid}
+                title="Add all remaining catalog products for this supplier"
+              >
+                {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Sparkles size={13} />
+                )}
+                <span>
+                  {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid
+                    ? "Adding Products..."
+                    : "Add More Products"}
+                </span>
               </button>
               <button
                 type="button"

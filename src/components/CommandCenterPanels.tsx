@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import { ArrowRight, ArrowUpRight, BriefcaseBusiness, CircleAlert, CircleCheck, Gauge, ShieldAlert, Sparkles, TrendingUp } from "lucide-react";
 import { taskInboxItems } from "../data/tasks";
 import "../Styles/CommandCenter.css";
@@ -25,6 +26,30 @@ const supplierOrderTotal = suppliers.reduce((sum, supplier) => sum + supplier.or
 const leadingSupplierShare = Math.round((suppliers[0].orders / supplierOrderTotal) * 100);
 
 export default function CommandCenterPanels({ onViewPRs, onOpenTask, onViewForecast }: Props) {
+  const [dynamicTaskCount, setDynamicTaskCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadTasks() {
+      try {
+        const res = await Cr49f_approvaltasksesService.getAll();
+        if (res.data && active) {
+          const activeTasks = res.data.filter((t) => t.statecode === 0);
+          setDynamicTaskCount(activeTasks.length);
+        }
+      } catch {
+        // fallback
+      }
+    }
+    void loadTasks();
+    const onUpdate = () => void loadTasks();
+    window.addEventListener("approvalTasksUpdated", onUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener("approvalTasksUpdated", onUpdate);
+    };
+  }, []);
+
   const [spendPeriod, setSpendPeriod] = useState("Monthly");
   const [spendDepartment, setSpendDepartment] = useState("All departments");
   const [spendSupplier, setSpendSupplier] = useState("All suppliers");
@@ -88,7 +113,7 @@ export default function CommandCenterPanels({ onViewPRs, onOpenTask, onViewForec
             <div className="cc-attention-item neutral">
               <span className="cc-attention-symbol"><BriefcaseBusiness size={15} /></span>
               <div className="cc-attention-copy">
-                <strong>{highPriorityTasks.length} high-priority tasks</strong>
+                <strong>{dynamicTaskCount !== null ? dynamicTaskCount : highPriorityTasks.length} pending tasks</strong>
                 <span>Across invoice, PR, and PO approvals</span>
               </div>
               <button type="button" onClick={() => onOpenTask(highPriorityTasks[0]?.id ?? 1)} aria-label="Open a high-priority task"><ArrowRight size={15} /></button>

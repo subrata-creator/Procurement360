@@ -197,9 +197,25 @@ export const ApprovalCycleModal: React.FC<ApprovalCycleModalProps> = ({
       setTasks([
         {
           cr49f_task: "",
+          cr49f_role: 2, // Procurement Admin
+          cr49f_department: 3, // Administrator
+          cr49f_sequencenumber: 1,
+          cr49f_slanumber: 24,
+          cr49f_slaunit: 1, // Hours
+        },
+        {
+          cr49f_task: "",
+          cr49f_role: 4, // Procurement Officer
+          cr49f_department: 2, // IT
+          cr49f_sequencenumber: 2,
+          cr49f_slanumber: 48,
+          cr49f_slaunit: 1, // Hours
+        },
+        {
+          cr49f_task: "",
           cr49f_role: 3, // Finance Approver
           cr49f_department: 1, // Finance
-          cr49f_sequencenumber: 1,
+          cr49f_sequencenumber: 3,
           cr49f_slanumber: 24,
           cr49f_slaunit: 1, // Hours
         },
@@ -210,6 +226,7 @@ export const ApprovalCycleModal: React.FC<ApprovalCycleModalProps> = ({
   if (!isOpen) return null;
 
   const handleAddTask = () => {
+    if (tasks.length >= 5) return;
     const nextStep = tasks.length + 1;
     setTasks((prev) => [
       ...prev,
@@ -266,8 +283,10 @@ export const ApprovalCycleModal: React.FC<ApprovalCycleModalProps> = ({
       newErrors.objectType = "Please select the target object.";
     }
 
-    if (tasks.length === 0) {
-      newErrors.tasks = "Please add at least one task for this approval cycle.";
+    if (tasks.length < 3) {
+      newErrors.tasks = "Approval cycle requires a minimum of 3 tasks.";
+    } else if (tasks.length > 5) {
+      newErrors.tasks = "Approval cycle allows a maximum of 5 tasks.";
     } else {
       const emptyName = tasks.some((t) => !t.cr49f_task.trim());
       if (emptyName) {
@@ -513,7 +532,7 @@ export const ApprovalCycleModal: React.FC<ApprovalCycleModalProps> = ({
                     </span>
                   </div>
                   <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--muted-foreground-hex)" }}>
-                    Define sequential approval tasks with role, department, and SLA duration.
+                    Define sequential approval tasks (minimum 3, maximum 5) with role, department, and SLA duration.
                   </p>
                 </div>
 
@@ -522,10 +541,11 @@ export const ApprovalCycleModal: React.FC<ApprovalCycleModalProps> = ({
                   className="admin-btn admin-btn-secondary"
                   style={{ height: 30, padding: "0 10px", fontSize: 11 }}
                   onClick={handleAddTask}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || tasks.length >= 5}
+                  title={tasks.length >= 5 ? "Maximum 5 tasks allowed" : "Add Task"}
                 >
                   <Plus size={13} />
-                  <span>Add Task</span>
+                  <span>{tasks.length >= 5 ? "Max 5 Tasks" : "Add Task"}</span>
                 </button>
               </div>
 

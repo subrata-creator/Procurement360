@@ -1274,9 +1274,7 @@
 
   display: grid;
 
-  grid-template-columns:
-    minmax(0, 2.1fr)
-    minmax(280px, 1fr);
+  grid-template-columns: 1fr;
 
   gap: 14px;
 

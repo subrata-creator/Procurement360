@@ -1,101 +1,1000 @@
-import { useState } from "react";
-import { ArrowLeft, CalendarDays, Check, ClipboardList, Eye, FileText, Flag, List, MapPin, Paperclip, Send, ShieldCheck, Tag, UserRound, Users } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  Check,
+  ClipboardList,
+  Clock,
+  Coins,
+  ExternalLink,
+  FileText,
+  List,
+  Loader2,
+  Send,
+  ShieldCheck,
+  Tag,
+  ThumbsDown,
+  ThumbsUp,
+  UserRound,
+  XCircle,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { getTaskById } from "../data/tasks";
 import type { Task } from "../types/dashboard";
+import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
+import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
+import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
+import {
+  Cr49f_approvaltasksescr49f_department,
+  Cr49f_approvaltasksescr49f_role,
+  Cr49f_approvaltasksescr49f_slaunit,
+} from "../generated/models/Cr49f_approvaltasksesModel";
+import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
+import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
+import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
+import {
+  cleanGuid,
+  getTaskApprovalStatusLabel,
+  approveTask,
+  rejectTask,
+  getApprovalTasksForRecord,
+} from "../Services/ApprovalWorkflowService";
 import "../Styles/TaskDetail.css";
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
+function toUsDate(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+}
+
+interface TaskComment {
+  id: string;
+  text: string;
+  author: string;
+  timestamp: string;
+}
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const task = id ? getTaskById(Number(id)) : undefined;
 
-  if (!task) {
+  const [loading, setLoading] = useState(true);
+  const [dataverseTask, setDataverseTask] = useState<Cr49f_approvaltaskses | null>(null);
+  const [parentPR, setParentPR] = useState<Cr49f_purchaserequests | null>(null);
+  const [parentRFQ, setParentRFQ] = useState<Cr49f_requestforqoutations | null>(null);
+  const [lineItems, setLineItems] = useState<Cr49f_purchaserequestlines[]>([]);
+  const [siblingTasks, setSiblingTasks] = useState<Cr49f_approvaltaskses[]>([]);
+
+  const loadDataverseTaskData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const cleanTargetId = cleanGuid(id);
+      const res = await Cr49f_approvaltasksesService.getAll();
+      const allTasks = res.data ?? [];
+
+      const matched = allTasks.find((t) => {
+        const raw = t as unknown as Record<string, unknown>;
+        return (
+          cleanGuid(t.cr49f_approvaltasksid) === cleanTargetId ||
+          t.cr49f_id === id ||
+          cleanGuid(raw.cr49f_approvaltasksid as string) === cleanTargetId
+        );
+      });
+
+      if (matched) {
+        setDataverseTask(matched);
+
+        const rawMatched = matched as unknown as Record<string, unknown>;
+        const prId =
+          cleanGuid(matched._cr49f_pr_value) ||
+          cleanGuid(rawMatched._cr49f_PR_value as string) ||
+          cleanGuid(rawMatched.cr49f_pr as string);
+
+        const rfqId =
+          cleanGuid(matched._cr49f_rfq_value) ||
+          cleanGuid(rawMatched._cr49f_RFQ_value as string) ||
+          cleanGuid(rawMatched.cr49f_rfq as string);
+
+        if (prId || matched.cr49f_object === 1) {
+          const [prsRes, linesRes, siblings] = await Promise.all([
+            Cr49f_purchaserequestsService.getAll(),
+            Cr49f_purchaserequestlinesService.getAll(),
+            getApprovalTasksForRecord(1, prId || ""),
+          ]);
+
+          const foundPR = (prsRes.data ?? []).find(
+            (p) => cleanGuid(p.cr49f_purchaserequestid) === prId
+          );
+          setParentPR(foundPR || null);
+
+          const matchedLines = (linesRes.data ?? []).filter((l) => {
+            const rawL = l as unknown as Record<string, unknown>;
+            const lPR =
+              cleanGuid(l._cr49f_purchaserequest_value) ||
+              cleanGuid(rawL._cr49f_PurchaseRequest_value as string);
+            return lPR === prId;
+          });
+          setLineItems(matchedLines);
+          setSiblingTasks(siblings);
+        } else if (rfqId || matched.cr49f_object === 2) {
+          const [rfqsRes, siblings] = await Promise.all([
+            Cr49f_requestforqoutationsService.getAll(),
+            getApprovalTasksForRecord(2, rfqId || ""),
+          ]);
+
+          const foundRFQ = (rfqsRes.data ?? []).find(
+            (r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId
+          );
+          setParentRFQ(foundRFQ || null);
+          setSiblingTasks(siblings);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load Dataverse approval task:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void loadDataverseTaskData();
+
+    const handleUpdate = () => void loadDataverseTaskData();
+    window.addEventListener("approvalTasksUpdated", handleUpdate);
+    return () => {
+      window.removeEventListener("approvalTasksUpdated", handleUpdate);
+    };
+  }, [loadDataverseTaskData]);
+
+  if (loading) {
     return (
-      <section className="task-detail-page">
-        <button type="button" className="task-detail-back" onClick={() => navigate("/")}>
-          <ArrowLeft size={16} /> Dashboard
-        </button>
-        <div className="task-detail-empty">Task not found.</div>
+      <section className="task-page-container" style={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+        <div style={{ textAlign: "center", color: "var(--muted-foreground-hex, #64748b)" }}>
+          <Loader2 size={36} className="animate-spin" style={{ margin: "0 auto 12px", display: "block", color: "var(--primary-hex, #2563eb)" }} />
+          <p style={{ fontSize: 14, fontWeight: 500 }}>Loading approval task details...</p>
+        </div>
       </section>
     );
   }
 
-  const relatedReference = task.taskName.match(/(?:INV|PR|RFQ|PO)-\d{4}-\d{3}/)?.[0] ?? "—";
-
-  if (task.taskType === "Request for Quotation") {
-    return <RfqApprovalTask task={task} onBack={() => navigate(-1)} />;
+  // 1. Dataverse Task Found
+  if (dataverseTask) {
+    return (
+      <ModernDataverseTaskDetail
+        task={dataverseTask}
+        parentPR={parentPR}
+        parentRFQ={parentRFQ}
+        lineItems={lineItems}
+        siblingTasks={siblingTasks}
+        onRefresh={loadDataverseTaskData}
+        onBack={() => navigate(-1)}
+      />
+    );
   }
 
-  if (task.taskType === "Invoice" || task.taskType === "Purchase Request" || task.taskType === "Purchase Order") {
-    return <OtherApprovalTask task={task} onBack={() => navigate(-1)} />;
+  // 2. Legacy / Sample Task Fallback
+  const numericId = Number(id?.replace("sample-", ""));
+  const sampleTask = !Number.isNaN(numericId) ? getTaskById(numericId) : undefined;
+
+  if (sampleTask) {
+    if (sampleTask.taskType === "Request for Quotation") {
+      return <RfqApprovalTask task={sampleTask} onBack={() => navigate(-1)} />;
+    }
+    return <OtherApprovalTask task={sampleTask} onBack={() => navigate(-1)} />;
   }
 
+  // 3. Not Found
   return (
-    <section className="task-detail-page">
-      <button type="button" className="task-detail-back" onClick={() => navigate(-1)}>
-        <ArrowLeft size={16} /> Back to Task Inbox
+    <section className="task-page-container">
+      <button type="button" className="task-back-btn" onClick={() => navigate("/")}>
+        <ArrowLeft size={16} /> Dashboard
       </button>
-
-      <header className="task-detail-heading">
-        <div>
-          <span className="task-detail-eyebrow">{task.taskType}</span>
-          <h1>{task.taskName}</h1>
-          <p>Review the assigned action and its related procurement record.</p>
-        </div>
-        <span className="task-detail-status">Pending action</span>
-      </header>
-
-      <article className="task-detail-card">
-        <div className="task-detail-card-heading">
-          <ClipboardList size={18} />
-          <h2>Task details</h2>
-        </div>
-
-        <div className="task-detail-fields">
-          <div className="task-detail-field">
-            <UserRound size={16} />
-            <div><span>Assigned to</span><strong>{task.assignedTo}</strong></div>
-          </div>
-          <div className="task-detail-field">
-            <CalendarDays size={16} />
-            <div><span>Assigned on</span><strong>{task.assignedOn}</strong></div>
-          </div>
-          <div className="task-detail-field">
-            <ClipboardList size={16} />
-            <div><span>Related reference</span><strong>{relatedReference}</strong></div>
-          </div>
-          <div className="task-detail-field">
-            <Flag size={16} />
-            <div><span>Priority</span><strong>{task.priority ?? "Normal"}</strong></div>
-          </div>
-        </div>
-
-        <div className="task-detail-description">
-          <h3>Requested action</h3>
-          <p>{task.description ?? "Review the assigned record and complete the required workflow action."}</p>
-        </div>
-      </article>
+      <div style={{ margin: "60px auto", textAlign: "center", maxWidth: 440 }}>
+        <AlertCircle size={40} style={{ color: "#ef4444", margin: "0 auto 14px", display: "block" }} />
+        <h2 style={{ fontSize: 18, color: "var(--foreground-hex, #0f172a)", marginBottom: 8, fontWeight: 700 }}>Task Not Found</h2>
+        <p style={{ fontSize: 13, color: "var(--muted-foreground-hex, #64748b)", marginBottom: 20, lineHeight: 1.5 }}>
+          Could not find an approval task matching &quot;{id}&quot; in the approval tasks table.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          style={{
+            padding: "9px 20px",
+            background: "var(--primary-hex, #2563eb)",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Return to Dashboard
+        </button>
+      </div>
     </section>
   );
 }
 
+/**
+ * Modern, High-End Enterprise Task Review View
+ * Pure task focus without PR Journey card.
+ */
+function ModernDataverseTaskDetail({
+  task,
+  parentPR,
+  parentRFQ,
+  lineItems,
+  siblingTasks,
+  onRefresh,
+  onBack,
+}: {
+  task: Cr49f_approvaltaskses;
+  parentPR: Cr49f_purchaserequests | null;
+  parentRFQ: Cr49f_requestforqoutations | null;
+  lineItems: Cr49f_purchaserequestlines[];
+  siblingTasks: Cr49f_approvaltaskses[];
+  onRefresh: () => Promise<void>;
+  onBack: () => void;
+}) {
+  const navigate = useNavigate();
+  const cleanTaskId = cleanGuid(task.cr49f_approvaltasksid);
+  const approvalStatus = getTaskApprovalStatusLabel(task);
+  const isApproved = approvalStatus === "Approved";
+  const isRejected = approvalStatus === "Rejected";
+  const isPending = approvalStatus === "Pending";
+  const isActive = task.statecode === 0 && isPending;
+
+  // Comments state persisted in localStorage
+  const commentsKey = `task_comments_${cleanTaskId}`;
+  const [comments, setComments] = useState<TaskComment[]>(() => {
+    try {
+      const stored = window.localStorage.getItem(commentsKey);
+      if (stored) return JSON.parse(stored) as TaskComment[];
+    } catch {
+      // Fallback
+    }
+    return [];
+  });
+  const [commentDraft, setCommentDraft] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const addComment = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const text = commentDraft.trim();
+    if (!text) return;
+
+    const newComment: TaskComment = {
+      id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      text,
+      author: "Procurement Approver",
+      timestamp: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+
+    const updated = [...comments, newComment];
+    setComments(updated);
+    try {
+      window.localStorage.setItem(commentsKey, JSON.stringify(updated));
+    } catch {
+      // Keep in local state
+    }
+    setCommentDraft("");
+    setNotice("Comment added successfully.");
+  };
+
+  const handleApprove = async () => {
+    if (actionLoading) return;
+    setActionLoading(true);
+    setNotice(null);
+    try {
+      const result = await approveTask(cleanTaskId);
+      setNotice(
+        result.parentCompleted
+          ? "Final approval complete! All sequential cycle tasks are approved and the record is Approved."
+          : `Task approved successfully! Sequence #${result.nextActivatedTask?.cr49f_sequence ?? 2} has been activated.`
+      );
+      await onRefresh();
+    } catch (err: unknown) {
+      console.error("Failed to approve task:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setNotice(`Failed to approve task: ${msg}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (actionLoading) return;
+    setActionLoading(true);
+    setNotice(null);
+    try {
+      await rejectTask(cleanTaskId);
+      setNotice("Task has been rejected. Parent procurement request has been marked as Rejected.");
+      await onRefresh();
+    } catch (err: unknown) {
+      console.error("Failed to reject task:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setNotice(`Failed to reject task: ${msg}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const isPr = task.cr49f_object === 1 || !!parentPR;
+  const isRfq = task.cr49f_object === 2 || !!parentRFQ;
+
+  const reference = isPr
+    ? parentPR?.cr49f_prnumber || "PR-2026"
+    : isRfq
+    ? parentRFQ?.cr49f_rfqnumber || "RFQ-2026"
+    : `TASK-${task.cr49f_sequence || 1}`;
+
+  const recordTitle = isPr
+    ? parentPR?.cr49f_prtitle || "Purchase Request"
+    : isRfq
+    ? parentRFQ?.cr49f_rfqtitle || "Request for Quotation"
+    : task.cr49f_task || "Approval Task";
+
+  const rawRfq = parentRFQ as unknown as Record<string, unknown> | null;
+  const totalAmount = isPr && parentPR?.cr49f_totalamount
+    ? currencyFormatter.format(Number(parentPR.cr49f_totalamount))
+    : rawRfq?.cr49f_totalamount || rawRfq?.cr49f_estimatedbudget
+    ? currencyFormatter.format(Number(rawRfq.cr49f_totalamount || rawRfq.cr49f_estimatedbudget))
+    : "—";
+
+  const requesterName = isPr
+    ? parentPR?.createdbyname || "Sakshi Paliwal"
+    : isRfq
+    ? parentRFQ?.createdbyname || "Neha Sharma"
+    : "Business User";
+
+  const deptLabel = task.cr49f_department
+    ? (Cr49f_approvaltasksescr49f_department[task.cr49f_department] || "IT")
+    : "Information Technology";
+
+  const roleLabel = task.cr49f_role
+    ? (Cr49f_approvaltasksescr49f_role[task.cr49f_role] || "Procurement Approver")
+    : "Procurement Approver";
+
+  const slaUnitLabel = task.cr49f_slaunit
+    ? (Cr49f_approvaltasksescr49f_slaunit[task.cr49f_slaunit] || "Hours")
+    : "Hours";
+
+  const slaLabel = `${task.cr49f_slanumber ?? 24} ${slaUnitLabel}`;
+
+  const priorityLabel = isPr
+    ? parentPR?.cr49f_priority === 2
+      ? "High"
+      : parentPR?.cr49f_priority === 0
+      ? "Low"
+      : "Medium"
+    : "Medium";
+
+  // Stepper steps from siblingTasks
+  const displaySteps = siblingTasks.length > 0 ? siblingTasks : [task];
+
+  // Calculate items sum
+  const itemsTotalSum = lineItems.reduce((sum, item) => {
+    const qty = Number(item.cr49f_quantity) || 1;
+    const price = Number(item.cr49f_unitprice) || 0;
+    return sum + qty * price;
+  }, 0);
+
+  return (
+    <section className="task-page-container">
+      {/* 1. Header Navigation & Title Section */}
+      <header className="task-page-header">
+        <div className="task-nav-row">
+          <button type="button" className="task-back-btn" onClick={onBack}>
+            <ArrowLeft size={14} /> Back to Tasks
+          </button>
+          <div className="task-breadcrumb-nav">
+            <span>Work Queue</span>
+            <span className="separator">/</span>
+            {parentPR ? (
+              <Link to={`/purchase-requests/${parentPR.cr49f_prnumber || parentPR.cr49f_purchaserequestid}`}>
+                {parentPR.cr49f_prnumber}
+              </Link>
+            ) : (
+              <span>{reference}</span>
+            )}
+            <span className="separator">/</span>
+            <span>Task #{task.cr49f_sequence ?? 1}</span>
+          </div>
+        </div>
+
+        <div className="task-header-main">
+          <div className="task-title-group">
+            <div className="task-badge-row">
+              <span className="task-eyebrow-pill">
+                <ShieldCheck size={11} />
+                {isPr ? "Purchase Request Approval" : isRfq ? "RFQ Approval" : "Approval Task"}
+              </span>
+              <span className="task-seq-pill">
+                Step {task.cr49f_sequence ?? 1} of {displaySteps.length}
+              </span>
+              <span className={`task-status-pill ${isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"}`}>
+                <span className="dot" />
+                {isApproved
+                  ? "Approved"
+                  : isRejected
+                  ? "Rejected"
+                  : isActive
+                  ? "Action Required"
+                  : "Inactive (Waiting in Sequence)"}
+              </span>
+            </div>
+
+            <h1>{task.cr49f_task || "Approval Task"}</h1>
+
+            <div className="task-subtitle-row">
+              <span>Related to <strong>{reference}</strong>: {recordTitle}</span>
+              {parentPR && (
+                <Link to={`/purchase-requests/${parentPR.cr49f_prnumber || parentPR.cr49f_purchaserequestid}`}>
+                  Open Full PR Summary <ExternalLink size={12} />
+                </Link>
+              )}
+            </div>
+          </div>
+
+          <div className="task-header-right-actions">
+            <div className="task-sla-badge-box">
+              <Clock size={16} className="task-sla-icon" />
+              <div>
+                <span className="task-sla-label">Turnaround SLA</span>
+                <strong className="task-sla-value">{slaLabel}</strong>
+              </div>
+            </div>
+
+            {isActive && (
+              <div className="task-header-action-group">
+                <button
+                  type="button"
+                  className="task-btn-reject-header"
+                  onClick={() => void handleReject()}
+                  disabled={actionLoading}
+                >
+                  <ThumbsDown size={14} /> Reject
+                </button>
+                <button
+                  type="button"
+                  className="task-btn-approve-header"
+                  onClick={() => void handleApprove()}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <ThumbsUp size={14} />}
+                  Approve Task
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Feedback Notice */}
+      {notice && (
+        <div
+          style={{
+            margin: "0 0 20px",
+            padding: "12px 16px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            background: notice.toLowerCase().includes("fail") || notice.toLowerCase().includes("error")
+              ? "#fee2e2"
+              : "#f0fdf4",
+            color: notice.toLowerCase().includes("fail") || notice.toLowerCase().includes("error")
+              ? "#991b1b"
+              : "#166534",
+            border: notice.toLowerCase().includes("fail") || notice.toLowerCase().includes("error")
+              ? "1px solid #fecaca"
+              : "1px solid #bbf7d0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontWeight: 700 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* 3. Sequential Approval Cycle Stepper Card */}
+      <section className="task-workflow-card">
+        <div className="task-card-header">
+          <div className="task-card-header-left">
+            <div className="task-card-header-icon green">
+              <ShieldCheck size={16} />
+            </div>
+            <div className="task-card-header-titles">
+              <h2>Approval Workflow Sequence</h2>
+              <p>Step {task.cr49f_sequence ?? 1} of {displaySteps.length} configured in approval cycle</p>
+            </div>
+          </div>
+          <span
+            className={`task-step-badge ${isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"}`}
+            style={{ fontSize: 11, padding: "3px 10px" }}
+          >
+            {isApproved ? "Approved" : isRejected ? "Rejected" : isActive ? "Current Action Step" : "Waiting in Sequence"}
+          </span>
+        </div>
+
+        <div className="task-workflow-stepper">
+          {displaySteps.map((stepItem, index) => {
+            const stepStatus = getTaskApprovalStatusLabel(stepItem);
+            const stepApproved = stepStatus === "Approved";
+            const stepRejected = stepStatus === "Rejected";
+            const stepActive = stepItem.statecode === 0 && stepStatus === "Pending";
+            const isCurrentViewed = cleanGuid(stepItem.cr49f_approvaltasksid) === cleanTaskId;
+
+            const stepRole = stepItem.cr49f_role
+              ? (Cr49f_approvaltasksescr49f_role[stepItem.cr49f_role] || "Approver")
+              : "Approver";
+            const stepDept = stepItem.cr49f_department
+              ? (Cr49f_approvaltasksescr49f_department[stepItem.cr49f_department] || "IT")
+              : "IT";
+
+            return (
+              <button
+                type="button"
+                className={`task-step-item ${
+                  stepApproved
+                    ? "is-approved"
+                    : stepRejected
+                    ? "is-rejected"
+                    : stepActive
+                    ? "is-current-active"
+                    : ""
+                } ${isCurrentViewed ? "is-current" : ""}`}
+                key={stepItem.cr49f_approvaltasksid || index}
+                onClick={() => {
+                  if (stepItem.cr49f_approvaltasksid && !isCurrentViewed) {
+                    navigate(`/tasks/${stepItem.cr49f_approvaltasksid}`);
+                  }
+                }}
+                title={`Click to view Task #${stepItem.cr49f_sequence || index + 1}`}
+              >
+                <div className={`task-step-connector ${stepApproved ? "done" : ""}`} />
+                <div className="task-step-node">
+                  {stepApproved ? (
+                    <Check size={14} />
+                  ) : stepRejected ? (
+                    <XCircle size={14} />
+                  ) : (
+                    stepItem.cr49f_sequence || index + 1
+                  )}
+                </div>
+
+                <div className="task-step-details">
+                  <span className="task-step-title">{stepItem.cr49f_task || `Task #${index + 1}`}</span>
+                  <span className="task-step-meta">{stepRole} · {stepDept}</span>
+                  <span
+                    className={`task-step-badge ${
+                      stepApproved
+                        ? "approved"
+                        : stepRejected
+                        ? "rejected"
+                        : stepActive
+                        ? "active"
+                        : "pending"
+                    }`}
+                  >
+                    {stepApproved
+                      ? "Approved"
+                      : stepRejected
+                      ? "Rejected"
+                      : stepActive
+                      ? "Action Needed"
+                      : "Pending"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 4. Two-Column Dashboard Layout */}
+      <div className="task-grid-layout">
+        {/* Left Column (Primary Request Details, Items, and Comments) */}
+        <div className="task-main-col">
+          {/* Request Information Metrics Card */}
+          <section className="task-card">
+            <div className="task-card-header">
+              <div className="task-card-header-left">
+                <div className="task-card-header-icon">
+                  <FileText size={16} />
+                </div>
+                <div className="task-card-header-titles">
+                  <h2>Request Overview</h2>
+                  <p>Procurement details and recorded amount</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="task-metrics-grid">
+              <div className="task-metric-tile highlight">
+                <div className="task-metric-icon violet">
+                  <Coins size={17} />
+                </div>
+                <div className="task-metric-info">
+                  <span className="task-metric-label">Total Amount</span>
+                  <strong className="task-metric-value large">{totalAmount}</strong>
+                </div>
+              </div>
+
+              <div className="task-metric-tile">
+                <div className="task-metric-icon blue">
+                  <UserRound size={17} />
+                </div>
+                <div className="task-metric-info">
+                  <span className="task-metric-label">Requester</span>
+                  <strong className="task-metric-value">{requesterName}</strong>
+                </div>
+              </div>
+
+              <div className="task-metric-tile">
+                <div className="task-metric-icon purple">
+                  <List size={17} />
+                </div>
+                <div className="task-metric-info">
+                  <span className="task-metric-label">PR Reference</span>
+                  <strong className="task-metric-value">{reference}</strong>
+                </div>
+              </div>
+
+              <div className="task-metric-tile">
+                <div className="task-metric-icon green">
+                  <CalendarDays size={17} />
+                </div>
+                <div className="task-metric-info">
+                  <span className="task-metric-label">Required Delivery</span>
+                  <strong className="task-metric-value">
+                    {toUsDate(parentPR?.cr49f_requireddeliverydate)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {parentPR?.cr49f_businessjustification && (
+              <div className="task-justification-box">
+                <div className="task-justification-title">
+                  <Tag size={12} />
+                  Business Need &amp; Justification
+                </div>
+                <p>{parentPR.cr49f_businessjustification}</p>
+              </div>
+            )}
+          </section>
+
+          {/* Line Items Card */}
+          <section className="task-card">
+            <div className="task-card-header">
+              <div className="task-card-header-left">
+                <div className="task-card-header-icon">
+                  <List size={16} />
+                </div>
+                <div className="task-card-header-titles">
+                  <h2>Requested Line Items</h2>
+                  <p>Itemized equipment and service specifications</p>
+                </div>
+              </div>
+              <span className="task-seq-pill">
+                {lineItems.length > 0 ? `${lineItems.length} line items` : "1 item recorded"}
+              </span>
+            </div>
+
+            <div className="task-table-scroll">
+              <table className="task-modern-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 44 }}>#</th>
+                    <th>Item Name</th>
+                    <th>Specification / Description</th>
+                    <th style={{ width: 140 }}>Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItems.length > 0 ? (
+                    lineItems.map((item, index) => {
+                      const qty = Number(item.cr49f_quantity) || 1;
+                      const price = Number(item.cr49f_unitprice) || 0;
+                      const lineTotal = qty * price;
+                      return (
+                        <tr key={item.cr49f_purchaserequestlineid || index}>
+                          <td><strong>{index + 1}</strong></td>
+                          <td>
+                            <strong style={{ color: "var(--foreground-hex, #0f172a)" }}>
+                              {item.cr49f_itemname || `Item #${index + 1}`}
+                            </strong>
+                          </td>
+                          <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
+                            {item.cr49f_itemdescription || "—"}
+                          </td>
+                          <td>
+                            <strong style={{ color: "var(--primary-hex, #2563eb)" }}>
+                              {lineTotal > 0 ? currencyFormatter.format(lineTotal) : totalAmount}
+                            </strong>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td>1</td>
+                      <td><strong>{recordTitle}</strong></td>
+                      <td>Procurement equipment / services</td>
+                      <td><strong style={{ color: "var(--primary-hex, #2563eb)" }}>{totalAmount}</strong></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="task-table-footer">
+              <span>Showing all requested items</span>
+              <span>
+                Grand Total: <strong>{itemsTotalSum > 0 ? currencyFormatter.format(itemsTotalSum) : totalAmount}</strong>
+              </span>
+            </div>
+          </section>
+
+          {/* Comments & Remarks Card */}
+          <section className="task-card">
+            <div className="task-card-header">
+              <div className="task-card-header-left">
+                <div className="task-card-header-icon">
+                  <ClipboardList size={16} />
+                </div>
+                <div className="task-card-header-titles">
+                  <h2>Task Comments &amp; Notes</h2>
+                  <p>Audit trail of approver remarks and internal communications</p>
+                </div>
+              </div>
+              <span className="task-seq-pill">
+                {comments.length} {comments.length === 1 ? "comment" : "comments"}
+              </span>
+            </div>
+
+            <div className="task-comments-container">
+              {comments.length > 0 ? (
+                <div className="task-comments-feed">
+                  {comments.map((comment) => (
+                    <div className="task-comment-item" key={comment.id}>
+                      <div className="task-comment-avatar">
+                        {comment.author.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="task-comment-bubble">
+                        <div className="task-comment-bubble-header">
+                          <span className="task-comment-author">{comment.author}</span>
+                          <span className="task-comment-time">{comment.timestamp}</span>
+                        </div>
+                        <p className="task-comment-text">{comment.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="task-empty-comments">
+                  No comments yet. Leave an approval remark or note below.
+                </div>
+              )}
+
+              <form className="task-comment-composer" onSubmit={addComment}>
+                <input
+                  className="task-comment-input"
+                  aria-label="Add remark"
+                  placeholder="Type an approver note, comment, or remark..."
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                />
+                <button type="submit" className="task-comment-submit-btn">
+                  <Send size={14} /> Send
+                </button>
+              </form>
+            </div>
+          </section>
+        </div>
+
+        {/* Right Column (Task Assignment & Record Context) */}
+        <div className="task-side-col">
+          {/* Task Assignment Card */}
+          <section className="task-card">
+            <div className="task-card-header">
+              <div className="task-card-header-left">
+                <div className="task-card-header-icon green">
+                  <ShieldCheck size={16} />
+                </div>
+                <div className="task-card-header-titles">
+                  <h2>Task Assignment</h2>
+                  <p>Workflow routing &amp; SLA</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="task-profile-body">
+              <div className="task-profile-hero">
+                <div className="task-profile-avatar assignee">
+                  {roleLabel.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="task-profile-name">{roleLabel}</h3>
+                  <p className="task-profile-role">{deptLabel} Department</p>
+                </div>
+              </div>
+
+              <div className="task-info-list">
+                <div className="task-info-row">
+                  <span className="label">Sequence Position</span>
+                  <strong className="value">Step #{task.cr49f_sequence ?? 1} in Workflow</strong>
+                </div>
+                <div className="task-info-row">
+                  <span className="label">Target SLA</span>
+                  <strong className="value">{slaLabel}</strong>
+                </div>
+                <div className="task-info-row">
+                  <span className="label">Workflow State</span>
+                  <strong className="value">
+                    {task.statecode === 0 ? "Active (In Progress)" : "Inactive (Waiting in sequence)"}
+                  </strong>
+                </div>
+                <div className="task-info-row">
+                  <span className="label">Decision Status</span>
+                  <strong
+                    className="value"
+                    style={{ color: isApproved ? "#16a34a" : isRejected ? "#dc2626" : "#2563eb" }}
+                  >
+                    {approvalStatus}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Related PR Record Context */}
+          {parentPR && (
+            <section className="task-card">
+              <div className="task-card-header">
+                <div className="task-card-header-left">
+                  <div className="task-card-header-icon blue">
+                    <FileText size={16} />
+                  </div>
+                  <div className="task-card-header-titles">
+                    <h2>Record Context</h2>
+                    <p>Purchase request details</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="task-profile-body">
+                <div className="task-info-list">
+                  <div className="task-info-row">
+                    <span className="label">PR Number</span>
+                    <strong className="value">{reference}</strong>
+                  </div>
+                  <div className="task-info-row">
+                    <span className="label">Department</span>
+                    <strong className="value">{deptLabel}</strong>
+                  </div>
+                  <div className="task-info-row">
+                    <span className="label">Delivery Location</span>
+                    <strong className="value">{parentPR.cr49f_deliverylocation || "Main Office"}</strong>
+                  </div>
+                  <div className="task-info-row">
+                    <span className="label">Priority</span>
+                    <strong className="value">{priorityLabel}</strong>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <Link
+                    to={`/purchase-requests/${parentPR.cr49f_prnumber || parentPR.cr49f_purchaserequestid}`}
+                    className="task-link-button"
+                  >
+                    <span>View Full PR Summary</span>
+                    <ExternalLink size={13} />
+                  </Link>
+                </div>
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+
+      {/* 5. Sticky Action Footer Bar */}
+      <footer className="task-sticky-bar">
+        <div className="task-sticky-left">
+          <button type="button" className="task-btn-close" onClick={onBack}>
+            ← Back
+          </button>
+          <span style={{ fontSize: 13, color: "var(--foreground-hex, #0f172a)", fontWeight: 600 }}>
+            {task.cr49f_task} ({reference})
+          </span>
+        </div>
+
+        <div className="task-sticky-actions">
+          {isApproved ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="task-status-pill approved">
+                <CheckCircle2 size={13} /> Task Approved
+              </span>
+            </div>
+          ) : isRejected ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="task-status-pill rejected">
+                <XCircle size={13} /> Task Rejected
+              </span>
+            </div>
+          ) : !isActive ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="task-status-pill pending">
+                ⏳ Inactive · Waiting for prior sequential task approval
+              </span>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="task-btn-reject"
+                onClick={() => void handleReject()}
+                disabled={actionLoading}
+              >
+                <ThumbsDown size={14} /> Reject
+              </button>
+
+              <button
+                type="button"
+                className="task-btn-approve"
+                onClick={() => void handleApprove()}
+                disabled={actionLoading}
+              >
+                {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <ThumbsUp size={14} />}
+                Approve Task
+              </button>
+            </>
+          )}
+        </div>
+      </footer>
+    </section>
+  );
+}
+
+// -------------------------------------------------------------
+// Legacy Mock Task Components for Fallback
+// -------------------------------------------------------------
+
 function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
   const [status, setStatus] = useState("In Review");
   const [assignee, setAssignee] = useState(task.id === 5 ? "Rushi Pardeshi" : "Aman Jain");
-  const [commentDraft, setCommentDraft] = useState("");
-  const [comments, setComments] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const reference = task.taskName.match(/RFQ-\d{4}-\d{3}/)?.[0] ?? "RFQ-2025-019";
   const isTestingRfq = reference.endsWith("019");
   const rfqTitle = isTestingRfq ? "testing" : "Office supplies quotation";
-
-  const addComment = () => {
-    const comment = commentDraft.trim();
-    if (!comment) return;
-    setComments((existing) => [...existing, comment]);
-    setCommentDraft("");
-  };
 
   const updateStatus = (nextStatus: string) => {
     setStatus(nextStatus);
@@ -108,305 +1007,60 @@ function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
   };
 
   return (
-    <section className="task-detail-page rfq-review-page">
-      <header className="rfq-review-heading">
-        <button type="button" className="task-detail-back rfq-review-back" onClick={onBack} aria-label="Back to Task Inbox">
-          <ArrowLeft size={17} />
+    <section className="task-page-container">
+      <header className="task-page-header">
+        <button type="button" className="task-back-btn" onClick={onBack}>
+          <ArrowLeft size={14} /> Back to Tasks
         </button>
-        <div className="rfq-review-title-group">
+        <div style={{ marginTop: 12 }}>
           <h1>REQUEST FOR QUOTATION APPROVAL FOR {reference} | {rfqTitle.toUpperCase()}</h1>
-          <span className={`rfq-review-status ${status.toLowerCase().replaceAll(" ", "-")}`}>{status}</span>
+          <span className={`task-status-pill ${status === "Approved" ? "approved" : "active"}`}>{status}</span>
         </div>
       </header>
 
-      <section className="rfq-approval-track" aria-label="Approval progress">
-        {[
-          { label: "Form Review", assigned: "Neha Sharma", status: "Completed" },
-          { label: "Manager Approval", assigned: assignee, status: status === "In Review" ? "Current" : "Pending" },
-          { label: "Final Approval", assigned: "Akash Singh", status: "Pending" },
-        ].map((step, index) => (
-          <div className={`rfq-approval-step ${step.status.toLowerCase()}`} key={step.label}>
-            <div className="rfq-approval-node">{step.status === "Completed" ? <Check size={15} /> : index + 1}</div>
-            <strong>{step.label}</strong>
-            <span>Assignee: {step.assigned} <i /> Department: Information Technology</span>
-          </div>
-        ))}
-      </section>
-
-      <div className="rfq-review-columns">
-        <div className="rfq-review-main-column">
-          <section className="rfq-review-panel requester-panel">
-            <PanelHeading icon={<Users size={15} />} title="Requester Details" />
-            <div className="requester-summary-grid">
-              <InfoTile icon={<UserRound size={17} />} label="Requester Name" value="Neha Sharma" tone="violet" />
-              <InfoTile icon={<ClipboardList size={17} />} label="Requester Department" value="Information Technology" tone="blue" />
-              <InfoTile icon={<UserRound size={17} />} label="Requester Role" value="Business User" tone="green" />
-            </div>
-          </section>
-
-          <section className="rfq-review-panel basic-details-panel">
-            <PanelHeading icon={<List size={15} />} title="Basic Details" />
-            <div className="rfq-basic-grid">
-              <InfoTile icon={<List size={16} />} label="RFQ Number" value={reference} tone="blue" />
-              <InfoTile icon={<Tag size={16} />} label="RFQ Title" value={rfqTitle} tone="blue" />
-              <InfoTile icon={<CalendarDays size={16} />} label="Response Due Date" value="10/25/2025" tone="blue" />
-              <InfoTile icon={<CalendarDays size={16} />} label="Start Date" value="10/23/2025" tone="blue" />
-              <InfoTile icon={<CalendarDays size={16} />} label="Clarification Due Date" value="10/24/2025" tone="blue" />
-              <InfoTile icon={<CalendarDays size={16} />} label="Rewarded Date" value="10/26/2025" tone="blue" />
-              <InfoTile icon={<FileText size={16} />} label="Total Amount" value="INR 21,516.00" tone="violet" />
-              <InfoTile icon={<ShieldCheck size={16} />} label="Status" value={status} tone="red" />
-            </div>
-          </section>
+      <div className="task-card" style={{ padding: 20 }}>
+        <p style={{ margin: 0, color: "var(--muted-foreground-hex, #64748b)" }}>Sample RFQ Approval for demonstration.</p>
+        {notice && <p style={{ color: "var(--primary-hex, #2563eb)", marginTop: 8 }}>{notice}</p>}
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button type="button" className="task-btn-reject" onClick={() => updateStatus("Rejected")}>Reject</button>
+          <button type="button" className="task-btn-approve" onClick={() => updateStatus("Approved")}>Approve</button>
+          <button type="button" className="task-btn-close" onClick={reassign}>Reassign ({assignee})</button>
         </div>
-
-        <aside className="rfq-review-panel assignee-panel">
-          <PanelHeading icon={<UserRound size={15} />} title="Assignee Details" />
-          <div className="rfq-assignee-row">
-            <div className="rfq-person-avatar">{assignee.split(" ").map((part) => part[0]).join("").slice(0, 2)}</div>
-            <strong>{assignee}</strong>
-            <button type="button" onClick={reassign}>Reassign</button>
-          </div>
-          <div className="rfq-started-row">
-            <div className="rfq-info-icon"><CalendarDays size={17} /></div>
-            <div><strong>Started On</strong><span>{task.assignedOn}, 1:17 PM</span></div>
-          </div>
-        </aside>
       </div>
-
-      <DataPanel icon={<Users size={15} />} title="Invited Suppliers" className="supplier-panel">
-        <div className="rfq-table-scroll">
-          <table className="rfq-review-table">
-            <thead><tr><th>#</th><th></th><th>Name</th><th>Email</th><th>Phone Number</th><th>Ranking</th><th>Address</th></tr></thead>
-            <tbody>
-              <tr><td>1</td><td><Building2Icon /></td><td>Dell Inc.</td><td>contact@dell.com</td><td>+91 98765 43210</td><td>1</td><td>Bangalore, India</td></tr>
-              <tr><td>2</td><td><Building2Icon /></td><td>TechScan Devices</td><td>info@techscan.com</td><td>+91 98765 67890</td><td>2</td><td>Delhi, India</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <TablePagination label="Showing 1–2 of 2" />
-      </DataPanel>
-
-      <DataPanel icon={<List size={15} />} title="Quotation Line Items" className="quotation-panel">
-        <div className="rfq-table-scroll">
-          <table className="rfq-review-table quote-table">
-            <thead><tr><th>#</th><th></th><th>Item Code</th><th>Item Name</th><th>Quantity</th><th>Unit Price</th><th>Total Amount</th><th>Delivery Address</th></tr></thead>
-            <tbody>
-              <tr><td>1</td><td><span className="rfq-product-thumb">▧</span></td><td>PDT-2025-04</td><td>Document Trays</td><td>22</td><td>INR 543.00</td><td>INR 11,946.00</td><td><MapPin size={13} /> Door No. 12/1...</td></tr>
-              <tr><td>2</td><td><span className="rfq-product-thumb dark">▰</span></td><td>PDT-2025-05</td><td>Laser Printer</td><td>22</td><td>INR 435.00</td><td>INR 9,570.00</td><td><MapPin size={13} /> Opp. SBI Ban...</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <TablePagination label="Showing 1–2 of 2" />
-      </DataPanel>
-
-      <DataPanel icon={<Paperclip size={15} />} title="Attachments" className="attachment-panel">
-        <div className="rfq-table-scroll">
-          <table className="rfq-review-table">
-            <thead><tr><th>#</th><th>Documents</th><th>Description</th><th>Uploaded By</th><th>Uploaded On</th><th>Actions</th></tr></thead>
-            <tbody><tr><td>1</td><td><span className="rfq-file-icon">PNG</span><a href="/process.png" onClick={(event) => { event.preventDefault(); setNotice("Attachment preview is not available in this sample."); }}>process.png</a></td><td>—</td><td>Neha Sharma</td><td>10/6/2025</td><td><button type="button" className="rfq-icon-action" aria-label="Preview attachment" onClick={() => setNotice("Attachment preview is not available in this sample.")}><Eye size={14} /></button></td></tr></tbody>
-          </table>
-        </div>
-        <TablePagination label="Showing 1–1 of 1" />
-      </DataPanel>
-
-      <DataPanel icon={<ClipboardList size={15} />} title="Comments" className="comments-panel">
-        {comments.map((comment, index) => <p className="rfq-comment" key={`${comment}-${index}`}>{comment}</p>)}
-        {notice && <p className="rfq-task-notice" role="status">{notice}</p>}
-        <form className="rfq-comment-form" onSubmit={(event) => { event.preventDefault(); addComment(); }}>
-          <input aria-label="Leave a comment" placeholder="Leave a comment..." value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} />
-          <button type="submit" aria-label="Send comment"><Send size={16} /></button>
-        </form>
-      </DataPanel>
-
-      <footer className="rfq-decision-bar">
-        <button type="button" className="rfq-close-action" onClick={onBack}>Close</button>
-        <div className="rfq-decision-actions">
-          <button type="button" className="rfq-reject-action" onClick={() => updateStatus("Rejected")}>Reject</button>
-          <button type="button" className="rfq-changes-action" onClick={() => updateStatus("Changes Needed")}>Changes needed</button>
-          <button type="button" className="rfq-approve-action" onClick={() => updateStatus("Approved")}>Approve</button>
-        </div>
-      </footer>
     </section>
   );
 }
 
 function OtherApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
-  const isInvoice = task.taskType === "Invoice";
-  const isPurchaseOrder = task.taskType === "Purchase Order";
   const [status, setStatus] = useState("In Review");
-  const [assignee, setAssignee] = useState(task.assignedTo);
-  const [commentDraft, setCommentDraft] = useState("");
-  const [comments, setComments] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
-  const reference = task.taskName.match(/(?:INV|PR|PO)-\d{4}-\d{3}/)?.[0]
-    ?? (isInvoice ? `INV-2026-0${31 - task.id}` : isPurchaseOrder ? "PO-2026-032" : `PR-2026-0${90 - task.id}`);
-  const requestTitle = task.id === 3 ? "IT Equipment package"
-    : isPurchaseOrder ? "Logitech IT equipment"
-      : task.id === 7 ? "First Aid Kit"
-        : isInvoice ? "IT equipment invoice" : "Purchase request";
-  const requester = task.id === 3 ? "Raj Mehta"
-    : task.id === 4 ? "Ayesha Khan"
-      : task.id === 7 ? "Neha Sharma"
-        : task.id === 1 ? "Aman Jain" : "Rhea Nair";
-  const amount = task.id === 3 ? "USD 15,610.00"
-    : isPurchaseOrder ? "USD 17,171.00"
-      : task.id === 7 ? "USD 1,200.00"
-        : task.id === 1 ? "USD 3,480.00" : "USD 2,175.00";
-  const stageNames = isInvoice
-    ? ["Invoice Submitted", "Business Owner Review", "Finance Approval"]
-    : isPurchaseOrder
-      ? ["PO Created", "Manager Review", "Final Approval"]
-      : ["Request Submitted", "Manager Approval", "Procurement Review"];
-  const relatedRows = isPurchaseOrder
-    ? [
-      { name: "Logitech IT equipment", description: "Approved RFQ-2026-052 award", quantity: "1", unitPrice: amount, total: amount },
-      { name: "Delivery and handling", description: "Supplier delivery charge", quantity: "1", unitPrice: "USD 171.00", total: "USD 171.00" },
-    ]
-    : isInvoice
-    ? [
-      { name: "Equipment and supplies", description: "Invoice line items", quantity: "1", unitPrice: amount, total: amount },
-      { name: "Freight and handling", description: "Delivery charge", quantity: "1", unitPrice: "USD 45.00", total: "USD 45.00" },
-    ]
-    : [{ name: requestTitle, description: task.description ?? "Requested item", quantity: task.id === 7 ? "12" : "1", unitPrice: amount, total: amount }];
+  const reference = task.taskName.match(/(?:INV|PR|PO)-\d{4}-\d{3}/)?.[0] ?? "PR-2026";
 
   const updateStatus = (nextStatus: string) => {
     setStatus(nextStatus);
     setNotice(`${reference} marked ${nextStatus.toLowerCase()}.`);
   };
 
-  const addComment = () => {
-    const comment = commentDraft.trim();
-    if (!comment) return;
-    setComments((existing) => [...existing, comment]);
-    setCommentDraft("");
-  };
-
-  const reassign = () => {
-    setAssignee((current) => current === "Aman Jain" ? "Sakshi Paliwal" : "Aman Jain");
-    setNotice("Task reassigned.");
-  };
-
   return (
-    <section className="task-detail-page rfq-review-page">
-      <header className="rfq-review-heading">
-        <button type="button" className="task-detail-back rfq-review-back" onClick={onBack} aria-label="Back to Task Inbox"><ArrowLeft size={17} /></button>
-        <div className="rfq-review-title-group">
-          <h1>{isInvoice ? "INVOICE APPROVAL" : isPurchaseOrder ? "PURCHASE ORDER APPROVAL" : "PURCHASE REQUEST APPROVAL"} FOR {reference} | {requestTitle.toUpperCase()}</h1>
-          <span className={`rfq-review-status ${status.toLowerCase().replaceAll(" ", "-")}`}>{status}</span>
+    <section className="task-page-container">
+      <header className="task-page-header">
+        <button type="button" className="task-back-btn" onClick={onBack}>
+          <ArrowLeft size={14} /> Back to Tasks
+        </button>
+        <div style={{ marginTop: 12 }}>
+          <h1>{task.taskName}</h1>
+          <span className={`task-status-pill ${status === "Approved" ? "approved" : "active"}`}>{status}</span>
         </div>
       </header>
 
-      <section className="rfq-approval-track" aria-label="Approval progress">
-        {stageNames.map((label, index) => {
-          const stageStatus = index === 0 ? "Completed" : index === 1 && (status === "In Review" || status === "Changes Needed") ? "Current" : "Pending";
-          const assigned = index === 0 ? requester : index === 1 ? assignee : "Finance Manager";
-          return (
-            <div className={`rfq-approval-step ${stageStatus.toLowerCase()}`} key={label}>
-              <div className="rfq-approval-node">{stageStatus === "Completed" ? <Check size={15} /> : index + 1}</div>
-              <strong>{label}</strong>
-              <span>Assignee: {assigned}<i />Department: Information Technology</span>
-            </div>
-          );
-        })}
-      </section>
-
-      <div className="rfq-review-columns">
-        <div className="rfq-review-main-column">
-          <section className="rfq-review-panel requester-panel">
-            <PanelHeading icon={<Users size={15} />} title="Requester Details" />
-            <div className="requester-summary-grid">
-              <InfoTile icon={<UserRound size={17} />} label="Requester Name" value={requester} tone="violet" />
-              <InfoTile icon={<ClipboardList size={17} />} label="Department" value="Information Technology" tone="blue" />
-              <InfoTile icon={<UserRound size={17} />} label="Requester Role" value="Business User" tone="green" />
-            </div>
-          </section>
-
-          <section className="rfq-review-panel basic-details-panel">
-            <PanelHeading icon={<List size={15} />} title={isInvoice ? "Invoice Details" : isPurchaseOrder ? "Purchase Order Details" : "Purchase Request Details"} />
-            <div className="rfq-basic-grid">
-              <InfoTile icon={<List size={16} />} label={isInvoice ? "Invoice Number" : isPurchaseOrder ? "PO Number" : "PR Number"} value={reference} tone="blue" />
-              <InfoTile icon={<Tag size={16} />} label={isInvoice || isPurchaseOrder ? "Supplier" : "Request Title"} value={isInvoice ? "Dell Inc." : isPurchaseOrder ? "Logitech" : requestTitle} tone="blue" />
-              <InfoTile icon={<CalendarDays size={16} />} label={isInvoice ? "Invoice Date" : isPurchaseOrder ? "PO Date" : "Request Date"} value={task.assignedOn} tone="blue" />
-              <InfoTile icon={<CalendarDays size={16} />} label={isInvoice ? "Payment Due" : isPurchaseOrder ? "Expected Delivery" : "Required Date"} value={isInvoice ? "4/15/2026" : isPurchaseOrder ? "4/30/2026" : "4/30/2026"} tone="blue" />
-              <InfoTile icon={<ClipboardList size={16} />} label={isInvoice ? "Purchase Order" : isPurchaseOrder ? "Associated PR" : "Category"} value={isInvoice ? "PO-2026-032" : isPurchaseOrder ? "PR-2026-088" : task.id === 7 ? "Workplace Safety" : "IT Hardware"} tone="blue" />
-              <InfoTile icon={<Flag size={16} />} label="Priority" value={task.priority ?? "Normal"} tone="violet" />
-              <InfoTile icon={<FileText size={16} />} label="Total Amount" value={amount} tone="violet" />
-              <InfoTile icon={<ShieldCheck size={16} />} label="Status" value={status} tone="red" />
-            </div>
-          </section>
+      <div className="task-card" style={{ padding: 20 }}>
+        <p style={{ margin: 0, color: "var(--muted-foreground-hex, #64748b)" }}>{task.description || "Sample task review."}</p>
+        {notice && <p style={{ color: "var(--primary-hex, #2563eb)", marginTop: 8 }}>{notice}</p>}
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button type="button" className="task-btn-reject" onClick={() => updateStatus("Rejected")}>Reject</button>
+          <button type="button" className="task-btn-approve" onClick={() => updateStatus("Approved")}>Approve</button>
         </div>
-
-        <aside className="rfq-review-panel assignee-panel">
-          <PanelHeading icon={<UserRound size={15} />} title="Assignee Details" />
-          <div className="rfq-assignee-row">
-            <div className="rfq-person-avatar">{assignee.split(" ").map((part) => part[0]).join("").slice(0, 2)}</div>
-            <strong>{assignee}</strong>
-            <button type="button" onClick={reassign}>Reassign</button>
-          </div>
-          <div className="rfq-started-row">
-            <div className="rfq-info-icon"><CalendarDays size={17} /></div>
-            <div><strong>Assigned On</strong><span>{task.assignedOn}</span></div>
-          </div>
-        </aside>
       </div>
-
-      <DataPanel icon={<List size={15} />} title={isInvoice ? "Invoice Line Items" : isPurchaseOrder ? "Purchase Order Items" : "Requested Items"} className="quotation-panel">
-        <div className="rfq-table-scroll">
-          <table className="rfq-review-table quote-table">
-            <thead><tr><th>#</th><th>Item</th><th>Description</th><th>Quantity</th><th>Unit Price</th><th>Total Amount</th></tr></thead>
-            <tbody>{relatedRows.map((row, index) => <tr key={row.name}><td>{index + 1}</td><td>{row.name}</td><td>{row.description}</td><td>{row.quantity}</td><td>{row.unitPrice}</td><td>{row.total}</td></tr>)}</tbody>
-          </table>
-        </div>
-        <TablePagination label={`Showing 1–${relatedRows.length} of ${relatedRows.length}`} />
-      </DataPanel>
-
-      <DataPanel icon={<Paperclip size={15} />} title="Attachments" className="attachment-panel">
-        <div className="rfq-table-scroll">
-          <table className="rfq-review-table">
-            <thead><tr><th>#</th><th>Document</th><th>Description</th><th>Uploaded By</th><th>Uploaded On</th><th>Actions</th></tr></thead>
-            <tbody><tr><td>1</td><td><span className="rfq-file-icon">PDF</span><a href="#attachment" onClick={(event) => { event.preventDefault(); setNotice("Attachment preview is not available in this sample."); }}>{reference.toLowerCase()}_supporting-document.pdf</a></td><td>Supporting documentation</td><td>{requester}</td><td>{task.assignedOn}</td><td><button type="button" className="rfq-icon-action" aria-label="Preview attachment" onClick={() => setNotice("Attachment preview is not available in this sample.")}><Eye size={14} /></button></td></tr></tbody>
-          </table>
-        </div>
-        <TablePagination label="Showing 1–1 of 1" />
-      </DataPanel>
-
-      <DataPanel icon={<ClipboardList size={15} />} title="Comments" className="comments-panel">
-        {comments.map((comment, index) => <p className="rfq-comment" key={`${comment}-${index}`}>{comment}</p>)}
-        {notice && <p className="rfq-task-notice" role="status">{notice}</p>}
-        <form className="rfq-comment-form" onSubmit={(event) => { event.preventDefault(); addComment(); }}>
-          <input aria-label="Leave a comment" placeholder="Leave a comment..." value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} />
-          <button type="submit" aria-label="Send comment"><Send size={16} /></button>
-        </form>
-      </DataPanel>
-
-      <footer className="rfq-decision-bar">
-        <button type="button" className="rfq-close-action" onClick={onBack}>Close</button>
-        <div className="rfq-decision-actions">
-          <button type="button" className="rfq-reject-action" onClick={() => updateStatus("Rejected")}>Reject</button>
-          <button type="button" className="rfq-changes-action" onClick={() => updateStatus("Changes Needed")}>Changes needed</button>
-          <button type="button" className="rfq-approve-action" onClick={() => updateStatus("Approved")}>Approve</button>
-        </div>
-      </footer>
     </section>
   );
-}
-
-function PanelHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return <div className="rfq-review-panel-heading"><span>{icon}</span><h2>{title}</h2></div>;
-}
-
-function InfoTile({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone: string }) {
-  return <div className={`rfq-info-tile ${tone}`}><span className="rfq-info-tile-icon">{icon}</span><div><span>{label}</span><strong>{value}</strong></div></div>;
-}
-
-function DataPanel({ icon, title, className, children }: { icon: React.ReactNode; title: string; className: string; children: React.ReactNode }) {
-  return <section className={`rfq-review-panel rfq-data-panel ${className}`}><PanelHeading icon={icon} title={title} />{children}</section>;
-}
-
-function TablePagination({ label }: { label: string }) {
-  return <div className="rfq-table-pagination"><span>{label}</span><button type="button" disabled aria-label="Previous page">‹</button><button type="button" className="current" aria-current="page">1</button><button type="button" disabled aria-label="Next page">›</button></div>;
-}
-
-function Building2Icon() {
-  return <span className="rfq-building-icon">▦</span>;
 }

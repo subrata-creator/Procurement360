@@ -50,6 +50,9 @@ export interface PurchaseRequestRecord {
   approvalSteps?: ApprovalStep[];
   subTasks?: SubTask[];
   lineItems?: LineItem[];
+  totalTasks?: number;
+  completedTasks?: number;
+  progressPercentage?: number;
 }
 
 const seedPurchaseRequests: PurchaseRequestRecord[] = [
@@ -204,7 +207,7 @@ export function getInitials(name: string): string {
 }
 
 export function buildApprovalSteps(record: PurchaseRequestRecord): ApprovalStep[] {
-  if (record.approvalSteps) return record.approvalSteps;
+  if (record.approvalSteps && record.approvalSteps.length > 0) return record.approvalSteps;
 
   const hasRFQ = record.rfq !== "No RFQ available";
   const hasPO = record.po !== "No PO available";
@@ -212,47 +215,52 @@ export function buildApprovalSteps(record: PurchaseRequestRecord): ApprovalStep[
   if (record.status === "Rejected") {
     return STEP_LABELS.map((title, index) => {
       const step = index + 1;
-      if (step === 1 || step === 2) return { step, title, status: "Completed" };
-      if (step === 3) return { step, title: "Rejected", date: record.date, status: "Rejected" };
+      if (step === 1) return { step, title, status: "Completed" };
+      if (step === 2) return { step, title: "Rejected", date: record.date, status: "Rejected" };
       return { step, title, status: "Skipped" };
     });
   }
 
-  if (record.status === "In Review") {
+  if (record.status === "Approved") {
     return STEP_LABELS.map((title, index) => {
       const step = index + 1;
-      if (step === 1) return { step, title, date: record.date, by: record.createdBy, status: "Completed" };
-      if (step === 2) return { step, title, status: "Current" };
+      if (step <= 3) return { step, title, status: "Completed" };
+      if (step === 4) return { step, title, status: hasRFQ ? "Completed" : "Pending" };
+      if (step === 5) return { step, title, status: hasPO ? "Completed" : "Pending" };
       return { step, title, status: "Pending" };
     });
   }
 
+  // Default for "In Review", "Pending", or any pending PR:
+  // Step 1: Created (Completed), Step 2: Under Review (Current), remaining steps: Pending
   return STEP_LABELS.map((title, index) => {
     const step = index + 1;
-    if (step <= 3) return { step, title, status: "Completed" };
-    if (step === 4) return { step, title, status: hasRFQ ? "Completed" : "Pending" };
-    if (step === 5) return { step, title, status: hasPO ? "Completed" : "Pending" };
+    if (step === 1) return { step, title, date: record.date, by: record.createdBy, status: "Completed" };
+    if (step === 2) return { step, title, status: "Current" };
     return { step, title, status: "Pending" };
   });
 }
 
 export function buildDefaultSubTasks(record: PurchaseRequestRecord): SubTask[] {
-  if (record.subTasks) return record.subTasks;
+  if (record.subTasks && record.subTasks.length > 0) return record.subTasks;
 
   if (record.status === "Rejected") {
     return [
-      { id: 1, task: "Final Review", status: "Completed", assignedTo: record.createdBy, remarks: "Sent for review", completedOn: record.date },
-      { id: 2, task: "Final Approval", status: "Completed", assignedTo: "Procurement Head", remarks: "Request rejected", completedOn: record.date },
+      { id: 1, task: "Department Review", status: "Completed", assignedTo: record.createdBy, remarks: "Review finished", completedOn: record.date },
+      { id: 2, task: "Approval Decision", status: "Pending", assignedTo: "Procurement Approver", remarks: "Request rejected", completedOn: record.date },
     ];
   }
 
-  if (record.status === "In Review") {
-    return [{ id: 1, task: "Final Review", status: "In Progress", assignedTo: record.createdBy, remarks: "Awaiting reviewer action" }];
+  if (record.status === "Approved") {
+    return [
+      { id: 1, task: "Department Review", status: "Completed", assignedTo: record.createdBy, remarks: "Approved for next stage", completedOn: record.date },
+      { id: 2, task: "Final Approval", status: "Completed", assignedTo: "Procurement Head", remarks: "Approved", completedOn: record.date },
+    ];
   }
 
   return [
-    { id: 1, task: "Final Review", status: "Completed", assignedTo: record.createdBy, remarks: "Approved for next stage", completedOn: record.date },
-    { id: 2, task: "Final Approval", status: "Completed", assignedTo: "Procurement Head", remarks: "PR approved", completedOn: record.date },
+    { id: 1, task: "Department Review", status: "In Progress", assignedTo: record.createdBy, remarks: "Awaiting reviewer action" },
+    { id: 2, task: "Final Approval", status: "Pending", assignedTo: "Procurement Head", remarks: "Waiting for department review" },
   ];
 }
 

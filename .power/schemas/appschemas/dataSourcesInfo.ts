@@ -5,6 +5,13 @@
  */
 
 export const dataSourcesInfo = {
+  "cr49f_approvaltaskses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_approvaltasksid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr49f_procurementapprovalcycle": {
     "tableId": "",
     "version": "",

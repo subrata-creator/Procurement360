@@ -27,6 +27,9 @@ import {
 } from "../data/Purchaserequestsdata";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
+import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
+import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
+import { getTaskApprovalStatusLabel, cleanGuid } from "../Services/ApprovalWorkflowService";
 import "../Styles/PurchaseRequest.css";
 
 const PAGE_SIZE = 10;
@@ -186,17 +189,50 @@ function formatReviewDuration(days: number | null): string {
     : `${days.toFixed(1)} days`;
 }
 
-function StatusIndicator({ status }: { status: PRStatus }) {
-  const progress = STATUS_PROGRESS[status];
-  const statusClass = status.toLowerCase().replace(" ", "-");
+function StatusIndicator({
+  status,
+  progressPercentage,
+  completedTasks,
+  totalTasks,
+}: {
+  status: PRStatus;
+  progressPercentage?: number;
+  completedTasks?: number;
+  totalTasks?: number;
+}) {
+  const progress =
+    typeof progressPercentage === "number"
+      ? progressPercentage
+      : STATUS_PROGRESS[status] ?? 0;
+
+  const isComplete = progress === 100 || status === "Approved";
+  const isRejected = status === "Rejected";
+
+  const statusClass = isComplete
+    ? "approved"
+    : isRejected
+    ? "rejected"
+    : progress > 0
+    ? "in-review"
+    : "pending";
+
+  const titleTooltip =
+    typeof totalTasks === "number" && totalTasks > 0
+      ? `${status} • ${completedTasks ?? 0}/${totalTasks} tasks completed (${progress}%)`
+      : `${status} • ${progress}% complete`;
 
   return (
     <span
       className={`purchase-status-indicator ${statusClass}`}
       role="img"
       aria-label={`${status}, ${progress}% complete`}
-      title={`${status} · ${progress}% complete`}
-      style={{ "--status-progress": `${progress}%` } as CSSProperties}
+      title={titleTooltip}
+      style={
+        {
+          "--status-progress": `${progress}%`,
+          ...(isComplete ? { "--status-color": "var(--success-hex, #16a34a)" } : {}),
+        } as CSSProperties
+      }
     >
       <span aria-hidden="true">
         {progress}
@@ -226,16 +262,57 @@ export default function PurchaseRequest() {
     setRequestLoadError("");
 
     try {
-      const result = await Cr49f_purchaserequestsService.getAll();
+      const [result, tasksRes] = await Promise.allSettled([
+        Cr49f_purchaserequestsService.getAll(),
+        Cr49f_approvaltasksesService.getAll(),
+      ]);
 
       if (signal?.aborted) return;
 
-      if (!result.success) {
+      if (result.status !== "fulfilled" || !result.value.success) {
         throw new Error("Unable to retrieve purchase requests from Dataverse.");
       }
 
-      const records = result.data ?? [];
-      setRequests(records.map(mapDataverseRequest));
+      const records = result.value.data ?? [];
+      const allTasks: Cr49f_approvaltaskses[] =
+        tasksRes.status === "fulfilled" && tasksRes.value.success && tasksRes.value.data
+          ? tasksRes.value.data
+          : [];
+
+      setRequests(
+        records.map((record) => {
+          const req = mapDataverseRequest(record);
+          const prId = cleanGuid(record.cr49f_purchaserequestid);
+
+          const prTasks = allTasks.filter((t) => {
+            const raw = t as unknown as Record<string, unknown>;
+            const tPR =
+              cleanGuid(t._cr49f_pr_value) ||
+              cleanGuid(raw._cr49f_PR_value as string) ||
+              cleanGuid(raw.cr49f_pr as string);
+            return tPR === prId;
+          });
+
+          const totalTasks = prTasks.length;
+          const completedTasks = prTasks.filter(
+            (t) => getTaskApprovalStatusLabel(t) === "Approved"
+          ).length;
+
+          let progressPercentage: number;
+          if (totalTasks > 0) {
+            progressPercentage = Math.round((completedTasks / totalTasks) * 100);
+          } else {
+            const dbStatus = getDatabaseStatus(record);
+            progressPercentage = STATUS_PROGRESS[dbStatus] ?? 0;
+          }
+
+          req.totalTasks = totalTasks;
+          req.completedTasks = completedTasks;
+          req.progressPercentage = progressPercentage;
+
+          return req;
+        })
+      );
     } catch (error) {
       if (signal?.aborted) return;
 
@@ -924,7 +1001,7 @@ export default function PurchaseRequest() {
                   return (
                     <tr key={request.ref}>
                       <td className="purchase-status-cell">
-                        <StatusIndicator status={request.status} />
+                        <StatusIndicator status={request.status} progressPercentage={request.progressPercentage} completedTasks={request.completedTasks} totalTasks={request.totalTasks} />
                       </td>
                       <td className="purchase-subject-cell">
                         <strong className="purchase-request-title">{request.title}</strong>

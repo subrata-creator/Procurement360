@@ -24,7 +24,7 @@
           "x-ms-dataverse-attribute": "cr49f_itemdescription",
           "x-ms-dataverse-type": "StringType",
           "x-ms-schema-name": "cr49f_ItemDescription",
-          "maxLength": 100
+          "maxLength": 2000
         },
         "cr49f_itemname": {
           "type": "string",

@@ -8,7 +8,6 @@ import KpiBanner from "../components/KpiBanner";
 import PRJourney from "../components/PRJourney";
 import ChartCards from "../components/ChartCards";
 import TaskInbox from "../components/TaskInbox";
-import ActivityTimeline from "../components/ActivityTimeline";
 import "../Styles/DashboardNew.css";
 
 interface DashboardProps {
@@ -93,9 +92,7 @@ export default function Dashboard({ isAdmin = false }: DashboardProps) {
           <TaskInbox />
         </div>
 
-        <div className="dashboard-activity-wrapper">
-          <ActivityTimeline />
-        </div>
+        
 
       </section>
 

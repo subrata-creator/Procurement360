@@ -71,6 +71,11 @@
           "entitySetName": "cr49f_supplierproducts",
           "logicalName": "cr49f_supplierproduct",
           "isHidden": false
+        },
+        "approvaltasks": {
+          "entitySetName": "cr49f_approvaltaskses",
+          "logicalName": "cr49f_approvaltasks",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

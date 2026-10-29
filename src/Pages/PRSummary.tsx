@@ -10,11 +10,14 @@ import {
   Coins,
   FileText,
   Flag,
+  Loader2,
   Paperclip,
   Plus,
   ShieldCheck,
   Sparkles,
   Tag,
+  ThumbsDown,
+  ThumbsUp,
   User,
   X,
 } from "lucide-react";
@@ -31,20 +34,21 @@ import {
   type PurchaseRequestRecord,
 } from "../data/Purchaserequestsdata";
 import { rfqs } from "../data/rfqs";
-
-// ---------------------------------------------------------------------
-// Live Dataverse read, same services/shape your working version
-// (262b53a5) already uses. Everything else on this page — PR Journey,
-// milestone sub-tasks, RFQs/Associated Tasks/Notes/Attachments tabs,
-// Approval History sidebar — is unchanged from the original rich
-// layout and still runs on buildApprovalSteps / buildDefaultSubTasks /
-// buildMilestoneSubTasks from Purchaserequestsdata.ts. Those functions
-// only need a PurchaseRequestRecord-shaped object, so the live record
-// is mapped into that shape below (mapLiveRecordToPurchaseRequest)
-// instead of rewriting the generators.
-// ---------------------------------------------------------------------
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import {
+  createApprovalTasksForObject,
+  getApprovalTasksForRecord,
+  getTaskApprovalStatusLabel,
+  approveTask,
+  rejectTask,
+} from "../Services/ApprovalWorkflowService";
+import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
+import {
+  Cr49f_approvaltasksescr49f_department,
+  Cr49f_approvaltasksescr49f_role,
+  Cr49f_approvaltasksescr49f_slaunit,
+} from "../generated/models/Cr49f_approvaltasksesModel";
 
 import "../Styles/PRSummary.css";
 
@@ -216,13 +220,19 @@ export default function PurchaseRequestDetail() {
   const [noteDescription, setNoteDescription] = useState("");
   const [noteTaggedUsers, setNoteTaggedUsers] = useState("");
   const [noteAttachment, setNoteAttachment] = useState<File | null>(null);
-  const [subTasksOpen, setSubTasksOpen] = useState(false);
+  const [subTasksOpen, setSubTasksOpen] = useState(true);
   const [selectedMilestone, setSelectedMilestone] = useState<ApprovalStep | null>(null);
 
   const [liveRequests, setLiveRequests] = useState<LivePurchaseRequest[]>([]);
   const [liveLines, setLiveLines] = useState<LivePurchaseRequestLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+
+  // Real Dataverse cr49f_approvaltasks state
+  const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
+  const [taskActionNotice, setTaskActionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,6 +323,83 @@ export default function PurchaseRequestDetail() {
     };
   }, [liveRecord, mappedLineItems]);
 
+  const loadApprovalTasks = async (prId: string) => {
+    setLoadingTasks(true);
+    try {
+      const tasks = await getApprovalTasksForRecord(1, prId);
+      setApprovalTasks(tasks);
+    } catch (err) {
+      console.warn("Failed to load approval tasks:", err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  useEffect(() => {
+    if (liveRecord?.cr49f_purchaserequestid) {
+      void loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
+    }
+  }, [liveRecord?.cr49f_purchaserequestid]);
+
+  const handleGenerateTasks = async () => {
+    if (!liveRecord?.cr49f_purchaserequestid) return;
+    setLoadingTasks(true);
+    try {
+      await createApprovalTasksForObject({
+        objectType: 1, // PR
+        recordId: liveRecord.cr49f_purchaserequestid,
+        recordName: liveRecord.cr49f_prtitle,
+      });
+      await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
+      setTaskActionNotice("Approval tasks created successfully from template tasks.");
+    } catch (err) {
+      console.error("Failed to generate approval tasks:", err);
+      setTaskActionNotice(err instanceof Error ? err.message : "Failed to create approval tasks.");
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const handleApprove = async (task: Cr49f_approvaltaskses) => {
+    setActioningTaskId(task.cr49f_approvaltasksid);
+    setTaskActionNotice(null);
+    try {
+      const result = await approveTask(task.cr49f_approvaltasksid);
+      if (liveRecord?.cr49f_purchaserequestid) {
+        await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
+      }
+      setTaskActionNotice(
+        result.nextActivatedTask
+          ? `Task "${task.cr49f_task}" approved! Next task "${result.nextActivatedTask.cr49f_task}" is now Active.`
+          : `Task "${task.cr49f_task}" approved! All approval tasks completed. PR is now Approved!`
+      );
+    } catch (err) {
+      console.error("Approve failed:", err);
+      setTaskActionNotice(err instanceof Error ? err.message : "Approval failed.");
+    } finally {
+      setActioningTaskId(null);
+    }
+  };
+
+  const handleReject = async (task: Cr49f_approvaltaskses) => {
+    setActioningTaskId(task.cr49f_approvaltasksid);
+    setTaskActionNotice(null);
+    try {
+      await rejectTask(task.cr49f_approvaltasksid);
+      if (liveRecord?.cr49f_purchaserequestid) {
+        await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
+      }
+      setTaskActionNotice(
+        `Task "${task.cr49f_task}" rejected. Further tasks remain inactive and PR is marked Rejected.`
+      );
+    } catch (err) {
+      console.error("Reject failed:", err);
+      setTaskActionNotice(err instanceof Error ? err.message : "Rejection failed.");
+    } finally {
+      setActioningTaskId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="pr-detail-page">
@@ -359,7 +446,11 @@ export default function PurchaseRequestDetail() {
   const historyEvents = visibleApprovalSteps.filter(
     (step) => step.status === "Completed" || step.status === "Current" || step.status === "Rejected"
   );
-  const subTasks = selectedMilestone ? buildMilestoneSubTasks(record, selectedMilestone) : [];
+  const activeMilestone = selectedMilestone || visibleApprovalSteps[0] || null;
+  const isPrCreationMilestone =
+    activeMilestone?.title?.toLowerCase().includes("pr creation") ||
+    activeMilestone?.step === 1;
+  const subTasks = activeMilestone ? buildMilestoneSubTasks(record, activeMilestone) : [];
   const lineItems = record.lineItems ?? [];
   const associatedRfqs = record.rfq.startsWith("RFQ-")
     ? rfqs.filter((rfq) => rfq.refNo === record.rfq)
@@ -370,14 +461,16 @@ export default function PurchaseRequestDetail() {
     (task) => task.status === "In Progress" || task.status === "Pending"
   );
   const summaryItems = lineItems.length
-    ? lineItems.map((item) => `${item.quantity} × ${item.itemName}`).join(", ")
+    ? lineItems.map((item) => item.itemName).join(", ")
     : undefined;
   const aiSummary = [
     summaryItems ? `This request covers ${summaryItems}.` : record.title,
     `${record.totalAmount ? `Recorded amount is ${record.totalAmount}. ` : "Amount is not recorded. "}${record.status === "In Review" ? "It is awaiting review." : `Current status is ${statusLabel.toLowerCase()}.`}`,
   ].join(" ");
 
-  const subTasksCompleted = subTasks.length > 0 && subTasks.every((task) => task.status === "Completed");
+  const isMilestoneCompleted = isPrCreationMilestone && approvalTasks.length > 0
+    ? approvalTasks.every((t) => getTaskApprovalStatusLabel(t) === "Approved")
+    : (subTasks.length > 0 && subTasks.every((task) => task.status === "Completed"));
 
   const saveNote = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -417,9 +510,8 @@ export default function PurchaseRequestDetail() {
   };
 
   const toggleMilestone = (step: ApprovalStep) => {
-    if (subTasksOpen && selectedMilestone?.step === step.step) {
+    if (subTasksOpen && activeMilestone?.step === step.step) {
       setSubTasksOpen(false);
-      setSelectedMilestone(null);
       return;
     }
 
@@ -468,12 +560,12 @@ export default function PurchaseRequestDetail() {
         <div className="approval-timeline">
           {visibleApprovalSteps.map((step, index) => (
             <button
-              className={`approval-step ${selectedMilestone?.step === step.step ? "selected" : ""}`}
+              className={`approval-step ${activeMilestone?.step === step.step ? "selected" : ""}`}
               key={step.step}
               type="button"
               aria-label={`${step.title}, ${step.status}. View milestone tasks`}
-              aria-pressed={selectedMilestone?.step === step.step}
-              aria-expanded={subTasksOpen && selectedMilestone?.step === step.step}
+              aria-pressed={activeMilestone?.step === step.step}
+              aria-expanded={subTasksOpen && activeMilestone?.step === step.step}
               onClick={() => toggleMilestone(step)}
             >
               <div className={`approval-step-line ${step.status === "Completed" ? "done" : ""}`} />
@@ -490,54 +582,130 @@ export default function PurchaseRequestDetail() {
         </div>
       </section>
 
-      {selectedMilestone && (
-        <>
-          <section className="pr-detail-card">
-            <div className="pr-detail-card-header">
-              <div className="pr-detail-card-header-left">
-                <div className={`pr-detail-card-icon ${milestoneIconClass(selectedMilestone.status)}`}>
-                  <ShieldCheck size={12} />
-                </div>
-                <div className="pr-detail-card-title">
-                  <h2>{selectedMilestone.title} - Sub Tasks</h2>
-                  <p>{selectedMilestone.date ? `Milestone activity on ${selectedMilestone.date}` : `Milestone status: ${selectedMilestone.status}`}{selectedMilestone.by ? ` · ${selectedMilestone.by}` : ""}</p>
-                </div>
+      {activeMilestone && (
+        <section className="pr-detail-card">
+          <div className="pr-detail-card-header">
+            <div className="pr-detail-card-header-left">
+              <div className={`pr-detail-card-icon ${milestoneIconClass(activeMilestone.status)}`}>
+                <ShieldCheck size={12} />
               </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-                {subTasksCompleted && (
-                  <span className="pr-detail-status-tag">
-                    <ShieldCheck size={9} />
-                    Completed
-                  </span>
-                )}
-
-                <button
-                  type="button"
-                  className="pr-detail-collapse-btn"
-                  onClick={() => setSubTasksOpen((open) => !open)}
-                  style={{ transform: subTasksOpen ? "rotate(0deg)" : "rotate(180deg)" }}
-                >
-                  <ChevronUp size={12} />
-                </button>
+              <div className="pr-detail-card-title">
+                <h2>{activeMilestone.title} - Sub Tasks</h2>
+                <p>
+                  {activeMilestone.date ? `Milestone activity on ${activeMilestone.date}` : `Milestone status: ${activeMilestone.status}`}
+                  {activeMilestone.by ? ` · ${activeMilestone.by}` : (record.createdBy ? ` · ${record.createdBy}` : "")}
+                </p>
               </div>
             </div>
 
-            {subTasksOpen && (
-              <div className="pr-detail-table-wrapper">
-                <table className="pr-detail-table">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>Task</th>
-                      <th>Status</th>
-                      <th>Assigned To</th>
-                      <th>Remarks</th>
-                      <th>Completed On</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {subTasks.map((task, index) => (
+            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+              <span className={`pr-detail-status-tag ${isMilestoneCompleted ? "completed" : ""}`}>
+                <ShieldCheck size={9} />
+                {isMilestoneCompleted ? "Completed" : (activeMilestone.status === "Skipped" ? "Not Applicable" : activeMilestone.status)}
+              </span>
+
+              <button
+                type="button"
+                className="pr-detail-collapse-btn"
+                onClick={() => setSubTasksOpen((open) => !open)}
+                style={{ transform: subTasksOpen ? "rotate(0deg)" : "rotate(180deg)" }}
+                aria-label="Toggle sub-tasks"
+              >
+                <ChevronUp size={12} />
+              </button>
+            </div>
+          </div>
+
+          {subTasksOpen && (
+            <div className="pr-detail-table-wrapper">
+              <table className="pr-detail-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Task</th>
+                    <th>Status</th>
+                    <th>Assigned To</th>
+                    <th>Remarks</th>
+                    <th>Completed On</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isPrCreationMilestone && approvalTasks.length > 0 ? (
+                    approvalTasks.map((task, index) => {
+                      const approvalStatus = getTaskApprovalStatusLabel(task);
+                      const isApproved = approvalStatus === "Approved";
+                      const isRejected = approvalStatus === "Rejected";
+                      const isPending = approvalStatus === "Pending";
+                      const isActive = task.statecode === 0 && isPending;
+
+                      const statusLabel = isApproved
+                        ? "Completed"
+                        : isRejected
+                        ? "Rejected"
+                        : isActive
+                        ? "In Progress"
+                        : "Pending";
+                      const statusClass = isApproved
+                        ? "completed"
+                        : isRejected
+                        ? "rejected"
+                        : isActive
+                        ? "in-progress"
+                        : "pending";
+
+                      const roleName = task.cr49f_role
+                        ? (Cr49f_approvaltasksescr49f_role[task.cr49f_role] || "Approver")
+                        : "Approver";
+                      const initials = getInitials(roleName);
+                      const remarks = isApproved
+                        ? "Completed for this approval stage"
+                        : isRejected
+                        ? "Task rejected"
+                        : isActive
+                        ? "Awaiting approval decision"
+                        : "Pending previous task approval";
+
+                      const completedOn = isApproved
+                        ? (task.modifiedon ? toUsDate(task.modifiedon) : (record.date || "—"))
+                        : "—";
+
+                      return (
+                        <tr
+                          key={task.cr49f_approvaltasksid || index}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => navigate(`/tasks/${task.cr49f_approvaltasksid}`)}
+                          title="Click to view task details, approve/reject, or add comment"
+                        >
+                          <td>{task.cr49f_sequence || index + 1}</td>
+                          <td>
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                color: "var(--primary-hex, #2563eb)",
+                                textDecoration: "underline",
+                                textUnderlineOffset: 3,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {task.cr49f_task}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`subtask-status ${statusClass}`}>{statusLabel}</span>
+                          </td>
+                          <td>
+                            <div className="pr-detail-table-avatar">
+                              <span>{initials}</span>
+                              {roleName}
+                            </div>
+                          </td>
+                          <td>{remarks}</td>
+                          <td>{completedOn}</td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    subTasks.map((task, index) => (
                       <tr key={task.id}>
                         <td>{index + 1}</td>
                         <td>{task.task}</td>
@@ -553,13 +721,13 @@ export default function PurchaseRequestDetail() {
                         <td>{task.remarks}</td>
                         <td>{task.completedOn || "—"}</td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
 
       <section className="pr-detail-card">
@@ -635,12 +803,243 @@ export default function PurchaseRequestDetail() {
           <div className="pr-associated-tasks">
             <div className="pr-associated-tasks-heading">
               <div>
-                <h3>PR Creation — Pending Tasks</h3>
-                <p>Tasks still in progress or pending for the PR Creation stage</p>
+                <h3>Associated Approval Tasks (cr49f_approvaltasks)</h3>
+                <p>Configured sequential workflow approval tasks for this Purchase Request</p>
               </div>
-              <span>{prCreationActiveTasks.length} pending</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span>{approvalTasks.length} tasks configured</span>
+                {approvalTasks.length < 4 && (
+                  <button
+                    type="button"
+                    className="pr-detail-primary-btn"
+                    onClick={handleGenerateTasks}
+                    disabled={loadingTasks}
+                    style={{ fontSize: 11, padding: "4px 10px" }}
+                  >
+                    {loadingTasks ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    <span>{approvalTasks.length === 0 ? "Generate Tasks" : "Generate All Tasks"}</span>
+                  </button>
+                )}
+              </div>
             </div>
-            {prCreationActiveTasks.length ? (
+
+            {taskActionNotice && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  background: taskActionNotice.toLowerCase().includes("fail") ||
+                              taskActionNotice.toLowerCase().includes("could not") ||
+                              taskActionNotice.toLowerCase().includes("error")
+                    ? "#fef2f2"
+                    : "#f0fdf4",
+                  border: taskActionNotice.toLowerCase().includes("fail") ||
+                          taskActionNotice.toLowerCase().includes("could not") ||
+                          taskActionNotice.toLowerCase().includes("error")
+                    ? "1px solid #fecaca"
+                    : "1px solid #bbf7d0",
+                  color: taskActionNotice.toLowerCase().includes("fail") ||
+                         taskActionNotice.toLowerCase().includes("could not") ||
+                         taskActionNotice.toLowerCase().includes("error")
+                    ? "#991b1b"
+                    : "#166534",
+                  borderRadius: 6,
+                  marginBottom: 12,
+                  fontSize: 13,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span>{taskActionNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setTaskActionNotice(null)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "inherit",
+                  }}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+
+            {approvalTasks.length > 0 ? (
+              <div className="pr-detail-table-wrapper">
+                <table className="pr-detail-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 45 }}>#</th>
+                      <th>Task Title</th>
+                      <th>Department</th>
+                      <th>Role</th>
+                      <th>SLA</th>
+                      <th>Task State</th>
+                      <th>Approval Status</th>
+                      <th style={{ textAlign: "center", width: 190 }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {approvalTasks.map((task) => {
+                      const isActive = task.statecode === 0;
+                      const approvalStatus = getTaskApprovalStatusLabel(task);
+                      const isPending = approvalStatus === "Pending";
+                      const isApproved = approvalStatus === "Approved";
+                      const isRejected = approvalStatus === "Rejected";
+
+                      const deptLabel =
+                        task.cr49f_department &&
+                        Cr49f_approvaltasksescr49f_department[task.cr49f_department]
+                          ? Cr49f_approvaltasksescr49f_department[task.cr49f_department]
+                          : "Administrator";
+
+                      const roleLabel =
+                        task.cr49f_role &&
+                        Cr49f_approvaltasksescr49f_role[task.cr49f_role]
+                          ? Cr49f_approvaltasksescr49f_role[task.cr49f_role]
+                          : "Procurement Admin";
+
+                      const slaUnitLabel =
+                        task.cr49f_slaunit &&
+                        Cr49f_approvaltasksescr49f_slaunit[task.cr49f_slaunit]
+                          ? Cr49f_approvaltasksescr49f_slaunit[task.cr49f_slaunit]
+                          : "Hours";
+
+                      const slaLabel = `${task.cr49f_slanumber ?? 24} ${slaUnitLabel}`;
+
+                      return (
+                        <tr key={task.cr49f_approvaltasksid}>
+                          <td><strong>{task.cr49f_sequence ?? 1}</strong></td>
+                          <td>
+                            <strong
+                              style={{ color: "var(--primary-hex, #2563eb)", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}
+                              onClick={() => navigate(`/tasks/${task.cr49f_approvaltasksid}`)}
+                              title="Click to view full task page"
+                            >
+                              {task.cr49f_task}
+                            </strong>
+                            {task.cr49f_id && task.cr49f_id !== task.cr49f_task && (
+                              <span style={{ display: "block", fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                                {task.cr49f_id}
+                              </span>
+                            )}
+                          </td>
+                          <td>{deptLabel}</td>
+                          <td>{roleLabel}</td>
+                          <td>{slaLabel}</td>
+                          <td>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                background: isActive ? "#dcfce7" : "#f1f5f9",
+                                color: isActive ? "#15803d" : "#64748b",
+                              }}
+                            >
+                              {isActive ? "Active" : "Inactive"}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                background: isApproved
+                                  ? "#dcfce7"
+                                  : isRejected
+                                  ? "#fee2e2"
+                                  : "#fef3c7",
+                                color: isApproved
+                                  ? "#15803d"
+                                  : isRejected
+                                  ? "#b91c1c"
+                                  : "#b45309",
+                              }}
+                            >
+                              {approvalStatus}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "center" }}>
+                            {isActive && isPending ? (
+                              <div style={{ display: "inline-flex", gap: 6, justifyContent: "center" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleApprove(task)}
+                                  disabled={actioningTaskId === task.cr49f_approvaltasksid}
+                                  style={{
+                                    padding: "4px 10px",
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: "#ffffff",
+                                    backgroundColor: "#16a34a",
+                                    border: "none",
+                                    borderRadius: 4,
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                  }}
+                                  title="Approve task and activate next task in sequence"
+                                >
+                                  {actioningTaskId === task.cr49f_approvaltasksid ? (
+                                    <Loader2 size={11} className="animate-spin" />
+                                  ) : (
+                                    <ThumbsUp size={11} />
+                                  )}
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleReject(task)}
+                                  disabled={actioningTaskId === task.cr49f_approvaltasksid}
+                                  style={{
+                                    padding: "4px 10px",
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: "#ffffff",
+                                    backgroundColor: "#dc2626",
+                                    border: "none",
+                                    borderRadius: 4,
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                  }}
+                                  title="Reject task (further tasks remain inactive)"
+                                >
+                                  <ThumbsDown size={11} />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            ) : isApproved ? (
+                              <span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>
+                                ✓ Approved
+                              </span>
+                            ) : isRejected ? (
+                              <span style={{ fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+                                ✕ Rejected
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                                Waiting for previous task
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : prCreationActiveTasks.length ? (
               <div className="pr-detail-table-wrapper">
                 <table className="pr-detail-table">
                   <thead>
@@ -671,7 +1070,9 @@ export default function PurchaseRequestDetail() {
                 </table>
               </div>
             ) : (
-              <div className="pr-associated-tasks-empty">No in-progress or pending tasks recorded for the PR Creation stage.</div>
+              <div className="pr-associated-tasks-empty">
+                No approval tasks found for this request. Click "Generate Tasks" above to create them.
+              </div>
             )}
           </div>
         )}
@@ -890,9 +1291,7 @@ export default function PurchaseRequestDetail() {
                         <th>#</th>
                         <th>Item Code</th>
                         <th>Item Name</th>
-                        <th>Quantity</th>
                         <th>Previous Contract</th>
-                        <th>Unit Price</th>
                         <th>Total Amount</th>
                         <th>Delivery Date</th>
                         <th>Delivery Address</th>
@@ -904,16 +1303,14 @@ export default function PurchaseRequestDetail() {
                           <td>{index + 1}</td>
                           <td>{item.itemCode}</td>
                           <td>{item.itemName}</td>
-                          <td>{item.quantity}</td>
                           <td>{item.previousContract}</td>
-                          <td>{item.unitPrice}</td>
                           <td>{item.totalAmount}</td>
                           <td>{item.deliveryDate}</td>
                           <td>{item.deliveryAddress}</td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={9}>No line items are linked to this purchase request.</td>
+                          <td colSpan={7}>No line items are linked to this purchase request.</td>
                         </tr>
                       )}
                     </tbody>
@@ -932,10 +1329,10 @@ export default function PurchaseRequestDetail() {
                     return (
                       <button
                         type="button"
-                        className={`pr-summary-approval-step ${step.status.toLowerCase()} ${selectedMilestone?.step === step.step ? "selected" : ""}`}
+                        className={`pr-summary-approval-step ${step.status.toLowerCase()} ${activeMilestone?.step === step.step ? "selected" : ""}`}
                         key={step.step}
                         aria-label={`${step.title}, ${step.status}. View milestone tasks`}
-                        aria-expanded={subTasksOpen && selectedMilestone?.step === step.step}
+                        aria-expanded={subTasksOpen && activeMilestone?.step === step.step}
                         onClick={() => toggleMilestone(step)}
                       >
                         <span className="pr-summary-approval-rail">

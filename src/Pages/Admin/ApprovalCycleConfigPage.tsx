@@ -3,10 +3,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Layers,
+  Loader2,
   Pencil,
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   Workflow,
   X,
   XCircle,
@@ -22,6 +24,8 @@ import { Cr49f_procurementapprovalcyclesService } from "../../generated/services
 import { Cr49f_tasksesService } from "../../generated/services/Cr49f_tasksesService";
 import ApprovalCycleModal from "../../components/ApprovalCycleModal";
 import ModernSelect, { type ModernSelectOption } from "../../components/ModernSelect";
+import { seedApprovalCyclesToDataverse } from "../../Services/ApprovalCycleSeedingService";
+import { syncAllPendingApprovalTasks, cleanGuid } from "../../Services/ApprovalWorkflowService";
 import "../../Styles/AdminPages.css";
 
 const getObjectTypeName = (cycle: Cr49f_procurementapprovalcycles): string => {
@@ -48,6 +52,10 @@ const ApprovalCycleConfigPage: React.FC = () => {
   const [selectedCycle, setSelectedCycle] = useState<Cr49f_procurementapprovalcycles | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Seeding State
+  const [seeding, setSeeding] = useState(false);
+  const [seedProgress, setSeedProgress] = useState<string | null>(null);
+
   const fetchCycles = async () => {
     setLoading(true);
     setLoadError(null);
@@ -73,7 +81,10 @@ const ApprovalCycleConfigPage: React.FC = () => {
       if (taskRes.status === "fulfilled" && !taskRes.value.error && taskRes.value.data) {
         const counts: Record<string, number> = {};
         for (const t of taskRes.value.data) {
-          const cycleId = t._cr49f_procurementapprovalcycle_value;
+          const raw = t as unknown as Record<string, unknown>;
+          const cycleId = cleanGuid(t._cr49f_procurementapprovalcycle_value) ||
+            cleanGuid(raw._cr49f_ProcurementApprovalCycle_value as string) ||
+            cleanGuid(raw.cr49f_procurementapprovalcycle as string);
           if (cycleId) {
             counts[cycleId] = (counts[cycleId] || 0) + 1;
           }
@@ -92,7 +103,48 @@ const ApprovalCycleConfigPage: React.FC = () => {
 
   useEffect(() => {
     void fetchCycles();
+    const w = window as unknown as {
+      seedApprovalCycles: typeof seedApprovalCyclesToDataverse;
+    };
+    w.seedApprovalCycles = seedApprovalCyclesToDataverse;
   }, []);
+
+  const handleSeedApprovalCycles = async () => {
+    setSeeding(true);
+    setSeedProgress("Checking approval cycles in Dataverse...");
+    try {
+      const result = await seedApprovalCyclesToDataverse((msg) => setSeedProgress(msg));
+      await fetchCycles();
+      setToastMessage(
+        `Successfully configured ${result.cycles.length} approval cycles (PR, RFQ, and Orders) with ${result.createdTasksCount} new tasks in Dataverse!`
+      );
+    } catch (err: unknown) {
+      console.error("Failed to seed approval cycles:", err);
+      const msg = err instanceof Error ? err.message : "Failed to seed approval cycles.";
+      setLoadError(`Error seeding approval cycles: ${msg}`);
+    } finally {
+      setSeeding(false);
+      setSeedProgress(null);
+    }
+  };
+
+  const handleSyncApprovalTasks = async () => {
+    setSeeding(true);
+    setSeedProgress("Populating tasks for existing PRs & RFQs...");
+    try {
+      const result = await syncAllPendingApprovalTasks((msg) => setSeedProgress(msg));
+      setToastMessage(
+        `Generated ${result.tasksCreated} approval tasks across ${result.prCount} PRs and ${result.rfqCount} RFQs on cr49f_approvaltasks!`
+      );
+    } catch (err: unknown) {
+      console.error("Failed to sync approval tasks:", err);
+      const msg = err instanceof Error ? err.message : "Failed to sync approval tasks.";
+      setLoadError(`Error syncing tasks: ${msg}`);
+    } finally {
+      setSeeding(false);
+      setSeedProgress(null);
+    }
+  };
 
   const handleOpenCreate = () => {
     setSelectedCycle(null);
@@ -244,6 +296,7 @@ const ApprovalCycleConfigPage: React.FC = () => {
             type="button"
             className="admin-btn admin-btn-secondary"
             onClick={fetchCycles}
+            disabled={loading || seeding}
             title="Refresh approval cycles from Dataverse"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -251,8 +304,38 @@ const ApprovalCycleConfigPage: React.FC = () => {
           </button>
           <button
             type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={handleSeedApprovalCycles}
+            disabled={seeding || loading}
+            title="Create approval cycles for PR, RFQ, and Purchase Orders with min 3 and max 5 tasks"
+          >
+            {seeding ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                <span>{seedProgress || "Configuring..."}</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} />
+                <span>Seed PR, RFQ &amp; PO Cycles</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={handleSyncApprovalTasks}
+            disabled={seeding || loading}
+            title="Scan PRs and RFQs in Dataverse and generate approval tasks on cr49f_approvaltasks"
+          >
+            <Layers size={14} />
+            <span>Sync PR &amp; RFQ Tasks</span>
+          </button>
+          <button
+            type="button"
             className="admin-btn admin-btn-primary"
             onClick={handleOpenCreate}
+            disabled={seeding}
           >
             <Plus size={15} />
             <span>New Approval Cycle</span>
@@ -397,22 +480,37 @@ const ApprovalCycleConfigPage: React.FC = () => {
                     ) : (
                       <div>
                         <p>No approval cycles found in Dataverse.</p>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-primary"
-                          style={{ margin: "8px auto 0" }}
-                          onClick={handleOpenCreate}
-                        >
-                          <Plus size={14} />
-                          <span>Add First Approval Cycle</span>
-                        </button>
+                        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 8 }}>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-primary"
+                            onClick={handleSeedApprovalCycles}
+                            disabled={seeding}
+                          >
+                            <Sparkles size={14} />
+                            <span>
+                              {seeding
+                                ? seedProgress || "Configuring..."
+                                : "Create PR, RFQ & PO Approval Cycles"}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-secondary"
+                            onClick={handleOpenCreate}
+                            disabled={seeding}
+                          >
+                            <Plus size={14} />
+                            <span>Add Blank Cycle</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                   </td>
                 </tr>
               ) : (
                 filteredCycles.map((c) => {
-                  const count = taskCounts[c.cr49f_procurementapprovalcycleid] ?? 0;
+                  const count = taskCounts[cleanGuid(c.cr49f_procurementapprovalcycleid)] ?? 0;
                   return (
                     <tr key={c.cr49f_procurementapprovalcycleid}>
                       {/* OBJECT */}

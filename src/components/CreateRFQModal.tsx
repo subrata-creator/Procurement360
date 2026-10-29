@@ -16,6 +16,7 @@ import {
 
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
+import { createApprovalTasksForObject } from "../Services/ApprovalWorkflowService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
 import type { Cr49f_requestforqoutationsBase } from "../generated/models/Cr49f_requestforqoutationsModel";
 
@@ -229,6 +230,18 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
       }
 
       const created = result.data;
+
+      // Create associated approval tasks in cr49f_approvaltasks from cr49f_tasks
+      try {
+        await createApprovalTasksForObject({
+          objectType: 2, // RFQ
+          recordId: created.cr49f_requestforqoutationid,
+          recordName: formData.rfqTitle.trim(),
+        });
+      } catch (taskErr) {
+        console.warn("Could not create approval tasks for RFQ:", taskErr);
+      }
+
       setCreatedRfqInfo({
         id: created.cr49f_requestforqoutationid,
         rfqNumber: created.cr49f_rfqnumber || undefined,
