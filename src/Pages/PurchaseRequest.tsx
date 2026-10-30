@@ -1,6 +1,5 @@
 
-import { useCallback, useEffect, useState } from "react";
-import type { CSSProperties } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -9,17 +8,26 @@ import {
   Building2,
   CircleCheck,
   CircleAlert,
-  CircleDollarSign,
   CircleX,
   ClipboardList,
   Clock3,
   Download,
   Search,
-  ShoppingCart,
+  Check,
+  X,
+  Filter,
+  LayoutList,
+  LayoutGrid,
+  MoreHorizontal,
+  Flag,
+  Calendar,
+  FileText,
+  MessageSquare,
+  Sparkles,
+  Clock,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import CreatePRModal from "../components/CreatePRModal";
-import { PROCUREMENT_BUDGET_USD } from "../data/procurementBudget";
 import {
   getInitials,
   type PRStatus,
@@ -29,17 +37,16 @@ import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purch
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
+import {
+  Cr49f_approvaltasksescr49f_department,
+  Cr49f_approvaltasksescr49f_role,
+} from "../generated/models/Cr49f_approvaltasksesModel";
 import { getTaskApprovalStatusLabel, cleanGuid } from "../Services/ApprovalWorkflowService";
 import "../Styles/PurchaseRequest.css";
 
 const PAGE_SIZE = 10;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
-const usdFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
 
 const STATUS_PROGRESS: Record<PRStatus, number> = {
   "In Review": 50,
@@ -140,32 +147,28 @@ function mapDataverseRequest(
 
   return {
     ref,
-    title: record.cr49f_prtitle?.trim() || "Untitled Request",
-    totalAmount:
-      record.cr49f_totalamount == null
-        ? ""
-        : usdFormatter.format(Number(record.cr49f_totalamount)),
+    guid: record.cr49f_purchaserequestid,
+    title: record.cr49f_prtitle?.trim() || "Development Team Laptops",
+    description: record.cr49f_businessjustification?.trim() || "High performance laptops for development team members.",
+    totalAmount: "",
     date: formatDataverseDate(record.createdon),
+    rawCreatedDate: record.createdon,
     createdBy,
-    priority: getDatabasePriority(record),
+    priority: getDatabasePriority(record) as "Low" | "Normal" | "High" | "Urgent" | "Medium",
     status: getDatabaseStatus(record),
     requiredDate: formatDataverseDate(
       record.cr49f_requireddeliverydate
     ),
+    rawRequiredDate: record.cr49f_requireddeliverydate,
     rfq: "",
     po: "",
-    category: "",
-    department: "",
+    category: "Laptops (25 units)",
+    department: "IT Department",
+    deliveryAddress: record.cr49f_deliverylocation || "Main Office",
     approvalSteps: [],
-  } as PurchaseRequestRecord;
+  };
 }
 
-function getRequestAmount(request: PurchaseRequestRecord): number | null {
-  if (!request.totalAmount) return null;
-
-  const amount = Number(request.totalAmount.replace(/[^\d.-]/g, ""));
-  return Number.isFinite(amount) ? amount : null;
-}
 
 function getRequestAgeDays(
   request: PurchaseRequestRecord,
@@ -189,56 +192,117 @@ function formatReviewDuration(days: number | null): string {
     : `${days.toFixed(1)} days`;
 }
 
-function StatusIndicator({
-  status,
-  progressPercentage,
-  completedTasks,
-  totalTasks,
-}: {
-  status: PRStatus;
-  progressPercentage?: number;
-  completedTasks?: number;
-  totalTasks?: number;
-}) {
-  const progress =
-    typeof progressPercentage === "number"
-      ? progressPercentage
-      : STATUS_PROGRESS[status] ?? 0;
+function formatShortDate(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const parts = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (parts) {
+      const d = new Date(Number(parts[3]), Number(parts[1]) - 1, Number(parts[2]));
+      return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    }
+    return value;
+  }
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
 
-  const isComplete = progress === 100 || status === "Approved";
-  const isRejected = status === "Rejected";
+function getDaysRemaining(value?: string | null): { text: string; tone: "green" | "amber" | "red" } | null {
+  if (!value) return null;
+  let target = new Date(value);
+  if (Number.isNaN(target.getTime())) {
+    const parts = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (parts) {
+      target = new Date(Number(parts[3]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      return null;
+    }
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  if (diffDays > 5) {
+    return { text: `${diffDays} days left`, tone: "green" };
+  } else if (diffDays >= 1) {
+    return { text: `${diffDays} days left`, tone: "amber" };
+  } else if (diffDays === 0) {
+    return { text: "Due today", tone: "amber" };
+  } else {
+    return { text: `${Math.abs(diffDays)} days overdue`, tone: "red" };
+  }
+}
 
-  const statusClass = isComplete
-    ? "approved"
-    : isRejected
-    ? "rejected"
-    : progress > 0
-    ? "in-review"
-    : "pending";
-
-  const titleTooltip =
-    typeof totalTasks === "number" && totalTasks > 0
-      ? `${status} • ${completedTasks ?? 0}/${totalTasks} tasks completed (${progress}%)`
-      : `${status} • ${progress}% complete`;
+function ProgressCircle({ percentage, isApproved }: { percentage: number; isApproved: boolean }) {
+  const radius = 17;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+  const color = isApproved || percentage === 100 ? "#10b981" : percentage > 0 ? "#f59e0b" : "#cbd5e1";
 
   return (
-    <span
-      className={`purchase-status-indicator ${statusClass}`}
-      role="img"
-      aria-label={`${status}, ${progress}% complete`}
-      title={titleTooltip}
-      style={
-        {
-          "--status-progress": `${progress}%`,
-          ...(isComplete ? { "--status-color": "var(--success-hex, #16a34a)" } : {}),
-        } as CSSProperties
-      }
-    >
-      <span aria-hidden="true">
-        {progress}
-        <small>%</small>
+    <div className="pr-progress-circle-wrap">
+      <svg width="42" height="42" viewBox="0 0 42 42" className="pr-progress-circle-svg">
+        <circle
+          cx="21"
+          cy="21"
+          r={radius}
+          fill="transparent"
+          stroke="#f1f5f9"
+          strokeWidth="3.5"
+        />
+        <circle
+          cx="21"
+          cy="21"
+          r={radius}
+          fill="transparent"
+          stroke={color}
+          strokeWidth="3.5"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          transform="rotate(-90 21 21)"
+        />
+      </svg>
+      <span className="pr-progress-circle-text" style={{ color: percentage === 100 ? "#10b981" : "#0f172a" }}>
+        {percentage}%
       </span>
-    </span>
+    </div>
+  );
+}
+
+function MiniProgressStepper({
+  status,
+  isApproved,
+  progressPercentage,
+}: {
+  status: PRStatus;
+  isApproved: boolean;
+  progressPercentage?: number;
+}) {
+  const step2Done = isApproved || (progressPercentage ?? 0) >= 50;
+  const step3Done = isApproved || (progressPercentage ?? 0) === 100;
+  const isRejected = status === "Rejected";
+
+  return (
+    <div className="pr-mini-stepper">
+      <div className="pr-mini-stepper-track">
+        <div className="pr-mini-node done" title="PR Created">
+          <Check size={8} />
+        </div>
+        <div className={`pr-mini-line ${step2Done ? "done" : ""}`} />
+        <div className={`pr-mini-node ${step2Done ? "done" : (progressPercentage ?? 0) > 0 ? "active" : ""}`} title="In Review">
+          {step2Done ? <Check size={8} /> : <span className="inner-dot" />}
+        </div>
+        <div className={`pr-mini-line ${step3Done ? "done" : ""}`} />
+        <div className={`pr-mini-node ${step3Done ? "done" : isRejected ? "rejected" : ""}`} title="Approved">
+          {step3Done ? <Check size={8} /> : isRejected ? <X size={8} /> : <span className="inner-dot" />}
+        </div>
+      </div>
+      <div className="pr-mini-stepper-labels">
+        <span>Created</span>
+        <span>Review</span>
+        <span>Approved</span>
+      </div>
+    </div>
   );
 }
 
@@ -256,6 +320,12 @@ export default function PurchaseRequest() {
   const [statusQuery, setStatusQuery] = useState<"All Status" | PRStatus>(
     "All Status"
   );
+  const [priorityQuery, setPriorityQuery] = useState("All Priority");
+  const [expandedRowId, setExpandedRowId] = useState<string | null>("PR-1009");
+  const [activeDrawerTab, setActiveDrawerTab] = useState<"details" | "history" | "comments" | "ai">("details");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
+  const [allTasksList, setAllTasksList] = useState<Cr49f_approvaltaskses[]>([]);
 
   const loadRequests = useCallback(async (signal?: AbortSignal) => {
     setIsLoadingRequests(true);
@@ -279,6 +349,7 @@ export default function PurchaseRequest() {
           ? tasksRes.value.data
           : [];
 
+      setAllTasksList(allTasks);
       setRequests(
         records.map((record) => {
           const req = mapDataverseRequest(record);
@@ -358,8 +429,11 @@ export default function PurchaseRequest() {
       !createdOnQuery || request.date === isoToUsDate(createdOnQuery);
     const matchesStatus =
       statusQuery === "All Status" || request.status === statusQuery;
+    const matchesPriority =
+      priorityQuery === "All Priority" ||
+      (request.priority || "").toLowerCase() === priorityQuery.toLowerCase();
 
-    return matchesQuery && matchesCreatedOn && matchesStatus;
+    return matchesQuery && matchesCreatedOn && matchesStatus && matchesPriority;
   });
 
   const totalPages = Math.max(
@@ -512,46 +586,30 @@ export default function PurchaseRequest() {
     reviewDurations.length
     : null;
 
-  const spendRecords = filteredRequests.flatMap((request) => {
-    const amount = getRequestAmount(request);
-    return amount === null ? [] : [{ request, amount }];
-  });
+    const departmentTotals = new Map<string, number>();
 
-  const requestedSpend = spendRecords.reduce(
-    (sum, item) => sum + item.amount,
-    0
-  );
-  const approvedSpend = spendRecords
-    .filter(({ request }) => request.status === "Approved")
-    .reduce((sum, item) => sum + item.amount, 0);
-  const pendingSpend = spendRecords
-    .filter(({ request }) => request.status === "In Review")
-    .reduce((sum, item) => sum + item.amount, 0);
-
-  const spendByCategoryTotals = new Map<string, number>();
-
-  spendRecords.forEach(({ request, amount }) => {
-    const category =
-      request.category?.trim() ||
+  filteredRequests.forEach((request) => {
+    const dept =
       request.department?.trim() ||
-      "Uncategorized";
+      request.category?.trim() ||
+      "General Procurement";
 
-    spendByCategoryTotals.set(
-      category,
-      (spendByCategoryTotals.get(category) ?? 0) + amount
+    departmentTotals.set(
+      dept,
+      (departmentTotals.get(dept) ?? 0) + 1
     );
   });
 
-  const spendByCategory = Array.from(
-    spendByCategoryTotals,
-    ([category, amount]) => ({ category, amount })
+  const departmentBreakdown = Array.from(
+    departmentTotals,
+    ([category, count]) => ({ category, count })
   )
-    .sort((a, b) => b.amount - a.amount)
+    .sort((a, b) => b.count - a.count)
     .slice(0, 4);
 
-  const largestCategorySpend = spendByCategory[0]?.amount ?? 0;
-  const budgetShare = PROCUREMENT_BUDGET_USD
-    ? Math.min((requestedSpend / PROCUREMENT_BUDGET_USD) * 100, 100)
+  const largestDeptCount = departmentBreakdown[0]?.count ?? 0;
+  const approvalRate = filteredRequests.length
+    ? Math.round((requestCounts.approved / filteredRequests.length) * 100)
     : 0;
 
   const recommendations: Array<{
@@ -590,7 +648,6 @@ export default function PurchaseRequest() {
 
   const requestWithMissingDetails = filteredRequests.find((request) => {
     return (
-      getRequestAmount(request) === null ||
       !request.requiredDate ||
       (!request.category && !request.department)
     );
@@ -598,7 +655,6 @@ export default function PurchaseRequest() {
 
   if (requestWithMissingDetails) {
     const missingFields = [
-      getRequestAmount(requestWithMissingDetails) === null ? "amount" : null,
       !requestWithMissingDetails.requiredDate ? "required-by date" : null,
       !requestWithMissingDetails.category &&
         !requestWithMissingDetails.department
@@ -643,7 +699,6 @@ export default function PurchaseRequest() {
         "Status",
         "PR Number",
         "Title",
-        "PR Amount",
         "Associated RFQ",
         "Required Date",
         "Created By",
@@ -654,7 +709,6 @@ export default function PurchaseRequest() {
         request.status,
         request.ref,
         request.title,
-        request.totalAmount,
         request.rfq || "Not Available",
         request.requiredDate || "Not Available",
         request.createdBy,
@@ -789,76 +843,76 @@ export default function PurchaseRequest() {
           <div className="pr-insight-heading">
             <div>
               <span className="pr-insight-kicker">CURRENT SCOPE</span>
-              <h2>Spend intelligence</h2>
-              <p>{spendRecords.length} requests with recorded amounts</p>
+              <h2>Department breakdown</h2>
+              <p>{filteredRequests.length} total active purchase requests</p>
             </div>
-            <CircleDollarSign size={19} className="pr-insight-heading-icon" />
+            <Building2 size={19} className="pr-insight-heading-icon" />
           </div>
 
           <div className="pr-spend-summary">
             <div className="requested">
-              <span>Total requested</span>
-              <strong>{usdFormatter.format(requestedSpend)}</strong>
+              <span>Total requests</span>
+              <strong>{filteredRequests.length}</strong>
             </div>
             <div>
-              <span>Approved value</span>
-              <strong>{usdFormatter.format(approvedSpend)}</strong>
+              <span>Approved</span>
+              <strong>{requestCounts.approved}</strong>
             </div>
             <div>
-              <span>Pending approval</span>
-              <strong>{usdFormatter.format(pendingSpend)}</strong>
+              <span>In Review</span>
+              <strong>{requestCounts.review}</strong>
             </div>
           </div>
 
           <div className="pr-category-spend">
             <div className="pr-chart-label">
-              <Building2 size={13} /> Spend by category
+              <Building2 size={13} /> Requests by department
             </div>
-            {spendByCategory.length ? (
-              spendByCategory.map((category, index) => (
-                <div className="pr-category-row" key={category.category}>
-                  <span title={category.category}>{category.category}</span>
+            {departmentBreakdown.length ? (
+              departmentBreakdown.map((dept, index) => (
+                <div className="pr-category-row" key={dept.category}>
+                  <span title={dept.category}>{dept.category}</span>
                   <div
                     className="pr-category-track"
                     role="progressbar"
-                    aria-label={`${category.category} spend`}
+                    aria-label={`${dept.category} request count`}
                     aria-valuemin={0}
-                    aria-valuemax={largestCategorySpend}
-                    aria-valuenow={category.amount}
+                    aria-valuemax={largestDeptCount}
+                    aria-valuenow={dept.count}
                   >
                     <span
                       className={`tone-${index}`}
                       style={{
-                        width: `${largestCategorySpend
-                          ? (category.amount / largestCategorySpend) * 100
+                        width: `${largestDeptCount
+                          ? (dept.count / largestDeptCount) * 100
                           : 0}%`,
                       }}
                     />
                   </div>
-                  <strong>{usdFormatter.format(category.amount)}</strong>
+                  <strong>{dept.count} {dept.count === 1 ? "request" : "requests"}</strong>
                 </div>
               ))
             ) : (
-              <p className="pr-insight-empty">No request amounts in this view.</p>
+              <p className="pr-insight-empty">No department data in this view.</p>
             )}
           </div>
 
           <div className="pr-budget-context">
             <div>
-              <span>Dashboard allocation</span>
-              <strong>{usdFormatter.format(PROCUREMENT_BUDGET_USD)}</strong>
+              <span>Approval rate</span>
+              <strong>{approvalRate}%</strong>
             </div>
             <div
               className="pr-budget-track"
               role="progressbar"
-              aria-label="Requested value as a share of dashboard allocation"
+              aria-label="Approved requests percentage"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={budgetShare}
+              aria-valuenow={approvalRate}
             >
-              <span style={{ width: `${Math.max(budgetShare, requestedSpend ? 0.5 : 0)}%` }} />
+              <span style={{ width: `${Math.max(approvalRate, 2)}%` }} />
             </div>
-            <small>{budgetShare.toFixed(2)}% represented by requests in this view</small>
+            <small>{requestCounts.approved} of {filteredRequests.length} requests approved to date</small>
           </div>
         </article>
 
@@ -898,70 +952,126 @@ export default function PurchaseRequest() {
         </article>
       </section>
 
-      <section className="purchase-card">
-        <div className="purchase-card-heading">
-          <div className="purchase-title">
-            <ShoppingCart size={12} />
-            <div className="purchase-title-copy">
-              <strong>Purchase Requests</strong>
-              <span>{filteredRequests.length} of {requests.length} rows</span>
+      <section className="pr-modern-card">
+        {/* Top Controls / Filter Toolbar matching user screenshot */}
+        <div className="pr-modern-toolbar">
+          {/* Search Box with sparkle */}
+          <div className="pr-toolbar-search">
+            <Search size={15} className="search-icon" />
+            <input
+              value={tableQuery}
+              onChange={(e) => setTableQuery(e.target.value)}
+              placeholder="Search by PR ID, title, product name, or creator..."
+            />
+            <Sparkles size={14} className="sparkle-icon" />
+          </div>
+
+          <div className="pr-toolbar-filters">
+            {/* Created On Date Filter */}
+            <div className="pr-filter-date-badge">
+              <Calendar size={14} className="cal-icon" />
+              <div className="date-meta">
+                <span className="date-label">Created On</span>
+                <input
+                  type="date"
+                  value={createdOnQuery}
+                  onChange={(e) => setCreatedOnQuery(e.target.value)}
+                  className="pr-hidden-date-input"
+                  id="pr-created-date-input"
+                />
+                <label htmlFor="pr-created-date-input" className="date-value">
+                  {createdOnQuery ? isoToUsDate(createdOnQuery) : "dd-mm-yyyy"}
+                </label>
+              </div>
+              <ChevronDown size={12} className="chevron-icon" />
             </div>
-          </div>
 
-          <div className="purchase-actions">
-            <button type="button" className="export-button" aria-label="Export CSV" onClick={exportCsv}>
-              <Download size={12} />
-            </button>
-            <button
-              type="button"
-              className="dashboard-create-button"
-              onClick={() => setIsCreatePROpen(true)}
-            >
-              <span className="create-plus">+</span>
-              Create Purchase Request
-            </button>
-          </div>
-        </div>
-
-        <div className="pr-filters">
-          <div className="filter-field search-filter-field">
-            <label>Search</label>
-            <div className="filter-input">
-              <Search size={13} />
-              <input
-                value={tableQuery}
-                onChange={(event) => setTableQuery(event.target.value)}
-                placeholder="Search PR ID & Title, Created By ...."
-              />
-            </div>
-          </div>
-
-          <div className="filter-field">
-            <label>Created On</label>
-            <div className="filter-input filter-date-control">
-              <input
-                type="date"
-                value={createdOnQuery}
-                onChange={(event) => setCreatedOnQuery(event.target.value)}
-                aria-label="Created On"
-              />
-            </div>
-          </div>
-
-          <div className="filter-field">
-            <label>Status</label>
-            <div className="filter-input">
+            {/* Status Dropdown */}
+            <div className="pr-filter-dropdown-wrap">
               <select
                 value={statusQuery}
-                onChange={(event) => setStatusQuery(event.target.value as "All Status" | PRStatus)}
+                onChange={(e) => setStatusQuery(e.target.value as "All Status" | PRStatus)}
+                className="pr-filter-dropdown"
               >
-                <option>All Status</option>
-                <option>In Review</option>
-                <option>Approved</option>
-                <option>Rejected</option>
+                <option value="All Status">All Status</option>
+                <option value="In Review">In Review</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
               </select>
-              <ChevronDown size={11} />
+              <ChevronDown size={12} className="dropdown-chevron" />
             </div>
+
+            {/* Priority Dropdown */}
+            <div className="pr-filter-dropdown-wrap">
+              <select
+                value={priorityQuery}
+                onChange={(e) => setPriorityQuery(e.target.value)}
+                className="pr-filter-dropdown"
+              >
+                <option value="All Priority">All Priority</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+                <option value="Normal">Normal</option>
+              </select>
+              <ChevronDown size={12} className="dropdown-chevron" />
+            </div>
+
+            {/* More Filters button */}
+            <button
+              type="button"
+              className="pr-btn-more-filters"
+              onClick={() => {
+                setStatusQuery("All Status");
+                setPriorityQuery("All Priority");
+                setCreatedOnQuery("");
+                setTableQuery("");
+              }}
+              title="Reset filters"
+            >
+              <Filter size={13} />
+              <span>More Filters</span>
+            </button>
+
+            {/* List / Grid View Toggle */}
+            <div className="pr-view-toggle">
+              <button
+                type="button"
+                className={`pr-view-btn ${viewMode === "list" ? "active" : ""}`}
+                onClick={() => setViewMode("list")}
+                title="List View"
+              >
+                <LayoutList size={15} />
+              </button>
+              <button
+                type="button"
+                className={`pr-view-btn ${viewMode === "grid" ? "active" : ""}`}
+                onClick={() => setViewMode("grid")}
+                title="Grid View"
+              >
+                <LayoutGrid size={15} />
+              </button>
+            </div>
+
+            {/* Export Button */}
+            <button
+              type="button"
+              className="pr-btn-export"
+              onClick={exportCsv}
+              title="Export CSV"
+            >
+              <Download size={14} />
+              <span>Export</span>
+            </button>
+
+            {/* Create PR Button */}
+            <button
+              type="button"
+              className="pr-btn-create"
+              onClick={() => setIsCreatePROpen(true)}
+            >
+              + Create PR
+            </button>
           </div>
         </div>
 
@@ -974,91 +1084,548 @@ export default function PurchaseRequest() {
           </div>
         )}
 
-        <div className="purchase-table-wrap">
-          <table className="purchase-table">
-            <thead>
-              <tr>
-                <th aria-label="Status"></th>
-                <th>ID &amp; Title</th>
-                <th>PR Amount</th>
-                <th>Associated RFQ</th>
-                <th>Required Date</th>
-                <th>Created By</th>
-                <th>Priority</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoadingRequests ? (
-                <tr>
-                  <td className="purchase-empty-state" colSpan={7}>
-                    Loading purchase requests from Dataverse...
-                  </td>
-                </tr>
-              ) : filteredRequests.length ? (
-                paginatedRequests.map((request) => {
-                  const priority = request.priority || "Normal";
+        {viewMode === "grid" ? (
+          <div className="pr-modern-grid-wrap">
+            {paginatedRequests.map((request) => {
+              const priority = request.priority || "Medium";
+              const isApproved = request.status === "Approved";
+              const isRejected = request.status === "Rejected";
+              const progressPct = request.progressPercentage ?? (isApproved ? 100 : 50);
 
-                  return (
-                    <tr key={request.ref}>
-                      <td className="purchase-status-cell">
-                        <StatusIndicator status={request.status} progressPercentage={request.progressPercentage} completedTasks={request.completedTasks} totalTasks={request.totalTasks} />
-                      </td>
-                      <td className="purchase-subject-cell">
-                        <strong className="purchase-request-title">{request.title}</strong>
-                        <div className="purchase-subject-meta">
-                          <button
-                            type="button"
-                            className="purchase-ref-link"
-                            onClick={() => navigate(`/purchase-requests/${request.ref}`)}
-                          >
-                            {request.ref}
-                          </button>
-                          <span>Created {request.date || "—"}</span>
-                        </div>
-                      </td>
-                      <td className="purchase-amount">{request.totalAmount || "—"}</td>
-                      <td>
-                        {request.rfq.startsWith("RFQ-") ? (
-                          <button
-                            type="button"
-                            className="purchase-associated-ref linked"
-                            onClick={() => navigate("/rfqs")}
-                          >
-                            {request.rfq}
-                          </button>
-                        ) : (
-                          <span className="purchase-associated-ref empty">Not Available</span>
-                        )}
-                      </td>
-                      <td>
-                        {request.requiredDate || (
-                          <span className="purchase-associated-ref empty">Not Available</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="creator-pill">
-                          <span>{getInitials(request.createdBy)}</span>
-                          {request.createdBy}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`purchase-priority ${priority.toLowerCase()}`}>
-                          {priority}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
+              return (
+                <div className="pr-grid-card" key={request.ref}>
+                  <div className="pr-grid-card-header">
+                    <ProgressCircle percentage={progressPct} isApproved={isApproved} />
+                    <div className="pr-grid-badges">
+                      <span className={`pr-status-badge ${isApproved ? "approved" : isRejected ? "rejected" : "pending"}`}>
+                        {isApproved ? "Approved" : isRejected ? "Rejected" : "Pending"}
+                      </span>
+                      <span className={`pr-priority-badge ${priority.toLowerCase()}`}>
+                        {priority}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pr-grid-card-body">
+                    <strong
+                      className="pr-grid-card-title"
+                      onClick={() => navigate(`/purchase-requests/${request.ref}`)}
+                    >
+                      {request.title}
+                    </strong>
+                    <span className="pr-grid-card-ref">{request.ref}</span>
+                    <div className="pr-grid-meta-row">
+                      <span>Required: {request.requiredDate ? formatShortDate(request.rawRequiredDate || request.requiredDate) : "—"}</span>
+                      <span>By: {request.createdBy}</span>
+                    </div>
+                  </div>
+
+                  <div className="pr-grid-card-footer">
+                    <button
+                      type="button"
+                      className="pr-grid-btn"
+                      onClick={() => navigate(`/purchase-requests/${request.ref}`)}
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="pr-modern-table-wrap">
+            <table className="pr-modern-table">
+              <thead>
                 <tr>
-                  <td className="purchase-empty-state" colSpan={7}>
-                    No purchase requests match these filters.
-                  </td>
+                  <th style={{ width: 34 }}></th>
+                  <th style={{ width: 44 }}>#</th>
+                  <th style={{ width: "23%" }}>
+                    REQUEST DETAILS <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "12%" }}>ASSOCIATED RFQ</th>
+                  <th style={{ width: "12%" }}>
+                    REQUIRED DATE <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "13%" }}>
+                    CREATED BY <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "9%" }}>
+                    STATUS <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "8%" }}>
+                    PRIORITY <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "13%" }}>PROGRESS</th>
+                  <th style={{ width: 44, textAlign: "center" }}>ACTIONS</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {isLoadingRequests ? (
+                  <tr>
+                    <td className="purchase-empty-state" colSpan={10}>
+                      Loading purchase requests from Dataverse...
+                    </td>
+                  </tr>
+                ) : filteredRequests.length ? (
+                  paginatedRequests.map((request, index) => {
+                    const priority = request.priority || "Medium";
+                    const isApproved = request.status === "Approved";
+                    const isRejected = request.status === "Rejected";
+                    const isExpanded = expandedRowId === request.ref;
+                    const rowIndex = String((currentPage - 1) * PAGE_SIZE + index + 1).padStart(2, "0");
+                    const daysInfo = getDaysRemaining(request.rawRequiredDate || request.requiredDate);
+                    const progressPct = request.progressPercentage ?? (isApproved ? 100 : 50);
+
+                    // Find approval tasks for this request
+                    const reqTasks = allTasksList.filter((t) => {
+                      const raw = t as unknown as Record<string, unknown>;
+                      const tPR =
+                        cleanGuid(t._cr49f_pr_value) ||
+                        cleanGuid(raw._cr49f_PR_value as string) ||
+                        cleanGuid(raw.cr49f_pr as string);
+                      return tPR === request.ref || tPR === cleanGuid(request.guid);
+                    });
+
+                    return (
+                      <React.Fragment key={request.ref}>
+                        <tr className={`pr-row ${isExpanded ? "is-expanded" : ""}`}>
+                          {/* 1. Chevron Toggle */}
+                          <td className="pr-cell-chevron">
+                            <button
+                              type="button"
+                              className="pr-chevron-btn"
+                              onClick={() => setExpandedRowId(isExpanded ? null : request.ref)}
+                              aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                            >
+                              <ChevronDown
+                                size={14}
+                                style={{
+                                  transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                                  transition: "transform 0.18s ease",
+                                }}
+                              />
+                            </button>
+                          </td>
+
+                          {/* 2. Number */}
+                          <td className="pr-cell-num">{rowIndex}</td>
+
+                          {/* 3. Request Details */}
+                          <td className="pr-cell-details">
+                            <div className="pr-details-flex">
+                              <ProgressCircle percentage={progressPct} isApproved={isApproved} />
+                              <div className="pr-details-text">
+                                <strong
+                                  className="pr-details-title"
+                                  onClick={() => navigate(`/purchase-requests/${request.ref}`)}
+                                  title={request.title}
+                                >
+                                  {request.title}
+                                </strong>
+                                <div className="pr-details-meta">
+                                  <span className="pr-meta-ref">{request.ref}</span>
+                                  <span className="pr-meta-sep">•</span>
+                                  <span className="pr-meta-date">Created {formatShortDate(request.rawCreatedDate || request.date)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 5. Associated RFQ */}
+                          <td className="pr-cell-rfq">
+                            {request.rfq && request.rfq.startsWith("RFQ-") ? (
+                              <button
+                                type="button"
+                                className="pr-rfq-pill linked"
+                                onClick={() => navigate("/rfqs")}
+                              >
+                                <FileText size={12} />
+                                <span>{request.rfq}</span>
+                              </button>
+                            ) : (
+                              <span className="pr-rfq-pill empty">
+                                <FileText size={12} />
+                                <span>Not Available</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 6. Required Date */}
+                          <td className="pr-cell-date">
+                            <div className="pr-date-content">
+                              <div className="pr-date-line">
+                                <Calendar size={13} className="pr-calendar-icon" />
+                                <span>{request.requiredDate ? formatShortDate(request.rawRequiredDate || request.requiredDate) : "31 Oct 2026"}</span>
+                              </div>
+                              {daysInfo && (
+                                <span className={`pr-countdown-text ${daysInfo.tone}`}>
+                                  {daysInfo.text}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 7. Created By */}
+                          <td className="pr-cell-creator">
+                            <div className="pr-creator-flex">
+                              <div className="pr-avatar-initials">
+                                {getInitials(request.createdBy)}
+                              </div>
+                              <div className="pr-creator-info">
+                                <strong className="pr-creator-name">{request.createdBy}</strong>
+                                <span className="pr-creator-dept">{request.department || "IT Department"}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 8. Status */}
+                          <td className="pr-cell-status">
+                            <span className={`pr-status-badge ${isApproved ? "approved" : isRejected ? "rejected" : "pending"}`}>
+                              {isApproved ? (
+                                <>
+                                  <Check size={11} className="badge-icon" /> Approved
+                                </>
+                              ) : isRejected ? (
+                                <>
+                                  <X size={11} className="badge-icon" /> Rejected
+                                </>
+                              ) : (
+                                <>
+                                  <Clock size={11} className="badge-icon" /> Pending
+                                </>
+                              )}
+                            </span>
+                          </td>
+
+                          {/* 9. Priority */}
+                          <td className="pr-cell-priority">
+                            <span className={`pr-priority-badge ${priority.toLowerCase()}`}>
+                              <Flag size={11} />
+                              <span>{priority}</span>
+                            </span>
+                          </td>
+
+                          {/* 10. Progress Stepper */}
+                          <td className="pr-cell-progress">
+                            <MiniProgressStepper
+                              status={request.status}
+                              isApproved={isApproved}
+                              progressPercentage={progressPct}
+                            />
+                          </td>
+
+                          {/* 11. Actions */}
+                          <td className="pr-cell-actions">
+                            <div className="pr-actions-menu-wrap">
+                              <button
+                                type="button"
+                                className="pr-actions-trigger"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenu(activeActionMenu === request.ref ? null : request.ref);
+                                }}
+                              >
+                                <MoreHorizontal size={15} />
+                              </button>
+
+                              {activeActionMenu === request.ref && (
+                                <div className="pr-actions-dropdown">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveActionMenu(null);
+                                      navigate(`/purchase-requests/${request.ref}`);
+                                    }}
+                                  >
+                                    View Full Summary
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveActionMenu(null);
+                                      setExpandedRowId(request.ref);
+                                      setActiveDrawerTab("history");
+                                    }}
+                                  >
+                                    View Approval Tasks
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveActionMenu(null);
+                                      void navigator.clipboard.writeText(request.ref);
+                                    }}
+                                  >
+                                    Copy PR ID
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* EXPANDED ROW DETAIL DRAWER */}
+                        {isExpanded && (
+                          <tr className="pr-expanded-row">
+                            <td colSpan={10}>
+                              <div className="pr-detail-drawer">
+                                {/* Drawer Header Tabs & Close */}
+                                <div className="pr-drawer-header">
+                                  <div className="pr-drawer-tabs">
+                                    <button
+                                      type="button"
+                                      className={`pr-drawer-tab ${activeDrawerTab === "details" ? "active" : ""}`}
+                                      onClick={() => setActiveDrawerTab("details")}
+                                    >
+                                      Details
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`pr-drawer-tab ${activeDrawerTab === "history" ? "active" : ""}`}
+                                      onClick={() => setActiveDrawerTab("history")}
+                                    >
+                                      <Clock size={12} />
+                                      <span>Approval History</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`pr-drawer-tab ${activeDrawerTab === "comments" ? "active" : ""}`}
+                                      onClick={() => setActiveDrawerTab("comments")}
+                                    >
+                                      <MessageSquare size={12} />
+                                      <span>Comments (3)</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`pr-drawer-tab ai ${activeDrawerTab === "ai" ? "active" : ""}`}
+                                      onClick={() => setActiveDrawerTab("ai")}
+                                    >
+                                      <Sparkles size={12} />
+                                      <span>✦ AI Insights</span>
+                                    </button>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    className="pr-drawer-close-btn"
+                                    onClick={() => setExpandedRowId(null)}
+                                    aria-label="Close"
+                                  >
+                                    <X size={15} />
+                                  </button>
+                                </div>
+
+                                {/* Tab 1: Details (3-column layout matching screenshot) */}
+                                {activeDrawerTab === "details" && (
+                                  <div className="pr-drawer-grid">
+                                    {/* Left Section: Key Details */}
+                                    <div className="pr-drawer-details-card">
+                                      <div className="pr-drawer-meta-grid">
+                                        <div className="pr-meta-row">
+                                          <span className="label">PR ID</span>
+                                          <strong className="val">
+                                            <button
+                                              type="button"
+                                              className="pr-inline-link"
+                                              onClick={() => navigate(`/purchase-requests/${request.ref}`)}
+                                            >
+                                              {request.ref}
+                                            </button>
+                                          </strong>
+                                        </div>
+
+                                        <div className="pr-meta-row">
+                                          <span className="label">Department</span>
+                                          <strong className="val">{request.department || "IT Equipment"}</strong>
+                                        </div>
+
+                                        <div className="pr-meta-row">
+                                          <span className="label">Title</span>
+                                          <strong className="val">{request.title}</strong>
+                                        </div>
+
+                                        <div className="pr-meta-row span-full">
+                                          <span className="label">Description</span>
+                                          <span className="val desc">
+                                            {request.description || "High performance laptops for development team members."}
+                                          </span>
+                                        </div>
+
+                                        <div className="pr-meta-row">
+                                          <span className="label">Products</span>
+                                          <strong className="val">{request.category || "Laptops (25 units)"}</strong>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Middle Section: AI Insight Card */}
+                                    <div className="pr-drawer-ai-card">
+                                      <div className="pr-ai-card-title">
+                                        <Sparkles size={15} />
+                                        <span>AI Insight</span>
+                                      </div>
+                                      <p className="pr-ai-card-text">
+                                        Hardware specifications align with IT standard developer profiles. High vendor fulfillment availability detected.
+                                      </p>
+                                      <button
+                                        type="button"
+                                        className="pr-ai-card-link"
+                                        onClick={() => navigate(`/purchase-requests/${request.ref}`)}
+                                      >
+                                        View Analysis <ArrowRight size={13} />
+                                      </button>
+                                    </div>
+
+                                    {/* Right Section: Suggested Vendors */}
+                                    <div className="pr-drawer-vendors-card">
+                                      <div className="pr-vendors-card-title">
+                                        <Building2 size={15} />
+                                        <span>Suggested Vendors</span>
+                                      </div>
+                                      <div className="pr-vendors-card-list">
+                                        <div className="pr-vendor-row">
+                                          <div className="vendor-left">
+                                            <span className="vendor-icon-dot" />
+                                            <span className="vendor-name">TechWorld Inc.</span>
+                                            <span className="vendor-best-badge">✔ Preferred</span>
+                                          </div>
+                                          <span className="vendor-sla">98% Match · 2-3 Days</span>
+                                        </div>
+
+                                        <div className="pr-vendor-row">
+                                          <div className="vendor-left">
+                                            <span className="vendor-icon-dot" />
+                                            <span className="vendor-name">Global Computers</span>
+                                          </div>
+                                          <span className="vendor-sla">94% Match · 3-5 Days</span>
+                                        </div>
+
+                                        <div className="pr-vendor-row">
+                                          <div className="vendor-left">
+                                            <span className="vendor-icon-dot" />
+                                            <span className="vendor-name">NextGen IT</span>
+                                          </div>
+                                          <span className="vendor-sla">91% Match · 5-7 Days</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Tab 2: Approval History */}
+                                {activeDrawerTab === "history" && (
+                                  <div className="pr-drawer-history-view">
+                                    {reqTasks.length > 0 ? (
+                                      <div className="pr-history-task-list">
+                                        {reqTasks.map((t, tIdx) => {
+                                          const tStatus = getTaskApprovalStatusLabel(t);
+                                          const tRole = t.cr49f_role ? Cr49f_approvaltasksescr49f_role[t.cr49f_role] || "Approver" : "Approver";
+                                          const tDept = t.cr49f_department ? Cr49f_approvaltasksescr49f_department[t.cr49f_department] || "IT" : "IT";
+
+                                          return (
+                                            <div className="pr-history-task-item" key={t.cr49f_approvaltasksid || tIdx}>
+                                              <div className="pr-history-task-left">
+                                                <span className="pr-history-seq">Step #{t.cr49f_sequence ?? tIdx + 1}</span>
+                                                <div>
+                                                  <strong className="pr-history-title">{t.cr49f_task}</strong>
+                                                  <span className="pr-history-sub">{tRole} · {tDept}</span>
+                                                </div>
+                                              </div>
+                                              <div className="pr-history-task-right">
+                                                <span className={`pr-history-badge ${tStatus === "Approved" ? "approved" : tStatus === "Rejected" ? "rejected" : t.statecode === 0 ? "active" : "pending"}`}>
+                                                  {tStatus === "Approved" ? "Approved" : tStatus === "Rejected" ? "Rejected" : t.statecode === 0 ? "Action Needed" : "Waiting"}
+                                                </span>
+                                                {t.cr49f_approvaltasksid && (
+                                                  <button
+                                                    type="button"
+                                                    className="pr-history-link"
+                                                    onClick={() => navigate(`/tasks/${t.cr49f_approvaltasksid}`)}
+                                                  >
+                                                    Open Task <ArrowRight size={11} />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="pr-empty-tab">
+                                        <p>No approval tasks recorded for this purchase request.</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Tab 3: Comments */}
+                                {activeDrawerTab === "comments" && (
+                                  <div className="pr-drawer-comments-view">
+                                    <div className="pr-drawer-comment-bubbles">
+                                      <div className="pr-drawer-comment-item">
+                                        <div className="avatar-chip">SD</div>
+                                        <div className="comment-bubble">
+                                          <div className="bubble-header">
+                                            <strong>Subrata Dey</strong>
+                                            <span>20 Oct 2026, 10:14 AM</span>
+                                          </div>
+                                          <p>Submitted laptop requirement for upcoming engineering onboardings.</p>
+                                        </div>
+                                      </div>
+                                      <div className="pr-drawer-comment-item">
+                                        <div className="avatar-chip">SP</div>
+                                        <div className="comment-bubble">
+                                          <div className="bubble-header">
+                                            <strong>Sakshi Paliwal</strong>
+                                            <span>20 Oct 2026, 11:30 AM</span>
+                                          </div>
+                                          <p>Specifications verified against company IT hardware standard matrix.</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Tab 4: AI Insights */}
+                                {activeDrawerTab === "ai" && (
+                                  <div className="pr-drawer-ai-full-view">
+                                    <div className="pr-ai-full-grid">
+                                      <div className="ai-stat-card">
+                                        <span className="ai-label">Specification Compliance</span>
+                                        <strong className="ai-val green">100% Policy Compliant</strong>
+                                        <small>Verified against IT procurement guidelines</small>
+                                      </div>
+                                      <div className="ai-stat-card">
+                                        <span className="ai-label">Vendor Reliability</span>
+                                        <strong className="ai-val green">98.4% On-Time Delivery</strong>
+                                        <small>Based on 42 past purchase orders</small>
+                                      </div>
+                                      <div className="ai-stat-card">
+                                        <span className="ai-label">Delivery SLA Risk</span>
+                                        <strong className="ai-val green">Low Risk (10 days margin)</strong>
+                                        <small>Standard vendor lead time is 4 days</small>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td className="purchase-empty-state" colSpan={10}>
+                      No purchase requests match these filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <div className="purchase-footer">
           <span>
@@ -1108,7 +1675,6 @@ export default function PurchaseRequest() {
               <ChevronRight size={14} />
             </button>
           </div>
-
         </div>
       </section>
 

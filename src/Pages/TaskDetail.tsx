@@ -5,9 +5,9 @@ import {
   Check,
   ClipboardList,
   Clock,
-  Coins,
   ExternalLink,
   FileText,
+  Flag,
   List,
   Loader2,
   Send,
@@ -44,12 +44,6 @@ import {
   getApprovalTasksForRecord,
 } from "../Services/ApprovalWorkflowService";
 import "../Styles/TaskDetail.css";
-
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
 
 function toUsDate(value?: string | null): string {
   if (!value) return "—";
@@ -354,13 +348,6 @@ function ModernDataverseTaskDetail({
     ? parentRFQ?.cr49f_rfqtitle || "Request for Quotation"
     : task.cr49f_task || "Approval Task";
 
-  const rawRfq = parentRFQ as unknown as Record<string, unknown> | null;
-  const totalAmount = isPr && parentPR?.cr49f_totalamount
-    ? currencyFormatter.format(Number(parentPR.cr49f_totalamount))
-    : rawRfq?.cr49f_totalamount || rawRfq?.cr49f_estimatedbudget
-    ? currencyFormatter.format(Number(rawRfq.cr49f_totalamount || rawRfq.cr49f_estimatedbudget))
-    : "—";
-
   const requesterName = isPr
     ? parentPR?.createdbyname || "Sakshi Paliwal"
     : isRfq
@@ -391,13 +378,6 @@ function ModernDataverseTaskDetail({
 
   // Stepper steps from siblingTasks
   const displaySteps = siblingTasks.length > 0 ? siblingTasks : [task];
-
-  // Calculate items sum
-  const itemsTotalSum = lineItems.reduce((sum, item) => {
-    const qty = Number(item.cr49f_quantity) || 1;
-    const price = Number(item.cr49f_unitprice) || 0;
-    return sum + qty * price;
-  }, 0);
 
   return (
     <section className="task-page-container">
@@ -632,7 +612,7 @@ function ModernDataverseTaskDetail({
                 </div>
                 <div className="task-card-header-titles">
                   <h2>Request Overview</h2>
-                  <p>Procurement details and recorded amount</p>
+                  <p>Procurement request details and specifications</p>
                 </div>
               </div>
             </div>
@@ -640,11 +620,11 @@ function ModernDataverseTaskDetail({
             <div className="task-metrics-grid">
               <div className="task-metric-tile highlight">
                 <div className="task-metric-icon violet">
-                  <Coins size={17} />
+                  <Flag size={17} />
                 </div>
                 <div className="task-metric-info">
-                  <span className="task-metric-label">Total Amount</span>
-                  <strong className="task-metric-value large">{totalAmount}</strong>
+                  <span className="task-metric-label">Priority Tier</span>
+                  <strong className="task-metric-value large">{priorityLabel}</strong>
                 </div>
               </div>
 
@@ -716,15 +696,11 @@ function ModernDataverseTaskDetail({
                     <th style={{ width: 44 }}>#</th>
                     <th>Item Name</th>
                     <th>Specification / Description</th>
-                    <th style={{ width: 140 }}>Total Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lineItems.length > 0 ? (
                     lineItems.map((item, index) => {
-                      const qty = Number(item.cr49f_quantity) || 1;
-                      const price = Number(item.cr49f_unitprice) || 0;
-                      const lineTotal = qty * price;
                       return (
                         <tr key={item.cr49f_purchaserequestlineid || index}>
                           <td><strong>{index + 1}</strong></td>
@@ -736,11 +712,6 @@ function ModernDataverseTaskDetail({
                           <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
                             {item.cr49f_itemdescription || "—"}
                           </td>
-                          <td>
-                            <strong style={{ color: "var(--primary-hex, #2563eb)" }}>
-                              {lineTotal > 0 ? currencyFormatter.format(lineTotal) : totalAmount}
-                            </strong>
-                          </td>
                         </tr>
                       );
                     })
@@ -749,7 +720,6 @@ function ModernDataverseTaskDetail({
                       <td>1</td>
                       <td><strong>{recordTitle}</strong></td>
                       <td>Procurement equipment / services</td>
-                      <td><strong style={{ color: "var(--primary-hex, #2563eb)" }}>{totalAmount}</strong></td>
                     </tr>
                   )}
                 </tbody>
@@ -759,7 +729,7 @@ function ModernDataverseTaskDetail({
             <div className="task-table-footer">
               <span>Showing all requested items</span>
               <span>
-                Grand Total: <strong>{itemsTotalSum > 0 ? currencyFormatter.format(itemsTotalSum) : totalAmount}</strong>
+                Total Items: <strong>{lineItems.length > 0 ? lineItems.length : 1}</strong>
               </span>
             </div>
           </section>

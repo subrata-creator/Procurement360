@@ -43,7 +43,11 @@ export interface PurchaseRequestRecord {
   requiredDate?: string;
   totalAmount?: string;
   category?: string;
-  priority?: "Low" | "Normal" | "High" | "Urgent";
+  priority?: "Low" | "Normal" | "High" | "Urgent" | "Medium";
+  guid?: string;
+  description?: string;
+  rawCreatedDate?: string;
+  rawRequiredDate?: string;
   costCenter?: string;
   justification?: string;
   deliveryAddress?: string;

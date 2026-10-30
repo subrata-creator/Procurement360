@@ -7,7 +7,6 @@ import {
   ChevronUp,
   ClipboardList,
   Clock,
-  Coins,
   FileText,
   Flag,
   Loader2,
@@ -287,7 +286,7 @@ export default function PurchaseRequestDetail() {
           itemName: line.cr49f_itemname || line.cr49f_itemdescription || "Unnamed item",
           quantity,
           // Not modeled on cr49f_purchaserequestlines today:
-          previousContract: "USD -",
+          previousContract: "—",
           unitPrice: currencyFormatter.format(unitPrice),
           totalAmount: currencyFormatter.format(quantity * unitPrice),
           deliveryDate: "—",
@@ -465,7 +464,7 @@ export default function PurchaseRequestDetail() {
     : undefined;
   const aiSummary = [
     summaryItems ? `This request covers ${summaryItems}.` : record.title,
-    `${record.totalAmount ? `Recorded amount is ${record.totalAmount}. ` : "Amount is not recorded. "}${record.status === "In Review" ? "It is awaiting review." : `Current status is ${statusLabel.toLowerCase()}.`}`,
+    `${record.status === "In Review" ? "It is currently awaiting review." : `Current status is ${statusLabel.toLowerCase()}.`}`,
   ].join(" ");
 
   const isMilestoneCompleted = isPrCreationMilestone && approvalTasks.length > 0
@@ -1178,9 +1177,9 @@ export default function PurchaseRequestDetail() {
         {activeTab === "Summary" && (
           <>
             <section className="pr-summary-kpis" aria-label="Purchase request summary metrics">
-              <article className="pr-summary-kpi amount">
-                <span className="pr-summary-kpi-icon"><Coins size={15} /></span>
-                <span className="pr-summary-kpi-copy"><small>Request Amount</small><strong>{record.totalAmount || "Not recorded"}</strong></span>
+              <article className="pr-summary-kpi department">
+                <span className="pr-summary-kpi-icon"><Building2 size={15} /></span>
+                <span className="pr-summary-kpi-copy"><small>Department</small><strong>{record.department || "IT Department"}</strong></span>
               </article>
               <article className={`pr-summary-kpi ${statusPillClass(statusLabel)}`}>
                 <span className="pr-summary-kpi-icon"><ShieldCheck size={15} /></span>
@@ -1280,7 +1279,7 @@ export default function PurchaseRequestDetail() {
                 </div>
 
                 <div className="pr-detail-lineitems-heading">
-                  <Coins size={11} />
+                  <FileText size={11} />
                   Purchase Request Line Items ({lineItems.length})
                 </div>
 
@@ -1292,7 +1291,6 @@ export default function PurchaseRequestDetail() {
                         <th>Item Code</th>
                         <th>Item Name</th>
                         <th>Previous Contract</th>
-                        <th>Total Amount</th>
                         <th>Delivery Date</th>
                         <th>Delivery Address</th>
                       </tr>
@@ -1304,13 +1302,12 @@ export default function PurchaseRequestDetail() {
                           <td>{item.itemCode}</td>
                           <td>{item.itemName}</td>
                           <td>{item.previousContract}</td>
-                          <td>{item.totalAmount}</td>
                           <td>{item.deliveryDate}</td>
                           <td>{item.deliveryAddress}</td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={7}>No line items are linked to this purchase request.</td>
+                          <td colSpan={6}>No line items are linked to this purchase request.</td>
                         </tr>
                       )}
                     </tbody>
