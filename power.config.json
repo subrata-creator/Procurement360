@@ -76,6 +76,16 @@
           "entitySetName": "cr49f_approvaltaskses",
           "logicalName": "cr49f_approvaltasks",
           "isHidden": false
+        },
+        "selectedsuppliers": {
+          "entitySetName": "cr49f_selectedsupplierses",
+          "logicalName": "cr49f_selectedsuppliers",
+          "isHidden": false
+        },
+        "rfqresponselines": {
+          "entitySetName": "cr49f_rfqresponselines",
+          "logicalName": "cr49f_rfqresponseline",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

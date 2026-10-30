@@ -54,6 +54,20 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cr49f_rfqresponselines": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_rfqresponselineid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr49f_selectedsupplierses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_selectedsuppliersid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr49f_supplierproducts": {
     "tableId": "",
     "version": "",
