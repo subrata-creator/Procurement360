@@ -1394,15 +1394,9 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                     </div>
 
                     <div className="rfq-input-field">
-                      <div className="rfq-label-with-tag">
-                        <label htmlFor="purchaseRequest">
-                          Purchase Request <span className="rfq-required-star">*</span>
-                        </label>
-                        <span className="rfq-approved-badge">
-                          <CheckCircle2 size={11} />
-                          Approved Only
-                        </span>
-                      </div>
+                      <label htmlFor="purchaseRequest">
+                        Purchase Request <span className="rfq-required-star">*</span>
+                      </label>
                       <select
                         id="purchaseRequest"
                         value={formData.purchaseRequestId}
@@ -1412,17 +1406,17 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                       >
                         <option value="">
                           {isLoadingPRs
-                            ? "Loading Approved PRs..."
+                            ? "Loading PRs..."
                             : approvedPurchaseRequests.length === 0
-                            ? "-- No Approved Purchase Requests Available --"
-                            : "-- Select Approved Purchase Request --"}
+                            ? "-- No Purchase Requests Available --"
+                            : "-- Select Purchase Request --"}
                         </option>
                         {approvedPurchaseRequests.map((pr) => (
                           <option
                             key={pr.cr49f_purchaserequestid}
                             value={pr.cr49f_purchaserequestid}
                           >
-                            {pr.cr49f_prnumber || "PR"} — {pr.cr49f_prtitle || "Untitled"} (Approved)
+                            {pr.cr49f_prnumber || "PR"} — {pr.cr49f_prtitle || "Untitled"}
                           </option>
                         ))}
                       </select>
@@ -1436,7 +1430,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                         </span>
                       ) : (
                         <span className="rfq-field-hint">
-                          Only approved PRs are eligible for RFQ creation. SearchSupplier flow triggers using this PR number.
+                          SearchSupplier flow triggers using this PR number to recommend vendors.
                         </span>
                       )}
                     </div>
