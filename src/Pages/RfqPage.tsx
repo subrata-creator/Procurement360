@@ -558,6 +558,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
 
       <CreateRFQModal
         isOpen={isCreateModalOpen}
+        existingRfqs={records}
         onClose={() => {
           setIsCreateModalOpen(false);
           // If URL is /rfqs/new, return to /rfqs

@@ -40,7 +40,10 @@ import type {
   Cr49f_purchaserequestscr49f_status,
 } from "../generated/models/Cr49f_purchaserequestsModel";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
-import type { Cr49f_requestforqoutationsBase } from "../generated/models/Cr49f_requestforqoutationsModel";
+import type {
+  Cr49f_requestforqoutations,
+  Cr49f_requestforqoutationsBase,
+} from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
 
 import "../Styles/CreateRFQModal.css";
@@ -49,6 +52,7 @@ export interface CreateRFQModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: () => void;
+  existingRfqs?: Cr49f_requestforqoutations[];
 }
 
 export interface RFQFormData {
@@ -202,6 +206,72 @@ export function isPrApproved(
         (t) => getTaskApprovalStatusLabel(t) === "Approved"
       );
       if (allApproved) return true;
+    }
+  }
+
+  return false;
+}
+
+// Helper: Extract all PR GUIDs and PR numbers that already have an RFQ created for them
+export function getPrIdsWithExistingRfqs(
+  rfqs: Cr49f_requestforqoutations[]
+): Set<string> {
+  const linkedPrSet = new Set<string>();
+
+  for (const rfq of rfqs) {
+    const raw = rfq as unknown as Record<string, unknown>;
+
+    // 1. GUID lookup on cr49f_PRRFQ
+    const prGuid =
+      cleanGuid(rfq._cr49f_prrfq_value) ||
+      cleanGuid(raw._cr49f_PRRFQ_value as string) ||
+      cleanGuid(raw.cr49f_PRRFQ as string) ||
+      cleanGuid(raw.cr49f_prrfq as string);
+    if (prGuid) {
+      linkedPrSet.add(prGuid.toLowerCase());
+    }
+
+    // 2. Formatted display name / PR reference (e.g. "PR-1017", "PR-2026-101")
+    const prName =
+      (raw["_cr49f_prrfq_value@OData.Community.Display.V1.FormattedValue"] as string) ||
+      rfq.cr49f_prrfqname ||
+      (raw.cr49f_PRRFQname as string);
+
+    if (typeof prName === "string" && prName.trim()) {
+      const trimmedUpper = prName.trim().toUpperCase();
+      linkedPrSet.add(trimmedUpper);
+      const match = trimmedUpper.match(/PR[-_]?[0-9]+(?:[-_][0-9]+)*/i);
+      if (match) {
+        linkedPrSet.add(match[0]);
+      }
+    }
+  }
+
+  return linkedPrSet;
+}
+
+// Helper: Check if a PR already has an associated RFQ created
+export function hasExistingRfq(
+  pr: Cr49f_purchaserequests,
+  linkedPrSet: Set<string>
+): boolean {
+  if (!pr || linkedPrSet.size === 0) return false;
+
+  const prGuid = cleanGuid(pr.cr49f_purchaserequestid).toLowerCase();
+  if (prGuid && linkedPrSet.has(prGuid)) return true;
+
+  const prNumber = pr.cr49f_prnumber?.trim().toUpperCase();
+  if (prNumber) {
+    if (linkedPrSet.has(prNumber)) return true;
+    for (const item of linkedPrSet) {
+      if (
+        item === prNumber ||
+        item.startsWith(`${prNumber} `) ||
+        item.startsWith(`${prNumber}—`) ||
+        item.startsWith(`${prNumber}-`)
+      ) {
+        return true;
+      }
     }
   }
 
@@ -567,6 +637,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
   isOpen,
   onClose,
   onCreated,
+  existingRfqs,
 }) => {
   const [activeStep, setActiveStep] = useState<1 | 2>(1);
   const [formData, setFormData] = useState<RFQFormData>(() => {
@@ -593,13 +664,32 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
   // Purchase Requests state
   const [purchaseRequests, setPurchaseRequests] = useState<Cr49f_purchaserequests[]>([]);
   const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
+  const [linkedPrIds, setLinkedPrIds] = useState<Set<string>>(() => {
+    return existingRfqs ? getPrIdsWithExistingRfqs(existingRfqs) : new Set();
+  });
   const [isLoadingPRs, setIsLoadingPRs] = useState<boolean>(false);
   const [prLoadError, setPrLoadError] = useState<string | null>(null);
 
-  // Filter PRs so that ONLY approved Purchase Requests are selectable for RFQ creation
-  const approvedPurchaseRequests = useMemo(() => {
-    return purchaseRequests.filter((pr) => isPrApproved(pr, approvalTasks));
-  }, [purchaseRequests, approvalTasks]);
+  // Synchronize linkedPrIds whenever existingRfqs prop updates
+  useEffect(() => {
+    if (existingRfqs && existingRfqs.length > 0) {
+      setLinkedPrIds(getPrIdsWithExistingRfqs(existingRfqs));
+    }
+  }, [existingRfqs]);
+
+  // Filter PRs so that ONLY approved Purchase Requests without an existing RFQ are selectable
+  const availablePurchaseRequests = useMemo(() => {
+    return purchaseRequests.filter((pr) => {
+      // 1. Must be approved
+      if (!isPrApproved(pr, approvalTasks)) return false;
+      // 2. If an RFQ is already created with this PR, do not show in dropdown
+      if (hasExistingRfq(pr, linkedPrIds)) return false;
+      return true;
+    });
+  }, [purchaseRequests, approvalTasks, linkedPrIds]);
+
+  // Alias for backward compatibility
+  const approvedPurchaseRequests = availablePurchaseRequests;
 
   // Suppliers state
   const [allSuppliers, setAllSuppliers] = useState<Cr49f_suppliers[]>([]);
@@ -646,7 +736,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     }
   }, [isOpen]);
 
-  // Load purchase requests from Dataverse (do NOT auto-select; keep dropdown blank until user chooses)
+  // Load purchase requests and existing RFQs from Dataverse (do NOT auto-select; keep dropdown blank until user chooses)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -655,14 +745,19 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
       setIsLoadingPRs(true);
       setPrLoadError(null);
       try {
-        const [result, tasksRes] = await Promise.allSettled([
+        const [result, tasksRes, rfqsRes] = await Promise.allSettled([
           Cr49f_purchaserequestsService.getAll(),
           Cr49f_approvaltasksesService.getAll(),
+          Cr49f_requestforqoutationsService.getAll(),
         ]);
 
         if (isMounted) {
           if (tasksRes.status === "fulfilled" && tasksRes.value.success && tasksRes.value.data) {
             setApprovalTasks(tasksRes.value.data);
+          }
+
+          if (rfqsRes.status === "fulfilled" && rfqsRes.value.success && rfqsRes.value.data) {
+            setLinkedPrIds(getPrIdsWithExistingRfqs(rfqsRes.value.data));
           }
 
           if (result.status === "fulfilled" && result.value.success && result.value.data && result.value.data.length > 0) {
@@ -758,11 +853,19 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     });
   }, [suppliers, supplierSearchQuery, selectedCategoryFilter]);
 
-  // When a PR is chosen, fetch delivery location automatically from the selected PR (Approved PR only)
+  // When a PR is chosen, fetch delivery location automatically from the selected PR (Approved PR without existing RFQ only)
   const handlePRChange = (prId: string) => {
     const chosen =
-      approvedPurchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId) ||
+      availablePurchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId) ||
       purchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId);
+
+    if (chosen && hasExistingRfq(chosen, linkedPrIds)) {
+      setErrors((prev) => ({
+        ...prev,
+        purchaseRequestId: "An RFQ has already been created for this Purchase Request.",
+      }));
+      return;
+    }
 
     if (chosen && !isPrApproved(chosen, approvalTasks)) {
       setErrors((prev) => ({
@@ -864,7 +967,9 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
           pr.cr49f_purchaserequestid === formData.purchaseRequestId ||
           pr.cr49f_prnumber === formData.purchaseRequestId
       );
-      if (selected && !isPrApproved(selected, approvalTasks)) {
+      if (selected && hasExistingRfq(selected, linkedPrIds)) {
+        newErrors.purchaseRequestId = "An RFQ has already been created for this Purchase Request.";
+      } else if (selected && !isPrApproved(selected, approvalTasks)) {
         newErrors.purchaseRequestId = "Only approved Purchase Requests can be converted into an RFQ.";
       }
     }
@@ -1027,6 +1132,13 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     }
 
     const selectedPr = getSelectedPR();
+    if (selectedPr && hasExistingRfq(selectedPr, linkedPrIds)) {
+      setErrors((prev) => ({
+        ...prev,
+        purchaseRequestId: "An RFQ has already been created for this Purchase Request.",
+      }));
+      return;
+    }
     if (selectedPr && !isPrApproved(selectedPr, approvalTasks)) {
       setErrors((prev) => ({
         ...prev,
@@ -1174,6 +1286,19 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         invitedCount: chosenSuppliers.length,
         invitedNames,
       });
+
+      // Track newly linked PR so it immediately disappears from available PRs
+      if (formData.purchaseRequestId) {
+        setLinkedPrIds((prev) => {
+          const next = new Set(prev);
+          next.add(formData.purchaseRequestId.toLowerCase());
+          const selectedPr = getSelectedPR();
+          if (selectedPr?.cr49f_prnumber) {
+            next.add(selectedPr.cr49f_prnumber.toUpperCase());
+          }
+          return next;
+        });
+      }
 
       // Clear saved draft on success
       localStorage.removeItem(STORAGE_DRAFT_KEY);
@@ -1426,7 +1551,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                         <span className="rfq-field-hint has-error">{prLoadError}</span>
                       ) : approvedPurchaseRequests.length === 0 ? (
                         <span className="rfq-field-hint has-error">
-                          No approved purchase requests found. Purchase requests must be approved in the workflow before creating an RFQ.
+                          No approved purchase requests available without an existing RFQ.
                         </span>
                       ) : (
                         <span className="rfq-field-hint">
