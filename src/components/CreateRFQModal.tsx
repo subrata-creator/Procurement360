@@ -381,6 +381,8 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         return {
           ...initialFormData,
           ...parsed,
+          purchaseRequestId: "",
+          deliveryLocation: "",
           selectedSupplierIds: Array.isArray(parsed.selectedSupplierIds)
             ? parsed.selectedSupplierIds
             : [],
@@ -419,6 +421,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     id?: string;
     rfqNumber?: string;
     title: string;
+    deliveryLocation?: string;
     invitedCount: number;
     invitedNames: string[];
   } | null>(null);
@@ -426,7 +429,22 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof RFQFormData, string>>>({});
 
-  // Load purchase requests from Dataverse
+  // Reset form and ensure PR selection starts blank whenever modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(initialFormData);
+      setActiveStep(1);
+      setErrors({});
+      setFlowMatchedSuppliers(null);
+      setFlowMatchedCodes([]);
+      setSearchedPrNumber(null);
+      setFlowNotice(null);
+      setIsSuccess(false);
+      setCreatedRfqInfo(null);
+    }
+  }, [isOpen]);
+
+  // Load purchase requests from Dataverse (do NOT auto-select; keep dropdown blank until user chooses)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -439,47 +457,14 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         if (isMounted) {
           if (result.success && result.data && result.data.length > 0) {
             setPurchaseRequests(result.data);
-            setFormData((prev) => {
-              if (!prev.purchaseRequestId && result.data && result.data[0]) {
-                const first = result.data[0];
-                return {
-                  ...prev,
-                  purchaseRequestId: first.cr49f_purchaserequestid,
-                  deliveryLocation: prev.deliveryLocation || first.cr49f_deliverylocation || "",
-                };
-              }
-              return prev;
-            });
           } else {
-            const fallback = getFallbackSamplePRs();
-            setPurchaseRequests(fallback);
-            setFormData((prev) => {
-              if (!prev.purchaseRequestId && fallback[0]) {
-                return {
-                  ...prev,
-                  purchaseRequestId: fallback[0].cr49f_purchaserequestid,
-                  deliveryLocation: prev.deliveryLocation || fallback[0].cr49f_deliverylocation || "",
-                };
-              }
-              return prev;
-            });
+            setPurchaseRequests(getFallbackSamplePRs());
           }
         }
       } catch (err) {
         console.error("Failed to load purchase requests:", err);
         if (isMounted) {
-          const fallback = getFallbackSamplePRs();
-          setPurchaseRequests(fallback);
-          setFormData((prev) => {
-            if (!prev.purchaseRequestId && fallback[0]) {
-              return {
-                ...prev,
-                purchaseRequestId: fallback[0].cr49f_purchaserequestid,
-                deliveryLocation: prev.deliveryLocation || fallback[0].cr49f_deliverylocation || "",
-              };
-            }
-            return prev;
-          });
+          setPurchaseRequests(getFallbackSamplePRs());
         }
       } finally {
         if (isMounted) {
@@ -563,7 +548,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     });
   }, [suppliers, supplierSearchQuery, selectedCategoryFilter]);
 
-  // When a PR is chosen, prefill delivery location if empty
+  // When a PR is chosen, fetch delivery location automatically from the selected PR
   const handlePRChange = (prId: string) => {
     const chosen = purchaseRequests.find(
       (pr) => pr.cr49f_purchaserequestid === prId
@@ -572,10 +557,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     setFormData((prev) => ({
       ...prev,
       purchaseRequestId: prId,
-      deliveryLocation:
-        !prev.deliveryLocation.trim() && chosen?.cr49f_deliverylocation
-          ? chosen.cr49f_deliverylocation
-          : prev.deliveryLocation,
+      deliveryLocation: chosen?.cr49f_deliverylocation || "",
     }));
 
     if (prId !== formData.purchaseRequestId) {
@@ -657,11 +639,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     }
 
     if (!formData.purchaseRequestId) {
-      newErrors.purchaseRequestId = "Please select a Purchase Request to find matching suppliers.";
-    }
-
-    if (!formData.deliveryLocation.trim()) {
-      newErrors.deliveryLocation = "Delivery Location is required";
+      newErrors.purchaseRequestId = "Please select a Purchase Request.";
     }
 
     if (!formData.submissionDeadline) {
@@ -688,6 +666,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
   };
 
   const getSelectedPR = () => {
+    if (!formData.purchaseRequestId) return undefined;
     return purchaseRequests.find(
       (pr) =>
         pr.cr49f_purchaserequestid === formData.purchaseRequestId ||
@@ -701,11 +680,16 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     if (formData.purchaseRequestId && formData.purchaseRequestId.startsWith("PR-")) {
       return formData.purchaseRequestId;
     }
-    return pr?.cr49f_prtitle || formData.purchaseRequestId || "PR-1009";
+    return pr?.cr49f_prtitle || formData.purchaseRequestId || "";
   };
 
   const triggerSearchSupplierFlow = async (prNumber: string, force = false) => {
-    const cleanPrNumber = (prNumber || getSelectedPRNumber() || "PR-1009").trim();
+    const cleanPrNumber = (prNumber || getSelectedPRNumber()).trim();
+
+    if (!cleanPrNumber) {
+      console.warn("[CreateRFQModal] Cannot run SearchSupplier flow without PR number.");
+      return;
+    }
 
     if (!force && searchedPrNumber === cleanPrNumber && flowMatchedSuppliers !== null) {
       return;
@@ -806,6 +790,14 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
   };
 
   const handleProceedToSuppliers = async (forceReload = false) => {
+    if (!formData.purchaseRequestId) {
+      setErrors((prev) => ({
+        ...prev,
+        purchaseRequestId: "Please select a Purchase Request before choosing suppliers.",
+      }));
+      return;
+    }
+
     // 1. Immediately determine PR number
     const prNumber = getSelectedPRNumber();
 
@@ -838,10 +830,17 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     setSubmitError(null);
 
     try {
+      // Automatically fetch delivery location from selected PR
+      const selectedPR = getSelectedPR();
+      const resolvedDeliveryLocation =
+        selectedPR?.cr49f_deliverylocation?.trim() ||
+        formData.deliveryLocation?.trim() ||
+        "Bengaluru Tech Hub";
+
       const rfqPayload: Record<string, unknown> = {
         cr49f_rfqtitle: formData.rfqTitle.trim(),
         cr49f_description: formData.description.trim(),
-        cr49f_deliverylocation: formData.deliveryLocation.trim(),
+        cr49f_deliverylocation: resolvedDeliveryLocation,
         cr49f_submissiondeadline: new Date(formData.submissionDeadline).toISOString(),
         cr49f_requestdate: new Date().toISOString(),
         cr49f_status: 0, // 0 = Pending
@@ -934,6 +933,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         id: createdRfqId,
         rfqNumber: created.cr49f_rfqnumber || undefined,
         title: formData.rfqTitle,
+        deliveryLocation: resolvedDeliveryLocation,
         invitedCount: chosenSuppliers.length,
         invitedNames,
       });
@@ -998,7 +998,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
               </div>
               <div className="rfq-success-row">
                 <span>Delivery Location:</span>
-                <span>{formData.deliveryLocation}</span>
+                <span>{createdRfqInfo?.deliveryLocation || formData.deliveryLocation || "From Selected Purchase Request"}</span>
               </div>
               <div className="rfq-success-row">
                 <span>Submission Deadline:</span>
@@ -1191,39 +1191,8 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Row 2: Delivery Location (Required) & Submission Deadline (Required) */}
+                  {/* Row 2: Submission Deadline (Required) */}
                   <div className="rfq-form-grid-2">
-                    <div className="rfq-input-field">
-                      <label htmlFor="deliveryLocation">
-                        Delivery Location <span className="rfq-required-star">*</span>
-                      </label>
-                      <div className="rfq-input-icon-wrap">
-                        <MapPin size={15} className="rfq-input-icon" />
-                        <input
-                          id="deliveryLocation"
-                          type="text"
-                          placeholder="e.g. Bangalore Tech Hub, Sector 4"
-                          value={formData.deliveryLocation}
-                          onChange={(e) => {
-                            setFormData((prev) => ({
-                              ...prev,
-                              deliveryLocation: e.target.value,
-                            }));
-                            if (errors.deliveryLocation) {
-                              setErrors((prev) => ({
-                                ...prev,
-                                deliveryLocation: undefined,
-                              }));
-                            }
-                          }}
-                          className={errors.deliveryLocation ? "has-error" : ""}
-                        />
-                      </div>
-                      {errors.deliveryLocation && (
-                        <span className="rfq-field-error">{errors.deliveryLocation}</span>
-                      )}
-                    </div>
-
                     <div className="rfq-input-field">
                       <label htmlFor="submissionDeadline">
                         Submission Deadline <span className="rfq-required-star">*</span>
