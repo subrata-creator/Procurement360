@@ -27,10 +27,19 @@ import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_r
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
 import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
+import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import { SearchSupplierService } from "../generated/services/SearchSupplierService";
-import { createApprovalTasksForObject } from "../Services/ApprovalWorkflowService";
+import {
+  cleanGuid,
+  createApprovalTasksForObject,
+  getTaskApprovalStatusLabel,
+} from "../Services/ApprovalWorkflowService";
 import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
-import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
+import type {
+  Cr49f_purchaserequests,
+  Cr49f_purchaserequestscr49f_status,
+} from "../generated/models/Cr49f_purchaserequestsModel";
+import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import type { Cr49f_requestforqoutationsBase } from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
 
@@ -90,6 +99,8 @@ function getFallbackSamplePRs(): Cr49f_purchaserequests[] {
       cr49f_prnumber: "PR-1009",
       cr49f_prtitle: "Development Team Laptops",
       cr49f_deliverylocation: "Bengaluru Tech Hub, Sector 4",
+      cr49f_status: 1 as Cr49f_purchaserequestscr49f_status,
+      cr49f_statusname: "Approved",
       statecode: 0,
       ownerid: "system",
       owneridtype: "system",
@@ -99,6 +110,8 @@ function getFallbackSamplePRs(): Cr49f_purchaserequests[] {
       cr49f_prnumber: "PR-1001",
       cr49f_prtitle: "IT Equipment Refresh 2026",
       cr49f_deliverylocation: "Bengaluru Tech Hub, Sector 4",
+      cr49f_status: 1 as Cr49f_purchaserequestscr49f_status,
+      cr49f_statusname: "Approved",
       statecode: 0,
       ownerid: "system",
       owneridtype: "system",
@@ -108,6 +121,8 @@ function getFallbackSamplePRs(): Cr49f_purchaserequests[] {
       cr49f_prnumber: "PR-1014",
       cr49f_prtitle: "Setup Laptops & Workstations",
       cr49f_deliverylocation: "Mumbai Delivery Center",
+      cr49f_status: 1 as Cr49f_purchaserequestscr49f_status,
+      cr49f_statusname: "Approved",
       statecode: 0,
       ownerid: "system",
       owneridtype: "system",
@@ -117,11 +132,80 @@ function getFallbackSamplePRs(): Cr49f_purchaserequests[] {
       cr49f_prnumber: "PR-1019",
       cr49f_prtitle: "Engineering Laptops & Displays",
       cr49f_deliverylocation: "Hyderabad Development Center",
+      cr49f_status: 1 as Cr49f_purchaserequestscr49f_status,
+      cr49f_statusname: "Approved",
       statecode: 0,
       ownerid: "system",
       owneridtype: "system",
     } as unknown as Cr49f_purchaserequests,
   ];
+}
+
+// Helper: Check if a Purchase Request is in Approved status
+export function isPrApproved(
+  pr: Cr49f_purchaserequests,
+  allApprovalTasks?: Cr49f_approvaltaskses[]
+): boolean {
+  if (!pr) return false;
+  const raw = pr as unknown as Record<string, unknown>;
+
+  // 1. Direct status number: 1 = Approved
+  if (Number(pr.cr49f_status) === 1 || pr.cr49f_status === 1) {
+    return true;
+  }
+
+  // 2. Status name check (e.g. "Approved")
+  const statusName =
+    pr.cr49f_statusname ||
+    (raw["cr49f_status@OData.Community.Display.V1.FormattedValue"] as string);
+
+  if (typeof statusName === "string" && statusName.trim().toLowerCase() === "approved") {
+    return true;
+  }
+
+  // Explicitly rejected or changes needed
+  if (
+    Number(pr.cr49f_status) === 3 ||
+    Number(pr.cr49f_status) === 2 ||
+    (typeof statusName === "string" &&
+      (statusName.trim().toLowerCase() === "rejected" ||
+        statusName.trim().toLowerCase() === "changes needed" ||
+        statusName.trim().toLowerCase() === "changesneeded"))
+  ) {
+    return false;
+  }
+
+  // 3. Check approval tasks: if all approval tasks for this PR are approved
+  if (allApprovalTasks && allApprovalTasks.length > 0) {
+    const prId = cleanGuid(pr.cr49f_purchaserequestid);
+    const prNumber = pr.cr49f_prnumber?.trim().toUpperCase();
+
+    const relatedTasks = allApprovalTasks.filter((t) => {
+      const tRaw = t as unknown as Record<string, unknown>;
+      const tPrGuid =
+        cleanGuid(t._cr49f_pr_value) ||
+        cleanGuid(tRaw._cr49f_PR_value as string) ||
+        cleanGuid(tRaw.cr49f_pr as string);
+
+      if (prId && tPrGuid && tPrGuid === prId) return true;
+
+      if (prNumber) {
+        const taskName = String(t.cr49f_task || t.cr49f_id || tRaw.cr49f_name || tRaw.cr49f_subject || "").toUpperCase();
+        if (taskName.includes(prNumber)) return true;
+      }
+
+      return false;
+    });
+
+    if (relatedTasks.length > 0) {
+      const allApproved = relatedTasks.every(
+        (t) => getTaskApprovalStatusLabel(t) === "Approved"
+      );
+      if (allApproved) return true;
+    }
+  }
+
+  return false;
 }
 
 // Helper: Supplier category/type badge color and label
@@ -508,8 +592,14 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
 
   // Purchase Requests state
   const [purchaseRequests, setPurchaseRequests] = useState<Cr49f_purchaserequests[]>([]);
+  const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
   const [isLoadingPRs, setIsLoadingPRs] = useState<boolean>(false);
   const [prLoadError, setPrLoadError] = useState<string | null>(null);
+
+  // Filter PRs so that ONLY approved Purchase Requests are selectable for RFQ creation
+  const approvedPurchaseRequests = useMemo(() => {
+    return purchaseRequests.filter((pr) => isPrApproved(pr, approvalTasks));
+  }, [purchaseRequests, approvalTasks]);
 
   // Suppliers state
   const [allSuppliers, setAllSuppliers] = useState<Cr49f_suppliers[]>([]);
@@ -565,10 +655,18 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
       setIsLoadingPRs(true);
       setPrLoadError(null);
       try {
-        const result = await Cr49f_purchaserequestsService.getAll();
+        const [result, tasksRes] = await Promise.allSettled([
+          Cr49f_purchaserequestsService.getAll(),
+          Cr49f_approvaltasksesService.getAll(),
+        ]);
+
         if (isMounted) {
-          if (result.success && result.data && result.data.length > 0) {
-            setPurchaseRequests(result.data);
+          if (tasksRes.status === "fulfilled" && tasksRes.value.success && tasksRes.value.data) {
+            setApprovalTasks(tasksRes.value.data);
+          }
+
+          if (result.status === "fulfilled" && result.value.success && result.value.data && result.value.data.length > 0) {
+            setPurchaseRequests(result.value.data);
           } else {
             setPurchaseRequests(getFallbackSamplePRs());
           }
@@ -660,11 +758,19 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     });
   }, [suppliers, supplierSearchQuery, selectedCategoryFilter]);
 
-  // When a PR is chosen, fetch delivery location automatically from the selected PR
+  // When a PR is chosen, fetch delivery location automatically from the selected PR (Approved PR only)
   const handlePRChange = (prId: string) => {
-    const chosen = purchaseRequests.find(
-      (pr) => pr.cr49f_purchaserequestid === prId
-    );
+    const chosen =
+      approvedPurchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId) ||
+      purchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId);
+
+    if (chosen && !isPrApproved(chosen, approvalTasks)) {
+      setErrors((prev) => ({
+        ...prev,
+        purchaseRequestId: "Only approved Purchase Requests can be selected for RFQ creation.",
+      }));
+      return;
+    }
 
     setFormData((prev) => ({
       ...prev,
@@ -751,7 +857,16 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     }
 
     if (!formData.purchaseRequestId) {
-      newErrors.purchaseRequestId = "Please select a Purchase Request.";
+      newErrors.purchaseRequestId = "Please select an approved Purchase Request.";
+    } else {
+      const selected = purchaseRequests.find(
+        (pr) =>
+          pr.cr49f_purchaserequestid === formData.purchaseRequestId ||
+          pr.cr49f_prnumber === formData.purchaseRequestId
+      );
+      if (selected && !isPrApproved(selected, approvalTasks)) {
+        newErrors.purchaseRequestId = "Only approved Purchase Requests can be converted into an RFQ.";
+      }
     }
 
     if (!formData.submissionDeadline) {
@@ -906,7 +1021,16 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     if (!formData.purchaseRequestId) {
       setErrors((prev) => ({
         ...prev,
-        purchaseRequestId: "Please select a Purchase Request before choosing suppliers.",
+        purchaseRequestId: "Please select an approved Purchase Request before choosing suppliers.",
+      }));
+      return;
+    }
+
+    const selectedPr = getSelectedPR();
+    if (selectedPr && !isPrApproved(selectedPr, approvalTasks)) {
+      setErrors((prev) => ({
+        ...prev,
+        purchaseRequestId: "Only approved Purchase Requests can be converted into an RFQ.",
       }));
       return;
     }
@@ -1270,9 +1394,15 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                     </div>
 
                     <div className="rfq-input-field">
-                      <label htmlFor="purchaseRequest">
-                        Purchase Request <span className="rfq-required-star">*</span>
-                      </label>
+                      <div className="rfq-label-with-tag">
+                        <label htmlFor="purchaseRequest">
+                          Purchase Request <span className="rfq-required-star">*</span>
+                        </label>
+                        <span className="rfq-approved-badge">
+                          <CheckCircle2 size={11} />
+                          Approved Only
+                        </span>
+                      </div>
                       <select
                         id="purchaseRequest"
                         value={formData.purchaseRequestId}
@@ -1281,14 +1411,18 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                         className={errors.purchaseRequestId ? "has-error" : ""}
                       >
                         <option value="">
-                          {isLoadingPRs ? "Loading PRs..." : "-- Select Purchase Request --"}
+                          {isLoadingPRs
+                            ? "Loading Approved PRs..."
+                            : approvedPurchaseRequests.length === 0
+                            ? "-- No Approved Purchase Requests Available --"
+                            : "-- Select Approved Purchase Request --"}
                         </option>
-                        {purchaseRequests.map((pr) => (
+                        {approvedPurchaseRequests.map((pr) => (
                           <option
                             key={pr.cr49f_purchaserequestid}
                             value={pr.cr49f_purchaserequestid}
                           >
-                            {pr.cr49f_prnumber || "PR"} — {pr.cr49f_prtitle || "Untitled"}
+                            {pr.cr49f_prnumber || "PR"} — {pr.cr49f_prtitle || "Untitled"} (Approved)
                           </option>
                         ))}
                       </select>
@@ -1296,9 +1430,13 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                         <span className="rfq-field-error">{errors.purchaseRequestId}</span>
                       ) : prLoadError ? (
                         <span className="rfq-field-hint has-error">{prLoadError}</span>
+                      ) : approvedPurchaseRequests.length === 0 ? (
+                        <span className="rfq-field-hint has-error">
+                          No approved purchase requests found. Purchase requests must be approved in the workflow before creating an RFQ.
+                        </span>
                       ) : (
                         <span className="rfq-field-hint">
-                          Required. SearchSupplier flow triggers using this PR number to recommend vendors.
+                          Only approved PRs are eligible for RFQ creation. SearchSupplier flow triggers using this PR number.
                         </span>
                       )}
                     </div>
