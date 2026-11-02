@@ -401,10 +401,11 @@ export default function RfqDetail() {
 
         const flowRes = await SearchSupplierService.Run(flowPayload);
         let recs: FlowSupplierRecommendation[] = [];
-        if (flowRes?.success && flowRes.data) {
+        if (flowRes?.data) {
           recs = parseSupplierRecommendationsFromFlow(flowRes.data);
-        } else if (flowRes?.data) {
-          recs = parseSupplierRecommendationsFromFlow(flowRes.data);
+        }
+        if (recs.length === 0 && flowRes) {
+          recs = parseSupplierRecommendationsFromFlow(flowRes);
         }
 
         if (recs.length === 0) {
