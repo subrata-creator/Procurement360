@@ -776,14 +776,31 @@
    reads "Not linked" until that relationship exists in Dataverse.
    The old "Status" text column is removed — status now lives only
    in the ring. */
-.rfq-page .purchase-card.rfq-records-card .rfq-table { min-width: 1280px; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(1) { width: 6%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(2) { width: 20%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(3) { width: 11%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(4) { width: 11%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(5) { width: 10%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(6) { width: 11%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(7) { width: 9%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(8) { width: 9%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(9) { width: 11%; }
-.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(10) { width: 12%; }
+/* Delivery Location Cell in Modern Table */
+.pr-modern-table .pr-cell-location {
+  white-space: nowrap;
+}
+
+.pr-modern-table .rfq-delivery-location-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 170px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground-hex, #0f172a);
+}
+
+.pr-modern-table .rfq-location-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.pr-modern-table .rfq-location-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
