@@ -768,14 +768,130 @@
 .rfq-status-ring.approved { --ring-color: var(--rfq-green); }
 .rfq-status-ring.rejected { --ring-color: var(--rfq-red); }
 
-/* 10 columns: status ring, ID & Title, Associated PR, Associated PO,
-   Request Date, Submission Deadline, Award Date, Closed Date,
-   Delivery Location, Created By. Associated PO is new per your
-   request, but is NOT backed by a real field — cr49f_requestforqoutations
-   has no PO lookup (only cr49f_PRRFQ, the PR one), so it always
-   reads "Not linked" until that relationship exists in Dataverse.
-   The old "Status" text column is removed — status now lives only
-   in the ring. */
+/* =========================================================
+   DISABLE HORIZONTAL SCROLLING ON RFQ OVERVIEW TABLE
+========================================================= */
+.rfq-page .pr-modern-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+.rfq-page .pr-modern-table-wrap {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important; /* Eliminate horizontal scrollbar */
+  box-sizing: border-box !important;
+}
+
+.rfq-page .pr-modern-table {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important; /* Force all columns to fit 100% container width */
+  box-sizing: border-box !important;
+}
+
+.rfq-page .pr-modern-table thead th,
+.rfq-page .pr-modern-table tbody td {
+  padding: 12px 6px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.rfq-page .pr-modern-table .pr-cell-chevron {
+  width: 30px !important;
+  padding-left: 8px !important;
+  padding-right: 2px !important;
+}
+
+.rfq-page .pr-modern-table .pr-cell-num {
+  width: 32px !important;
+  padding: 12px 4px !important;
+  text-align: center;
+}
+
+.rfq-page .pr-modern-table .pr-cell-actions {
+  width: 34px !important;
+  padding: 12px 4px !important;
+  text-align: center;
+}
+
+.rfq-page .pr-modern-table .pr-details-flex {
+  gap: 8px !important;
+}
+
+.rfq-page .pr-modern-table .pr-progress-circle-wrap {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.rfq-page .pr-modern-table .pr-progress-circle-svg {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.rfq-page .pr-modern-table .pr-progress-circle-text {
+  font-size: 10px !important;
+}
+
+.rfq-page .pr-modern-table .pr-details-title {
+  max-width: 180px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rfq-page .pr-modern-table .pr-details-meta {
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rfq-page .pr-modern-table .pr-rfq-pill {
+  max-width: 100%;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rfq-page .pr-modern-table .pr-creator-flex {
+  gap: 6px;
+}
+
+.rfq-page .pr-modern-table .pr-avatar-initials {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+}
+
+.rfq-page .pr-modern-table .pr-creator-name {
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rfq-page .pr-modern-table .pr-creator-dept {
+  font-size: 10px;
+}
+
+.rfq-page .pr-modern-table .pr-status-badge {
+  padding: 3px 8px;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.rfq-page .pr-modern-table .pr-mini-stepper {
+  width: 100%;
+  max-width: 110px;
+}
+
 /* Delivery Location Cell in Modern Table */
 .pr-modern-table .pr-cell-location {
   white-space: nowrap;
@@ -784,12 +900,12 @@
 .pr-modern-table .rfq-delivery-location-content {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  max-width: 170px;
+  gap: 5px;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--foreground-hex, #0f172a);
 }
