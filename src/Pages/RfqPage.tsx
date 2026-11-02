@@ -7,6 +7,7 @@ import {
   CircleX,
   ClipboardList,
   Clock3,
+  MapPin,
   Plus,
   Search,
 } from "lucide-react";
@@ -431,16 +432,16 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
           <table className="purchase-table rfq-table">
             <thead>
               <tr>
-                <th aria-label="Status"></th>
-                <th>RFQ ID &amp; Title</th>
-                <th>Associated PR</th>
-                <th>Associated PO</th>
-                <th>Request Date</th>
-                <th>Submission Deadline</th>
-                <th>Award Date</th>
-                <th>Closed Date</th>
-                <th>Delivery Location</th>
-                <th>Created By</th>
+                <th aria-label="Status" className="rfq-th-status"></th>
+                <th className="rfq-th-title">RFQ ID &amp; Title</th>
+                <th className="rfq-th-pr">Associated PR</th>
+                <th className="rfq-th-po">Associated PO</th>
+                <th className="rfq-th-req-date">Request Date</th>
+                <th className="rfq-th-deadline">Submission Deadline</th>
+                <th className="rfq-th-award-date">Award Date</th>
+                <th className="rfq-th-closed-date">Closed Date</th>
+                <th className="rfq-th-location">Delivery Location</th>
+                <th className="rfq-th-created-by">Created By</th>
               </tr>
             </thead>
             <tbody>
@@ -491,7 +492,21 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                       <td>{formatDate(row.cr49f_submissiondeadline)}</td>
                       <td>{formatDate(row.cr49f_awarddate)}</td>
                       <td>{formatDate(row.cr49f_closeddate)}</td>
-                      <td>{row.cr49f_deliverylocation?.trim() || "—"}</td>
+                      <td
+                        className="rfq-delivery-location-cell"
+                        title={row.cr49f_deliverylocation?.trim() || undefined}
+                      >
+                        {row.cr49f_deliverylocation?.trim() ? (
+                          <div className="rfq-delivery-location-content">
+                            <MapPin size={12} className="rfq-location-icon" />
+                            <span className="rfq-location-text">
+                              {row.cr49f_deliverylocation.trim()}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="purchase-muted">—</span>
+                        )}
+                      </td>
                       <td>
                         <span className="creator-pill">
                           <span>{getInitials(createdBy === "Unknown" ? "U" : createdBy)}</span>

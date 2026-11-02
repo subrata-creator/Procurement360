@@ -407,11 +407,14 @@
   border-color: var(--rfq-border);
 }
 
-.rfq-page .purchase-table-wrap { overflow-x: auto; }
+.rfq-page .purchase-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 .rfq-page .purchase-card.rfq-records-card .rfq-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1240px;
   border-collapse: collapse;
   table-layout: fixed;
   color: var(--rfq-text);
@@ -437,12 +440,132 @@
   vertical-align: middle;
 }
 
+/* Explicit column widths for all 10 columns to prevent squash/overlap */
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(1),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(1),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-status {
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+  padding-left: 14px !important;
+  padding-right: 6px !important;
+  text-align: center;
+}
+
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(2),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(2),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-title {
+  width: 210px !important;
+  min-width: 210px !important;
+}
+
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(3),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(3),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-pr {
+  width: 110px !important;
+  min-width: 110px !important;
+}
+
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(4),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(4),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-po {
+  width: 100px !important;
+  min-width: 100px !important;
+}
+
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(5),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(5),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-req-date {
+  width: 100px !important;
+  min-width: 100px !important;
+}
+
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(6),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(6),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-deadline {
+  width: 120px !important;
+  min-width: 120px !important;
+}
+
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(7),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(7),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-award-date {
+  width: 95px !important;
+  min-width: 95px !important;
+}
+
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(8),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(8),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-closed-date {
+  width: 95px !important;
+  min-width: 95px !important;
+}
+
+/* Delivery Location: Column 9 */
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(9),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(9),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-location {
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+}
+
+/* Created By: Column 10 */
+.rfq-page .purchase-card.rfq-records-card .rfq-table th:nth-child(10),
+.rfq-page .purchase-card.rfq-records-card .rfq-table td:nth-child(10),
+.rfq-page .purchase-card.rfq-records-card .rfq-table .rfq-th-created-by {
+  width: 140px !important;
+  min-width: 140px !important;
+}
+
 .rfq-page .purchase-card.rfq-records-card .rfq-table tbody tr:hover {
   background: color-mix(in srgb, var(--rfq-teal) 5%, var(--rfq-card));
 }
 
 .rfq-title-cell { overflow: hidden; text-overflow: ellipsis; }
 .rfq-response-count { color: var(--rfq-muted) !important; font-variant-numeric: tabular-nums; }
+
+/* Delivery Location Cell Styling */
+.rfq-page .purchase-card.rfq-records-card .rfq-table td.rfq-delivery-location-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rfq-delivery-location-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.rfq-location-icon {
+  flex-shrink: 0;
+  color: var(--rfq-teal, #0284c7);
+  opacity: 0.85;
+}
+
+.rfq-location-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--rfq-text);
+  font-weight: 500;
+}
+
+/* Ensure Creator Pill does not wrap or overflow */
+.rfq-page .purchase-card.rfq-records-card .rfq-table td .creator-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 135px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .rfq-insights-grid,
 .rfq-ai-summary-band,
