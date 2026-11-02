@@ -17,6 +17,18 @@
         "microsoftcopilotstudio"
       ],
       "dataSets": {}
+    },
+    "bb70294e-62db-4d07-bf38-7ba956b42f08": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "searchsupplier"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "2998d889-89d6-f111-a05b-70a8a5a68669",
+        "workflowDisplayName": "SearchSupplier",
+        "workflowName": "334b415d-6637-497a-8547-4bac37c68d2d"
+      }
     }
   },
   "databaseReferences": {

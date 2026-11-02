@@ -20,6 +20,7 @@ export * as Cr49f_tasksesModel from './models/Cr49f_tasksesModel';
 export * as Cr49f_userrolesesModel from './models/Cr49f_userrolesesModel';
 export * as Cr49f_usersesModel from './models/Cr49f_usersesModel';
 export * as MicrosoftCopilotStudioModel from './models/MicrosoftCopilotStudioModel';
+export * as SearchSupplierModel from './models/SearchSupplierModel';
 
 // Services
 export * from './services/Cr49f_approvaltasksesService';
@@ -37,3 +38,4 @@ export * from './services/Cr49f_tasksesService';
 export * from './services/Cr49f_userrolesesService';
 export * from './services/Cr49f_usersesService';
 export * from './services/MicrosoftCopilotStudioService';
+export * from './services/SearchSupplierService';

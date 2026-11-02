@@ -28,6 +28,9 @@ export interface RfqSupplier {
   address: string;
   ranking: number;
   rewarded: boolean;
+  code?: string;
+  category?: string;
+  reason?: string;
 }
 
 export interface RfqLineItem {

@@ -1,142 +1,841 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
+  AlertCircle,
+  ArrowLeft,
   Building2,
   CalendarDays,
+  CheckCircle2,
   CircleCheck,
   ClipboardList,
   Clock,
-  Coins,
+  ExternalLink,
   FileText,
+  Loader2,
   Mail,
   MapPin,
+  Paperclip,
+  Percent,
   Phone,
+  Plus,
   ShieldCheck,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
   Trophy,
-  ArrowLeft,
-  Percent,
+  User,
+  Users,
+  X,
 } from "lucide-react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
-  buildRfqApprovalSteps,
   getInitials,
   getRfqByRef,
-  totalBudgetFor,
   type RfqApprovalStep,
+  type RfqRecord,
+  type RfqLineItem,
 } from "../data/RFQdata";
+
+import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
+import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
+import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
+import { Cr49f_rfqresponselinesService } from "../generated/services/Cr49f_rfqresponselinesService";
+
+import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
+import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
+import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
+import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
+import type { Cr49f_selectedsupplierses } from "../generated/models/Cr49f_selectedsuppliersesModel";
+import type { Cr49f_rfqresponselines } from "../generated/models/Cr49f_rfqresponselinesModel";
+import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
+
+import {
+  Cr49f_approvaltasksescr49f_department,
+  Cr49f_approvaltasksescr49f_role,
+  Cr49f_approvaltasksescr49f_slaunit,
+} from "../generated/models/Cr49f_approvaltasksesModel";
+
+import {
+  cleanGuid,
+  createApprovalTasksForObject,
+  getApprovalTasksForRecord,
+  getTaskApprovalStatusLabel,
+  approveTask,
+  rejectTask,
+} from "../Services/ApprovalWorkflowService";
+
+import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 
 import "../Styles/RFQSummary.css";
 
 const TABS = [
   "Summary",
   "Purchase Request",
-  "Orders",
-  "Invoices",
-  "Supplier Responses",
-  "Supplier Clarifications",
-  "Reward History",
   "Associated Tasks",
+  "Supplier Responses",
   "Notes",
   "Attachments",
+  "Orders",
 ];
 
-const usdFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-});
-
-function statusPillClass(status: string) {
-  return status === "Rewarded" ? "rewarded" : "approved";
+interface RfqNote {
+  id: string;
+  title: string;
+  body: string;
+  type: "Internal" | "Clarification";
+  author: string;
+  createdAt: string;
 }
 
-function approvalStepClass(status: RfqApprovalStep["status"]) {
-  if (status === "Completed") return "completed";
-  if (status === "Current") return "current";
-  if (status === "Rejected") return "rejected";
-  return "pending";
+function toUsDate(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const parts = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (parts) return value;
+    return value;
+  }
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+}
+
+function getDaysRemaining(value?: string | null): { text: string; tone: "green" | "amber" | "red" } | null {
+  if (!value) return null;
+  const target = new Date(value);
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  if (diffDays > 3) return { text: `${diffDays} days left`, tone: "green" };
+  if (diffDays >= 0) return { text: `${diffDays} day${diffDays === 1 ? "" : "s"} left`, tone: "amber" };
+  return { text: `${Math.abs(diffDays)} days overdue`, tone: "red" };
+}
+
+function getStatusBadge(status?: number | string | null): { label: string; tone: string } {
+  if (typeof status === "string") {
+    const s = status.toLowerCase();
+    if (s.includes("reward") || s === "rewarded") return { label: "Rewarded", tone: "rewarded" };
+    if (s.includes("approv") || s === "approved") return { label: "Approved", tone: "approved" };
+    if (s.includes("change")) return { label: "Changes Needed", tone: "changes-needed" };
+    if (s.includes("reject")) return { label: "Rejected", tone: "rejected" };
+    return { label: "Pending", tone: "pending" };
+  }
+  switch (Number(status)) {
+    case 1:
+      return { label: "Approved", tone: "approved" };
+    case 2:
+      return { label: "Changes Needed", tone: "changes-needed" };
+    case 3:
+      return { label: "Rejected", tone: "rejected" };
+    default:
+      return { label: "Pending", tone: "pending" };
+  }
 }
 
 export default function RfqDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
+
   const [activeTab, setActiveTab] = useState("Summary");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const record = ref ? getRfqByRef(ref) : undefined;
+  // Live Dataverse records
+  const [liveRfq, setLiveRfq] = useState<Cr49f_requestforqoutations | null>(null);
+  const [mockRfq, setMockRfq] = useState<RfqRecord | null>(null);
+  const [linkedPR, setLinkedPR] = useState<Cr49f_purchaserequests | null>(null);
+  const [prLines, setPrLines] = useState<Cr49f_purchaserequestlines[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<Cr49f_suppliers[]>([]);
+  const [selectedSuppliers, setSelectedSuppliers] = useState<Cr49f_selectedsupplierses[]>([]);
+  const [responseLines, setResponseLines] = useState<Cr49f_rfqresponselines[]>([]);
 
-  if (!record) {
+  // Approval workflow tasks
+  const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
+  const [taskNotice, setTaskNotice] = useState<string | null>(null);
+
+  // Notes state
+  const notesKey = `procurement360.notes.rfq.${cleanGuid(ref) || ref || "unknown"}`;
+  const [notes, setNotes] = useState<RfqNote[]>(() => {
+    try {
+      const saved = localStorage.getItem(notesKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isAddNoteOpen, setIsAddNoteOpen] = useState(false);
+  const [newNoteTitle, setNewNoteTitle] = useState("");
+  const [newNoteBody, setNewNoteBody] = useState("");
+  const [newNoteType, setNewNoteType] = useState<"Internal" | "Clarification">("Internal");
+
+  // Load RFQ Data & Related Records from Dataverse
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      if (!ref) return;
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        // 1. Fetch live RFQ from Dataverse
+        const rfqRes = await Cr49f_requestforqoutationsService.getAll();
+        const cleanRef = cleanGuid(ref);
+        const searchRefLower = ref.toLowerCase().trim();
+
+        const foundLive = rfqRes.success && rfqRes.data
+          ? rfqRes.data.find((r) => {
+              const id = cleanGuid(r.cr49f_requestforqoutationid);
+              const num = (r.cr49f_rfqnumber || "").toLowerCase().trim();
+              return id === cleanRef || num === searchRefLower;
+            })
+          : null;
+
+        if (foundLive) {
+          if (!isMounted) return;
+          setLiveRfq(foundLive);
+          setMockRfq(null);
+
+          const rfqId = cleanGuid(foundLive.cr49f_requestforqoutationid);
+
+          // 2. Fetch linked PR and lines if available
+          const raw = foundLive as unknown as Record<string, unknown>;
+          const prId =
+            cleanGuid(foundLive._cr49f_prrfq_value) ||
+            cleanGuid(raw._cr49f_PRRFQ_value as string) ||
+            cleanGuid(raw.cr49f_prrfq as string);
+
+          if (prId) {
+            try {
+              const prRes = await Cr49f_purchaserequestsService.getAll();
+              if (prRes.success && prRes.data) {
+                const foundPr = prRes.data.find(
+                  (p) => cleanGuid(p.cr49f_purchaserequestid) === prId
+                );
+                if (foundPr && isMounted) {
+                  setLinkedPR(foundPr);
+                }
+              }
+
+              const linesRes = await Cr49f_purchaserequestlinesService.getAll();
+              if (linesRes.success && linesRes.data && isMounted) {
+                const matching = linesRes.data.filter(
+                  (l) => cleanGuid(l._cr49f_purchaserequest_value) === prId
+                );
+                setPrLines(matching);
+              }
+            } catch (prErr) {
+              console.warn("Could not load linked PR records:", prErr);
+            }
+          }
+
+          // 3. Fetch Selected Suppliers and Response Lines
+          try {
+            const [selSuppRes, respLinesRes, suppRes] = await Promise.allSettled([
+              Cr49f_selectedsuppliersesService.getAll(),
+              Cr49f_rfqresponselinesService.getAll(),
+              Cr49f_suppliersService.getAll(),
+            ]);
+
+            if (selSuppRes.status === "fulfilled" && selSuppRes.value.success && selSuppRes.value.data) {
+              const matchedSel = selSuppRes.value.data.filter(
+                (s) => cleanGuid(s._cr49f_rfq_value) === rfqId
+              );
+              if (isMounted) setSelectedSuppliers(matchedSel);
+            }
+
+            if (respLinesRes.status === "fulfilled" && respLinesRes.value.success && respLinesRes.value.data) {
+              const matchedResp = respLinesRes.value.data.filter(
+                (r) => cleanGuid(r._cr49f_rfqsupplierresponse_value) === rfqId
+              );
+              if (isMounted) setResponseLines(matchedResp);
+            }
+
+            if (suppRes.status === "fulfilled" && suppRes.value.success && suppRes.value.data) {
+              if (isMounted) setAllSuppliers(suppRes.value.data);
+            }
+          } catch (supErr) {
+            console.warn("Could not load suppliers data:", supErr);
+          }
+
+          // 4. Fetch Approval Workflow Tasks
+          if (rfqId) {
+            setLoadingTasks(true);
+            try {
+              let tasks = await getApprovalTasksForRecord(2, rfqId);
+              if (tasks.length === 0) {
+                // Auto create approval cycle tasks if not present yet
+                await createApprovalTasksForObject({
+                  objectType: 2,
+                  recordId: rfqId,
+                  recordName: foundLive.cr49f_rfqtitle || "RFQ Sign-Off",
+                });
+                tasks = await getApprovalTasksForRecord(2, rfqId);
+              }
+              if (isMounted) setApprovalTasks(tasks);
+            } catch (taskErr) {
+              console.warn("Could not load RFQ approval tasks:", taskErr);
+            } finally {
+              if (isMounted) setLoadingTasks(false);
+            }
+          }
+        } else {
+          // Fallback to static mock RFQ
+          const fallback = getRfqByRef(ref);
+          if (fallback && isMounted) {
+            setMockRfq(fallback);
+            setLiveRfq(null);
+          } else if (isMounted) {
+            setLoadError("RFQ not found in Dataverse or catalog.");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load RFQ:", err);
+        if (isMounted) {
+          setLoadError(err instanceof Error ? err.message : "Error loading RFQ details.");
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    void loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [ref]);
+
+  // Refresh approval tasks
+  const refreshTasks = async (rfqId: string) => {
+    try {
+      const tasks = await getApprovalTasksForRecord(2, rfqId);
+      setApprovalTasks(tasks);
+    } catch (err) {
+      console.warn("Could not refresh tasks:", err);
+    }
+  };
+
+  // Handle task approval
+  const handleApprove = async (task: Cr49f_approvaltaskses) => {
+    setActioningTaskId(task.cr49f_approvaltasksid);
+    setTaskNotice(null);
+    try {
+      const result = await approveTask(task.cr49f_approvaltasksid);
+      if (liveRfq) {
+        await refreshTasks(liveRfq.cr49f_requestforqoutationid);
+        // Refresh live RFQ status
+        const refreshed = await Cr49f_requestforqoutationsService.get(liveRfq.cr49f_requestforqoutationid);
+        if (refreshed.success && refreshed.data) {
+          setLiveRfq(refreshed.data);
+        }
+      }
+      setTaskNotice(
+        result.nextActivatedTask
+          ? `Task "${task.cr49f_task}" approved! Next sequence task "${result.nextActivatedTask.cr49f_task}" is now Active.`
+          : `Task "${task.cr49f_task}" approved! All approval tasks completed. RFQ is now Approved!`
+      );
+    } catch (err) {
+      console.error("Failed to approve task:", err);
+      setTaskNotice(err instanceof Error ? err.message : "Approval failed.");
+    } finally {
+      setActioningTaskId(null);
+    }
+  };
+
+  // Handle task rejection
+  const handleReject = async (task: Cr49f_approvaltaskses) => {
+    setActioningTaskId(task.cr49f_approvaltasksid);
+    setTaskNotice(null);
+    try {
+      await rejectTask(task.cr49f_approvaltasksid);
+      if (liveRfq) {
+        await refreshTasks(liveRfq.cr49f_requestforqoutationid);
+        const refreshed = await Cr49f_requestforqoutationsService.get(liveRfq.cr49f_requestforqoutationid);
+        if (refreshed.success && refreshed.data) {
+          setLiveRfq(refreshed.data);
+        }
+      }
+      setTaskNotice(`Task "${task.cr49f_task}" rejected. RFQ is marked as Rejected.`);
+    } catch (err) {
+      console.error("Failed to reject task:", err);
+      setTaskNotice(err instanceof Error ? err.message : "Rejection failed.");
+    } finally {
+      setActioningTaskId(null);
+    }
+  };
+
+  // Add note
+  const handleAddNote = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newNoteTitle.trim() || !newNoteBody.trim()) return;
+
+    const newNote: RfqNote = {
+      id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title: newNoteTitle.trim(),
+      body: newNoteBody.trim(),
+      type: newNoteType,
+      author: "Subrata Dey",
+      createdAt: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+
+    const updated = [newNote, ...notes];
+    setNotes(updated);
+    try {
+      localStorage.setItem(notesKey, JSON.stringify(updated));
+    } catch {
+      // Ignore quota
+    }
+
+    setNewNoteTitle("");
+    setNewNoteBody("");
+    setIsAddNoteOpen(false);
+  };
+
+  // Delete note
+  const handleDeleteNote = (id: string) => {
+    const updated = notes.filter((n) => n.id !== id);
+    setNotes(updated);
+    try {
+      localStorage.setItem(notesKey, JSON.stringify(updated));
+    } catch {
+      // Ignore quota
+    }
+  };
+
+  // Unified RFQ View Model
+  const rfqData = useMemo(() => {
+    if (liveRfq) {
+      const statusInfo = getStatusBadge(liveRfq.cr49f_status);
+      const rfqId = cleanGuid(liveRfq.cr49f_requestforqoutationid);
+
+      // Invited suppliers resolution (Dataverse selected suppliers + cached created suppliers)
+      let cachedInvited: Array<{ cr49f_name?: string; cr49f_supplierid1?: string; cr49f_email?: string; cr49f_phonenumber?: string; cr49f_city?: string; cr49f_country?: string }> = [];
+      try {
+        const stored =
+          localStorage.getItem(`rfq_invited_suppliers_${rfqId}`) ||
+          localStorage.getItem(`rfq_invited_suppliers_${liveRfq.cr49f_rfqnumber}`);
+        if (stored) cachedInvited = JSON.parse(stored);
+      } catch {
+        cachedInvited = [];
+      }
+
+      // Combine sources for suppliers
+      const invitedMap = new Map<
+        string,
+        {
+          id: string;
+          name: string;
+          email: string;
+          phone: string;
+          address: string;
+          category?: string;
+          code?: string;
+          verified: boolean;
+          ranking: number;
+          rewarded: boolean;
+          hasResponse: boolean;
+          reason?: string;
+        }
+      >();
+
+      // From cached creation
+      cachedInvited.forEach((sup: any, idx) => {
+        const name = sup.cr49f_name || "Supplier";
+        const matched = allSuppliers.find(
+          (as) =>
+            as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
+            as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
+        );
+        invitedMap.set(name.toLowerCase(), {
+          id: `inv-${idx + 1}`,
+          name,
+          email: sup.cr49f_email || matched?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@partner.com`,
+          phone: sup.cr49f_phonenumber || matched?.cr49f_phonenumber || "+91 80 6788 1000",
+          address: [sup.cr49f_city, sup.cr49f_country].filter(Boolean).join(", ") || [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || "Registered Vendor Location",
+          category: (sup as unknown as { cr49f_suppliercategory?: string }).cr49f_suppliercategory || matched?.cr49f_suppliercategory || "Vendor",
+          code: sup.cr49f_supplierid1 || matched?.cr49f_supplierid1,
+          verified: true,
+          ranking: sup.flowRank ?? (idx + 1),
+          rewarded: statusInfo.label === "Rewarded" && idx === 0,
+          hasResponse: idx === 0,
+          reason: sup.flowReason,
+        });
+      });
+
+      // From selected suppliers dataverse
+      selectedSuppliers.forEach((sel, idx) => {
+        const name = sel.cr49f_supplierquotation || sel.cr49f_selectedsuppliernumber || `Supplier #${idx + 1}`;
+        const matched = allSuppliers.find(
+          (as) =>
+            as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
+            as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
+        );
+        if (!invitedMap.has(name.toLowerCase())) {
+          invitedMap.set(name.toLowerCase(), {
+            id: sel.cr49f_selectedsuppliersid || `sel-${idx + 1}`,
+            name: matched?.cr49f_name || name,
+            email: matched?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@vendor.com`,
+            phone: matched?.cr49f_phonenumber || "+91 98 7654 3210",
+            address: [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || "Vendor Facility",
+            category: matched?.cr49f_suppliercategory || "Vendor",
+            verified: true,
+            ranking: invitedMap.size + 1,
+            rewarded: statusInfo.label === "Rewarded" && invitedMap.size === 0,
+            hasResponse: true,
+          });
+        }
+      });
+
+      // Fallback if none assigned
+      if (invitedMap.size === 0) {
+        INITIAL_SAMPLE_SUPPLIERS.slice(0, 3).forEach((item, idx) => {
+          const name = item.supplier.cr49f_name || "Vendor";
+          invitedMap.set(name.toLowerCase(), {
+            id: `sample-${idx + 1}`,
+            name,
+            email: item.supplier.cr49f_email || "vendor@partner.com",
+            phone: item.supplier.cr49f_phonenumber || "+91 80 1234 5678",
+            address: `${item.supplier.cr49f_city || "Bengaluru"}, ${item.supplier.cr49f_country || "India"}`,
+            category: item.supplier.cr49f_suppliercategory || "Hardware",
+            verified: true,
+            ranking: idx + 1,
+            rewarded: false,
+            hasResponse: idx === 0,
+          });
+        });
+      }
+
+      const invitedList = Array.from(invitedMap.values());
+
+      // Line items resolution (from PR lines or catalog)
+      const mappedLines: RfqLineItem[] = prLines.length > 0
+        ? prLines.map((l, idx) => ({
+            id: l.cr49f_purchaserequestlineid || `line-${idx + 1}`,
+            itemCode: l.cr49f_prlinenumber || `LINE-${idx + 1}`,
+            itemName: l.cr49f_itemname || l.cr49f_itemdescription || "Procurement Item",
+            quantity: Number(l.cr49f_quantity) || 1,
+            unitPrice: Number(l.cr49f_unitprice) || 0,
+            totalAmount: (Number(l.cr49f_quantity) || 1) * (Number(l.cr49f_unitprice) || 0),
+            deliveryAddress: liveRfq.cr49f_deliverylocation || "Main Tech Hub",
+          }))
+        : [
+            {
+              id: "item-1",
+              itemCode: "PDT-2026-IT",
+              itemName: liveRfq.cr49f_rfqtitle || "IT Equipment & Services",
+              quantity: 1,
+              unitPrice: 0,
+              totalAmount: 0,
+              deliveryAddress: liveRfq.cr49f_deliverylocation || "Main Delivery Location",
+            },
+          ];
+
+      const raw = liveRfq as unknown as Record<string, unknown>;
+      const prRef =
+        (raw["_cr49f_prrfq_value@OData.Community.Display.V1.FormattedValue"] as string) ||
+        liveRfq.cr49f_prrfqname ||
+        linkedPR?.cr49f_prnumber ||
+        null;
+
+      return {
+        refNo: liveRfq.cr49f_rfqnumber || liveRfq.cr49f_requestforqoutationid,
+        title: liveRfq.cr49f_rfqtitle || "Request for Quotation",
+        description: liveRfq.cr49f_description || "Scope of procurement work and equipment specifications.",
+        status: statusInfo.label,
+        statusTone: statusInfo.tone,
+        requestDate: toUsDate(liveRfq.cr49f_requestdate || liveRfq.createdon),
+        submissionDeadline: toUsDate(liveRfq.cr49f_submissiondeadline),
+        awardDate: liveRfq.cr49f_awarddate ? toUsDate(liveRfq.cr49f_awarddate) : "Pending Award",
+        closedDate: liveRfq.cr49f_closeddate ? toUsDate(liveRfq.cr49f_closeddate) : "—",
+        deliveryLocation: liveRfq.cr49f_deliverylocation || "Not specified",
+        createdBy: liveRfq.createdbyname || "Procurement Admin",
+        associatedPr: prRef,
+        invitedSuppliers: invitedList,
+        lineItems: mappedLines,
+        isLive: true,
+      };
+    }
+
+    if (mockRfq) {
+      const statusInfo = getStatusBadge(mockRfq.status);
+      return {
+        refNo: mockRfq.refNo,
+        title: mockRfq.title,
+        description: "Standard request for quotation specifications and commercial pricing schedule.",
+        status: statusInfo.label,
+        statusTone: statusInfo.tone,
+        requestDate: mockRfq.startDate,
+        submissionDeadline: mockRfq.responseDueDate,
+        awardDate: mockRfq.rewardDate || "Pending Award",
+        closedDate: "—",
+        deliveryLocation: mockRfq.invitedSuppliers[0]?.address || "Bengaluru Delivery Center",
+        createdBy: mockRfq.createdBy,
+        associatedPr: mockRfq.pr.startsWith("PR-") ? mockRfq.pr : null,
+        invitedSuppliers: mockRfq.invitedSuppliers.map((s) => ({
+          ...s,
+          category: "Hardware",
+          hasResponse: s.rewarded || s.ranking <= 2,
+        })),
+        lineItems: mockRfq.lineItems,
+        isLive: false,
+      };
+    }
+
+    return null;
+  }, [liveRfq, mockRfq, linkedPR, prLines, selectedSuppliers, allSuppliers]);
+
+  // Loading state
+  if (loading) {
     return (
       <div className="rfq-detail-page">
         <div className="rfq-detail-notfound">
-          <p>RFQ not found.</p>
-          <button type="button" onClick={() => navigate("/rfqs")}>Back to RFQs</button>
+          <Loader2 size={32} className="rfq-spinner" style={{ animation: "spin 1s linear infinite", marginBottom: 12 }} />
+          <p>Loading Request for Quotation details from Dataverse...</p>
         </div>
       </div>
     );
   }
 
-  const approvalSteps = buildRfqApprovalSteps(record);
-  const totalBudget = totalBudgetFor(record);
-  const isLinkedToPr = record.pr.startsWith("PR-");
+  // Error / Not Found state
+  if (loadError || !rfqData) {
+    return (
+      <div className="rfq-detail-page">
+        <div className="rfq-detail-notfound">
+          <AlertCircle size={36} color="#ef4444" style={{ marginBottom: 10 }} />
+          <p>{loadError || "Request for Quotation not found."}</p>
+          <button type="button" onClick={() => navigate("/rfqs")}>
+            <ArrowLeft size={13} style={{ marginRight: 6 }} />
+            Back to RFQs
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const aiSummary = [
-    `This RFQ (${record.title}) invited ${record.responsesInvited} supplier${record.responsesInvited === 1 ? "" : "s"} and has received ${record.responsesReceived} response${record.responsesReceived === 1 ? "" : "s"} so far.`,
-    record.status === "Rewarded"
-      ? `It has been awarded to ${record.supplier !== "N/A" ? record.supplier : "the selected supplier"} on ${record.rewardDate}, with a total quotation value of ${usdFormatter.format(totalBudget)}.`
-      : `It is currently awaiting evaluation — responses are due by ${record.responseDueDate}, with a running quotation value of ${usdFormatter.format(totalBudget)}.`,
-    isLinkedToPr ? `Linked to purchase request ${record.pr}.` : "No purchase request is linked to this RFQ yet.",
+  const deadlineDays = getDaysRemaining(rfqData.submissionDeadline !== "—" ? rfqData.submissionDeadline : null);
+
+  // Dynamic AI Summary
+  const dynamicAiSummary = [
+    `This RFQ (${rfqData.refNo}: "${rfqData.title}") was initiated on ${rfqData.requestDate} by ${rfqData.createdBy}.`,
+    rfqData.invitedSuppliers.length > 0
+      ? `It has invited ${rfqData.invitedSuppliers.length} supplier${rfqData.invitedSuppliers.length === 1 ? "" : "s"}, with ${rfqData.invitedSuppliers.filter((s) => s.hasResponse).length} quotation response${rfqData.invitedSuppliers.filter((s) => s.hasResponse).length === 1 ? "" : "s"} recorded.`
+      : "Supplier invitations are currently pending dispatch.",
+    rfqData.submissionDeadline !== "—"
+      ? `Quotation responses are scheduled for evaluation by ${rfqData.submissionDeadline}${deadlineDays ? ` (${deadlineDays.text})` : ""} for delivery to ${rfqData.deliveryLocation}.`
+      : `Deliveries will be routed to ${rfqData.deliveryLocation}.`,
+    rfqData.associatedPr
+      ? `Directly linked to Purchase Request ${rfqData.associatedPr}.`
+      : "Created as an independent procurement quotation cycle.",
+    rfqData.status === "Approved" || rfqData.status === "Rewarded"
+      ? "Quotation review is approved and ready for purchase order generation."
+      : rfqData.status === "Rejected"
+      ? "This RFQ has been rejected during the evaluation cycle."
+      : "Active in review sequence with designated approvers.",
   ].join(" ");
+
+  // Dynamic Journey Milestones
+  const isApprovedOrRewarded = rfqData.status === "Approved" || rfqData.status === "Rewarded";
+  const isRejected = rfqData.status === "Rejected";
+
+  const journeySteps: RfqApprovalStep[] = [
+    {
+      step: 1,
+      title: "RFQ Creation",
+      status: "Completed",
+      by: `${rfqData.createdBy} | Procurement Lead`,
+      date: rfqData.requestDate,
+    },
+    {
+      step: 2,
+      title: "Supplier Invitations",
+      status: rfqData.invitedSuppliers.length > 0 ? "Completed" : "Current",
+      by: `${rfqData.createdBy} | Vendor Desk`,
+      date: rfqData.requestDate,
+    },
+    {
+      step: 3,
+      title: "Quotation Submissions",
+      status: isApprovedOrRewarded || isRejected
+        ? "Completed"
+        : rfqData.invitedSuppliers.some((s) => s.hasResponse)
+        ? "Current"
+        : "Pending",
+      date: rfqData.submissionDeadline,
+    },
+    {
+      step: 4,
+      title: "Technical & Commercial Review",
+      status: isApprovedOrRewarded || isRejected
+        ? "Completed"
+        : approvalTasks.some((t) => t.statecode === 0)
+        ? "Current"
+        : "Pending",
+      by: "Evaluation Committee",
+      date: rfqData.awardDate !== "Pending Award" ? rfqData.awardDate : undefined,
+    },
+    {
+      step: 5,
+      title: "Sign-Off & Award",
+      status: isApprovedOrRewarded ? "Completed" : isRejected ? "Rejected" : "Pending",
+      by: "Procurement Committee",
+      date: isApprovedOrRewarded ? rfqData.awardDate : undefined,
+    },
+  ];
+
+  // Active approval task (currently active in sequence and pending decision)
+  const activeApprovalTask = approvalTasks.find(
+    (t) => t.statecode === 0 && getTaskApprovalStatusLabel(t) === "Pending"
+  );
+
+  const activeRoleLabel = activeApprovalTask?.cr49f_role && Cr49f_approvaltasksescr49f_role[activeApprovalTask.cr49f_role]
+    ? Cr49f_approvaltasksescr49f_role[activeApprovalTask.cr49f_role]
+    : "Procurement Approver";
+
+  const activeDeptLabel = activeApprovalTask?.cr49f_department && Cr49f_approvaltasksescr49f_department[activeApprovalTask.cr49f_department]
+    ? Cr49f_approvaltasksescr49f_department[activeApprovalTask.cr49f_department]
+    : "IT Department";
 
   return (
     <div className="rfq-detail-page">
+      {/* 1. Header Row */}
       <div className="rfq-detail-heading">
         <div className="rfq-detail-heading-left">
-          <button type="button" className="rfq-detail-back" onClick={() => navigate(-1)}>
-            <ArrowLeft size={12} />
+          <button
+            type="button"
+            className="rfq-detail-back"
+            onClick={() => navigate("/rfqs")}
+            aria-label="Back to RFQ List"
+            title="Back to RFQs"
+          >
+            <ArrowLeft size={16} />
           </button>
           <div>
             <div className="rfq-detail-title-row">
-              <h1>{record.refNo}</h1>
-              <span className={`rfq-detail-status-pill ${statusPillClass(record.status)}`}>{record.status}</span>
+              <h1>{rfqData.refNo}</h1>
+              <span className={`rfq-detail-status-pill ${rfqData.statusTone}`}>
+                {rfqData.status}
+              </span>
+              {deadlineDays && (
+                <span className={`rfq-countdown-tag tone-${deadlineDays.tone}`}>
+                  <Clock size={11} /> {deadlineDays.text}
+                </span>
+              )}
             </div>
-            <p className="rfq-detail-subtitle">{record.title}</p>
+            <p className="rfq-detail-subtitle">{rfqData.title}</p>
           </div>
         </div>
 
         <div className="rfq-detail-actions">
-          <button type="button" className="rfq-detail-primary-btn">
-            <FileText size={11} />
-            Create Purchase Order
-          </button>
+          {isApprovedOrRewarded ? (
+            <button
+              type="button"
+              className="rfq-detail-primary-btn"
+              onClick={() => navigate("/orders")}
+            >
+              <FileText size={12} />
+              Create Purchase Order
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="rfq-btn-outline"
+              onClick={() => setActiveTab("Associated Tasks")}
+            >
+              <ShieldCheck size={13} />
+              View Approval Tasks
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Action Notice (Approve/Reject Feedback) */}
+      {taskNotice && (
+        <div
+          className={`rfq-action-notice ${
+            taskNotice.toLowerCase().includes("fail") ||
+            taskNotice.toLowerCase().includes("reject") ||
+            taskNotice.toLowerCase().includes("error")
+              ? "error"
+              : "success"
+          }`}
+          role="status"
+        >
+          <div className="rfq-notice-content">
+            {taskNotice.toLowerCase().includes("fail") || taskNotice.toLowerCase().includes("reject") ? (
+              <AlertCircle size={15} />
+            ) : (
+              <CheckCircle2 size={15} />
+            )}
+            <span>{taskNotice}</span>
+          </div>
+          <button type="button" onClick={() => setTaskNotice(null)} aria-label="Dismiss notice">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* 2. RFQ Journey Card */}
       <section className="rfq-detail-card rfq-journey-card">
         <div className="rfq-detail-card-header">
           <div className="rfq-detail-card-header-left">
             <div className="rfq-detail-card-icon">
-              <Clock size={12} />
+              <Clock size={14} />
             </div>
             <div className="rfq-detail-card-title">
-              <h2>RFQ Journey</h2>
-              <p>Track progress from RFQ creation through reward</p>
+              <h2>RFQ Procurement Journey</h2>
+              <p>Track progression from request issuance through vendor evaluation and PO award</p>
             </div>
           </div>
         </div>
 
         <div className="rfq-approval-timeline">
-          {approvalSteps.map((step, index) => (
+          {journeySteps.map((step, index) => (
             <div className="rfq-approval-step" key={step.step}>
-              <div className={`rfq-approval-step-line ${step.status === "Completed" ? "done" : ""}`} />
-              <div className={`rfq-approval-step-circle ${approvalStepClass(step.status)}`}>
+              <div
+                className={`rfq-approval-step-line ${
+                  step.status === "Completed" ? "done" : ""
+                }`}
+              />
+              <div
+                className={`rfq-approval-step-circle ${
+                  step.status === "Completed"
+                    ? "completed"
+                    : step.status === "Current"
+                    ? "current"
+                    : step.status === "Rejected"
+                    ? "rejected"
+                    : "pending"
+                }`}
+              >
                 {step.status === "Completed" ? <CircleCheck size={14} /> : index + 1}
               </div>
               <div className="rfq-approval-step-label">
                 <strong>{step.title}</strong>
-                <span className={`rfq-approval-step-status ${approvalStepClass(step.status)}`}>
+                <span
+                  className={`rfq-approval-step-status ${
+                    step.status === "Completed"
+                      ? "completed"
+                      : step.status === "Current"
+                      ? "current"
+                      : step.status === "Rejected"
+                      ? "rejected"
+                      : "pending"
+                  }`}
+                >
                   {step.status === "Current" ? "In Progress" : step.status}
                 </span>
               </div>
@@ -145,161 +844,316 @@ export default function RfqDetail() {
         </div>
       </section>
 
+      {/* 3. Main Tabs Card */}
       <section className="rfq-detail-card">
-        <div className="rfq-detail-tabs">
+        <div className="rfq-detail-tabs" role="tablist">
           {TABS.map((tab) => (
             <button
               key={tab}
               type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
               className={activeTab === tab ? "active" : ""}
               onClick={() => setActiveTab(tab)}
             >
               {tab}
+              {tab === "Associated Tasks" && approvalTasks.length > 0 && (
+                <span className="rfq-tab-count">{approvalTasks.length}</span>
+              )}
+              {tab === "Supplier Responses" && rfqData.invitedSuppliers.length > 0 && (
+                <span className="rfq-tab-count">{rfqData.invitedSuppliers.length}</span>
+              )}
+              {tab === "Notes" && notes.length > 0 && (
+                <span className="rfq-tab-count">{notes.length}</span>
+              )}
             </button>
           ))}
         </div>
 
+        {/* TAB 1: SUMMARY */}
         {activeTab === "Summary" && (
           <>
+            {/* Top Decision Banner if Active Approval Task exists */}
+            {activeApprovalTask && (
+              <div className="rfq-decision-banner">
+                <div className="rfq-decision-banner-left">
+                  <div className="rfq-decision-icon-wrap">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <div className="rfq-decision-banner-title">
+                      Action Required: Review &amp; Submit Decision for Sequence #{activeApprovalTask.cr49f_sequence ?? 1}
+                    </div>
+                    <div className="rfq-decision-banner-sub">
+                      Assigned step: <strong>{activeApprovalTask.cr49f_task}</strong> ({activeRoleLabel} · {activeDeptLabel}). SLA: {activeApprovalTask.cr49f_slanumber ?? 24} hours.
+                    </div>
+                  </div>
+                </div>
+                <div className="rfq-decision-banner-actions">
+                  <button
+                    type="button"
+                    className="rfq-decision-btn reject"
+                    onClick={() => void handleReject(activeApprovalTask)}
+                    disabled={actioningTaskId === activeApprovalTask.cr49f_approvaltasksid}
+                  >
+                    <ThumbsDown size={13} />
+                    {actioningTaskId === activeApprovalTask.cr49f_approvaltasksid ? "Rejecting..." : "Reject"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rfq-decision-btn approve"
+                    onClick={() => void handleApprove(activeApprovalTask)}
+                    disabled={actioningTaskId === activeApprovalTask.cr49f_approvaltasksid}
+                  >
+                    <ThumbsUp size={13} />
+                    {actioningTaskId === activeApprovalTask.cr49f_approvaltasksid ? "Approving..." : "Approve Step"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* KPI Cards */}
             <section className="rfq-summary-kpis" aria-label="RFQ summary metrics">
-              <article className="rfq-summary-kpi amount">
-                <span className="rfq-summary-kpi-icon"><Coins size={15} /></span>
-                <span className="rfq-summary-kpi-copy"><small>Total Budget</small><strong>{usdFormatter.format(totalBudget)}</strong></span>
-              </article>
-              <article className={`rfq-summary-kpi ${statusPillClass(record.status)}`}>
+              <article className={`rfq-summary-kpi ${rfqData.statusTone}`}>
                 <span className="rfq-summary-kpi-icon"><ShieldCheck size={15} /></span>
-                <span className="rfq-summary-kpi-copy"><small>Current Status</small><strong>{record.status}</strong></span>
+                <span className="rfq-summary-kpi-copy">
+                  <small>Current Status</small>
+                  <strong>{rfqData.status}</strong>
+                </span>
               </article>
+
+              <article className="rfq-summary-kpi responses">
+                <span className="rfq-summary-kpi-icon"><Users size={15} /></span>
+                <span className="rfq-summary-kpi-copy">
+                  <small>Invited Suppliers</small>
+                  <strong>{rfqData.invitedSuppliers.length} Vendors</strong>
+                </span>
+              </article>
+
               <article className="rfq-summary-kpi responses">
                 <span className="rfq-summary-kpi-icon"><Percent size={15} /></span>
-                <span className="rfq-summary-kpi-copy"><small>Responses</small><strong>{record.responsesReceived} of {record.responsesInvited}</strong></span>
+                <span className="rfq-summary-kpi-copy">
+                  <small>Responses</small>
+                  <strong>
+                    {rfqData.invitedSuppliers.filter((s) => s.hasResponse).length} of {rfqData.invitedSuppliers.length} Received
+                  </strong>
+                </span>
               </article>
+
               <article className="rfq-summary-kpi due-date">
                 <span className="rfq-summary-kpi-icon"><CalendarDays size={15} /></span>
-                <span className="rfq-summary-kpi-copy"><small>Response Due</small><strong>{record.responseDueDate}</strong></span>
+                <span className="rfq-summary-kpi-copy">
+                  <small>Submission Deadline</small>
+                  <strong>{rfqData.submissionDeadline}</strong>
+                </span>
               </article>
             </section>
 
             <div className="rfq-summary-layout">
+              {/* Left Column */}
               <div className="rfq-summary-main-column">
+                {/* AI Summary */}
                 <section className="rfq-ai-summary" aria-labelledby="rfq-ai-summary-title">
                   <div className="rfq-ai-summary-heading">
                     <span><Sparkles size={14} /></span>
-                    <h2 id="rfq-ai-summary-title">AI Summary</h2>
-                    <small>Record-backed</small>
+                    <h2 id="rfq-ai-summary-title">AI Procurement Summary</h2>
+                    <small>Live Dataverse Record</small>
                   </div>
-                  <p>{aiSummary}</p>
-                  <span className="rfq-ai-summary-note">Generated from the fields and supplier responses recorded on this RFQ.</span>
+                  <p>{dynamicAiSummary}</p>
+                  <span className="rfq-ai-summary-note">
+                    Generated dynamically from RFQ attributes, vendor quotation status, and workflow tasks.
+                  </span>
                 </section>
 
+                {/* Scope & Description Box */}
+                {rfqData.description && (
+                  <div className="rfq-description-box">
+                    <div className="rfq-description-heading">
+                      <ClipboardList size={13} />
+                      Scope of Work &amp; Conditions
+                    </div>
+                    <p>{rfqData.description}</p>
+                  </div>
+                )}
+
+                {/* RFQ Details Grid */}
                 <div className="rfq-summary-top">
                   <div className="rfq-summary-title">
                     <ClipboardList size={13} />
-                    RFQ Details
+                    RFQ Record Details
                   </div>
                 </div>
 
                 <div className="rfq-detail-grid">
                   <div className="rfq-detail-field">
-                    <div className="rfq-detail-field-icon"><CalendarDays size={11} /></div>
-                    <div><span>Start Date</span><strong>{record.startDate}</strong></div>
+                    <div className="rfq-detail-field-icon"><CalendarDays size={12} /></div>
+                    <div><span>Request Date</span><strong>{rfqData.requestDate}</strong></div>
                   </div>
                   <div className="rfq-detail-field">
-                    <div className="rfq-detail-field-icon"><CalendarDays size={11} /></div>
-                    <div><span>Clarification Date</span><strong>{record.clarificationDate}</strong></div>
+                    <div className="rfq-detail-field-icon"><CalendarDays size={12} /></div>
+                    <div><span>Submission Deadline</span><strong>{rfqData.submissionDeadline}</strong></div>
                   </div>
                   <div className="rfq-detail-field">
-                    <div className="rfq-detail-field-icon"><CalendarDays size={11} /></div>
-                    <div><span>Response Due Date</span><strong>{record.responseDueDate}</strong></div>
+                    <div className="rfq-detail-field-icon"><MapPin size={12} /></div>
+                    <div><span>Delivery Location</span><strong>{rfqData.deliveryLocation}</strong></div>
                   </div>
                   <div className="rfq-detail-field">
-                    <div className="rfq-detail-field-icon"><CalendarDays size={11} /></div>
-                    <div><span>Reward Date</span><strong>{record.rewardDate}</strong></div>
+                    <div className="rfq-detail-field-icon"><User size={12} /></div>
+                    <div><span>Created By</span><strong>{rfqData.createdBy}</strong></div>
                   </div>
                   <div className="rfq-detail-field">
-                    <div className="rfq-detail-field-icon"><ClipboardList size={11} /></div>
-                    <div><span>Responses Received</span><strong>{record.responsesReceived}/{record.responsesInvited}</strong></div>
+                    <div className="rfq-detail-field-icon"><Trophy size={12} /></div>
+                    <div><span>Award Date</span><strong>{rfqData.awardDate}</strong></div>
                   </div>
                   <div className="rfq-detail-field">
-                    <div className="rfq-detail-field-icon"><FileText size={11} /></div>
-                    <div><span>Associated PR</span><strong>{isLinkedToPr ? record.pr : "Not linked"}</strong></div>
+                    <div className="rfq-detail-field-icon"><FileText size={12} /></div>
+                    <div>
+                      <span>Associated PR</span>
+                      <strong>
+                        {rfqData.associatedPr ? (
+                          <button
+                            type="button"
+                            className="rfq-inline-link"
+                            onClick={() => navigate(`/purchase-requests/${rfqData.associatedPr}`)}
+                          >
+                            {rfqData.associatedPr}
+                          </button>
+                        ) : (
+                          "Not linked"
+                        )}
+                      </strong>
+                    </div>
                   </div>
                 </div>
 
+                {/* Invited Suppliers Cards Section */}
                 <div className="rfq-detail-lineitems-heading">
-                  <Building2 size={11} />
-                  Invited Suppliers ({record.invitedSuppliers.length})
+                  <Building2 size={13} />
+                  Invited Suppliers ({rfqData.invitedSuppliers.length})
                 </div>
 
-                <div className="rfq-detail-table-wrapper">
-                  <table className="rfq-detail-table">
-                    <thead>
-                      <tr>
-                        <th>Supplier Details</th>
-                        <th>Contact Information</th>
-                        <th>Address</th>
-                        <th>Ranking</th>
-                        <th>Rewarded</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {record.invitedSuppliers.map((supplier) => (
-                        <tr key={supplier.id}>
-                          <td>
-                            <div className="rfq-detail-table-avatar">
-                              <span>{getInitials(supplier.name)}</span>
-                              {supplier.name}
-                              {supplier.verified && <ShieldCheck size={12} className="rfq-supplier-verified" />}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="rfq-supplier-contact">
-                              <span><Mail size={11} />{supplier.email}</span>
-                              <span><Phone size={11} />{supplier.phone}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="rfq-supplier-address"><MapPin size={11} />{supplier.address}</div>
-                          </td>
-                          <td>
-                            <span className="rfq-supplier-rank"><Trophy size={13} />{supplier.ranking}</span>
-                          </td>
-                          <td>
-                            <span className={`rfq-supplier-rewarded-pill ${supplier.rewarded ? "rewarded" : ""}`}>
-                              {supplier.rewarded ? "Rewarded" : "Not Rewarded"}
+                <div className="rfq-summary-suppliers-grid">
+                  {rfqData.invitedSuppliers.map((supplier) => {
+                    const initials = getInitials(supplier.name);
+                    const isAwarded = supplier.rewarded;
+                    const hasResponse = supplier.hasResponse;
+
+                    return (
+                      <div
+                        key={supplier.id}
+                        className={`rfq-summary-supplier-card ${
+                          isAwarded ? "awarded" : hasResponse ? "responded" : ""
+                        }`}
+                      >
+                        <div className="rfq-summary-supplier-card-header">
+                          <div className="rfq-summary-supplier-avatar-group">
+                            <span
+                              className={`rfq-summary-supplier-avatar ${
+                                isAwarded ? "tone-gold" : "tone-blue"
+                              }`}
+                            >
+                              {initials}
                             </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            <div className="rfq-summary-supplier-title-group">
+                              <div className="rfq-summary-supplier-name-row">
+                                <strong className="rfq-summary-supplier-name" title={supplier.name}>
+                                  {supplier.name}
+                                </strong>
+                                {supplier.verified && (
+                                  <span title="Verified Procurement Partner">
+                                    <ShieldCheck size={13} className="rfq-supplier-verified" />
+                                  </span>
+                                )}
+                              </div>
+                              <div className="rfq-summary-supplier-category-row">
+                                <span className="rfq-summary-supplier-category-badge">
+                                  {supplier.category || "Supplier"}
+                                </span>
+                                <span className="rfq-summary-supplier-rank">
+                                  <Trophy size={11} />
+                                  Rank #{supplier.ranking}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`rfq-supplier-rewarded-pill ${
+                              isAwarded ? "rewarded" : hasResponse ? "submitted" : "pending"
+                            }`}
+                          >
+                            {isAwarded ? "Awarded" : hasResponse ? "Submitted" : "Pending Bid"}
+                          </span>
+                        </div>
+
+                        <div className="rfq-summary-supplier-card-body">
+                          <div className="rfq-summary-supplier-info-item">
+                            <Mail size={12} className="rfq-supplier-info-icon" />
+                            <span title={supplier.email}>{supplier.email}</span>
+                          </div>
+                          <div className="rfq-summary-supplier-info-item">
+                            <Phone size={12} className="rfq-supplier-info-icon" />
+                            <span>{supplier.phone}</span>
+                          </div>
+                          <div className="rfq-summary-supplier-info-item">
+                            <MapPin size={12} className="rfq-supplier-info-icon" />
+                            <span title={supplier.address}>{supplier.address}</span>
+                          </div>
+                        </div>
+
+                        {supplier.reason && (
+                          <div className="rfq-summary-supplier-recommendation">
+                            <div className="rfq-summary-rec-header">
+                              <Sparkles size={11} className="rfq-summary-rec-sparkle" />
+                              <span>AI Recommendation</span>
+                            </div>
+                            <p className="rfq-summary-rec-text">{supplier.reason}</p>
+                          </div>
+                        )}
+
+                        <div className="rfq-summary-supplier-card-footer">
+                          <span className="rfq-supplier-quotation-ref">
+                            Quotation: <strong>{hasResponse ? `QT-${supplier.name.slice(0, 3).toUpperCase()}-2026` : "Awaiting Bid"}</strong>
+                          </span>
+                          {isAwarded ? (
+                            <span className="rfq-supplier-winner-tag">
+                              ★ Selected Vendor
+                            </span>
+                          ) : (
+                            <span className="rfq-supplier-delivery-tag">
+                              Invited Vendor
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
+                {/* Requested Line Items */}
                 <div className="rfq-detail-lineitems-heading">
-                  <Coins size={11} />
-                  Quotation Line Items ({record.lineItems.length})
+                  <ClipboardList size={12} />
+                  Requested Specification Lines ({rfqData.lineItems.length})
                 </div>
 
                 <div className="rfq-detail-table-wrapper">
                   <table className="rfq-detail-table">
                     <thead>
                       <tr>
+                        <th style={{ width: 44 }}>#</th>
                         <th>Item Code</th>
                         <th>Item Name</th>
                         <th>Quantity</th>
-                        <th>Unit Price</th>
-                        <th>Total Amount</th>
-                        <th>Delivery Address</th>
+                        <th>Delivery Destination</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {record.lineItems.map((item) => (
+                      {rfqData.lineItems.map((item, idx) => (
                         <tr key={item.id}>
-                          <td>{item.itemCode}</td>
+                          <td><strong>{idx + 1}</strong></td>
+                          <td><strong>{item.itemCode}</strong></td>
                           <td>{item.itemName}</td>
                           <td>{item.quantity}</td>
-                          <td>{usdFormatter.format(item.unitPrice)}</td>
-                          <td>{usdFormatter.format(item.totalAmount)}</td>
                           <td>{item.deliveryAddress}</td>
                         </tr>
                       ))}
@@ -308,35 +1162,78 @@ export default function RfqDetail() {
                 </div>
               </div>
 
+              {/* Right Column: Approval History Sidebar */}
               <aside className="rfq-summary-approval-card">
                 <div className="rfq-summary-approval-heading">
-                  <Clock size={17} />
-                  <h2>Approval History</h2>
+                  <Clock size={16} />
+                  <h2>Approval Lifecycle</h2>
                 </div>
                 <div className="rfq-summary-approval-list">
-                  {approvalSteps
-                    .filter((step) => step.status === "Completed" || step.status === "Current" || step.status === "Rejected")
-                    .map((step, index) => {
-                      const [actor, role] = (step.by ?? "").split("|").map((part) => part.trim());
+                  {approvalTasks.length > 0 ? (
+                    approvalTasks.map((t, index) => {
+                      const tStatus = getTaskApprovalStatusLabel(t);
+                      const isPending = tStatus === "Pending";
+                      const isApproved = tStatus === "Approved";
+                      const isRejected = tStatus === "Rejected";
+                      const isActive = t.statecode === 0 && isPending;
+
+                      const dept = t.cr49f_department && Cr49f_approvaltasksescr49f_department[t.cr49f_department]
+                        ? Cr49f_approvaltasksescr49f_department[t.cr49f_department]
+                        : "IT Department";
+
+                      const role = t.cr49f_role && Cr49f_approvaltasksescr49f_role[t.cr49f_role]
+                        ? Cr49f_approvaltasksescr49f_role[t.cr49f_role]
+                        : "Approver";
+
                       return (
-                        <div className={`rfq-summary-approval-step ${approvalStepClass(step.status)}`} key={step.step}>
+                        <div
+                          className={`rfq-summary-approval-step ${
+                            isApproved
+                              ? "completed"
+                              : isRejected
+                              ? "rejected"
+                              : isActive
+                              ? "current"
+                              : "pending"
+                          }`}
+                          key={t.cr49f_approvaltasksid}
+                        >
                           <span className="rfq-summary-approval-rail">
-                            <span className="rfq-summary-approval-node">{step.status === "Completed" ? "✓" : index + 1}</span>
+                            <span className="rfq-summary-approval-node">
+                              {isApproved ? "✓" : isRejected ? "✕" : index + 1}
+                            </span>
                           </span>
                           <span className="rfq-summary-approval-copy">
-                            <strong>{step.title}</strong>
-                            <span className={`rfq-summary-approval-badge ${approvalStepClass(step.status)}`}>
-                              {step.status === "Current" ? "In progress" : step.status}
+                            <strong
+                              className="rfq-task-link"
+                              onClick={() => navigate(`/tasks/${t.cr49f_approvaltasksid}`)}
+                              title="Click to view task details"
+                            >
+                              {t.cr49f_task}
+                            </strong>
+                            <span
+                              className={`rfq-summary-approval-badge ${
+                                isApproved
+                                  ? "completed"
+                                  : isRejected
+                                  ? "rejected"
+                                  : isActive
+                                  ? "current"
+                                  : "pending"
+                              }`}
+                            >
+                              {isApproved ? "Approved" : isRejected ? "Rejected" : isActive ? "Active" : "Pending"}
                             </span>
-                            {actor && <span><b>{actor}</b>{role && <>: <em>{role}</em></>}</span>}
-                            {step.department && <span>{step.department}</span>}
-                            {step.date && <small>{step.date}</small>}
+                            <span><b>{role}</b> · <em>{dept}</em></span>
+                            <small>SLA: {t.cr49f_slanumber ?? 24} hours</small>
                           </span>
                         </div>
                       );
-                    })}
-                  {approvalSteps.every((step) => step.status === "Pending") && (
-                    <p className="rfq-summary-approval-empty">No approval actions recorded yet.</p>
+                    })
+                  ) : loadingTasks ? (
+                    <p className="rfq-summary-approval-empty">Loading approval workflow tasks...</p>
+                  ) : (
+                    <p className="rfq-summary-approval-empty">No approval tasks configured for this RFQ.</p>
                   )}
                 </div>
               </aside>
@@ -344,20 +1241,521 @@ export default function RfqDetail() {
           </>
         )}
 
+        {/* TAB 2: PURCHASE REQUEST */}
         {activeTab === "Purchase Request" && (
-          isLinkedToPr ? (
-            <div className="rfq-detail-tab-empty">
-              Associated purchase request: <button type="button" className="rfq-inline-link" onClick={() => navigate(`/purchase-requests/${record.pr}`)}>{record.pr}</button>
-            </div>
-          ) : (
-            <div className="rfq-detail-tab-empty">No purchase request linked to this RFQ.</div>
-          )
+          <div className="rfq-tab-pane">
+            {linkedPR ? (
+              <div className="rfq-linked-pr-container">
+                <div className="rfq-linked-pr-card">
+                  <div className="rfq-linked-pr-header">
+                    <div className="rfq-linked-pr-badge">
+                      <FileText size={15} />
+                      <span>ASSOCIATED PURCHASE REQUEST</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="rfq-detail-primary-btn"
+                      onClick={() =>
+                        navigate(`/purchase-requests/${linkedPR.cr49f_prnumber || linkedPR.cr49f_purchaserequestid}`)
+                      }
+                    >
+                      View Full PR Summary <ExternalLink size={12} />
+                    </button>
+                  </div>
+
+                  <div className="rfq-linked-pr-body">
+                    <div className="rfq-linked-pr-title-row">
+                      <h3>{linkedPR.cr49f_prnumber || "PR-Record"}</h3>
+                      <span className="rfq-linked-pr-name">
+                        {linkedPR.cr49f_prtitle || "Untitled Purchase Request"}
+                      </span>
+                    </div>
+
+                    <div className="rfq-detail-grid">
+                      <div className="rfq-detail-field">
+                        <div className="rfq-detail-field-icon"><User size={12} /></div>
+                        <div><span>Requester</span><strong>{linkedPR.createdbyname || "Sakshi Paliwal"}</strong></div>
+                      </div>
+                      <div className="rfq-detail-field">
+                        <div className="rfq-detail-field-icon"><CalendarDays size={12} /></div>
+                        <div><span>Required Date</span><strong>{toUsDate(linkedPR.cr49f_requireddeliverydate)}</strong></div>
+                      </div>
+                      <div className="rfq-detail-field">
+                        <div className="rfq-detail-field-icon"><MapPin size={12} /></div>
+                        <div><span>Delivery Address</span><strong>{linkedPR.cr49f_deliverylocation || rfqData.deliveryLocation}</strong></div>
+                      </div>
+                      <div className="rfq-detail-field">
+                        <div className="rfq-detail-field-icon"><ShieldCheck size={12} /></div>
+                        <div><span>Status</span><strong>{linkedPR.cr49f_statusname || "In Review"}</strong></div>
+                      </div>
+                    </div>
+
+                    {linkedPR.cr49f_businessjustification && (
+                      <div className="rfq-pr-justification-box">
+                        <strong>Business Justification:</strong>
+                        <p>{linkedPR.cr49f_businessjustification}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {prLines.length > 0 && (
+                  <div className="rfq-pr-lines-section">
+                    <div className="rfq-detail-lineitems-heading">
+                      <ClipboardList size={12} />
+                      Line Items Linked from Purchase Request ({prLines.length})
+                    </div>
+                    <div className="rfq-detail-table-wrapper">
+                      <table className="rfq-detail-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: 44 }}>#</th>
+                            <th>Item Code</th>
+                            <th>Item Name</th>
+                            <th>Description / Specification</th>
+                            <th>Quantity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {prLines.map((line, idx) => (
+                            <tr key={line.cr49f_purchaserequestlineid || idx}>
+                              <td><strong>{idx + 1}</strong></td>
+                              <td><strong>{line.cr49f_prlinenumber || `LINE-${idx + 1}`}</strong></td>
+                              <td>{line.cr49f_itemname || "Item"}</td>
+                              <td>{line.cr49f_itemdescription || "—"}</td>
+                              <td>{line.cr49f_quantity || 1}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : rfqData.associatedPr ? (
+              <div className="rfq-detail-tab-empty">
+                <FileText size={28} style={{ opacity: 0.6, marginBottom: 8 }} />
+                <p>Associated Purchase Request: <strong>{rfqData.associatedPr}</strong></p>
+                <button
+                  type="button"
+                  className="rfq-inline-link"
+                  onClick={() => navigate(`/purchase-requests/${rfqData.associatedPr}`)}
+                >
+                  Click to open Purchase Request Summary →
+                </button>
+              </div>
+            ) : (
+              <div className="rfq-detail-tab-empty">
+                <FileText size={28} style={{ opacity: 0.6, marginBottom: 8 }} />
+                <p>No Purchase Request linked to this RFQ.</p>
+                <span>This RFQ was created directly without an upstream Purchase Request reference.</span>
+              </div>
+            )}
+          </div>
         )}
 
-        {["Orders", "Invoices", "Supplier Responses", "Supplier Clarifications", "Reward History", "Associated Tasks", "Notes", "Attachments"].includes(activeTab) && (
-          <div className="rfq-detail-tab-empty">No {activeTab.toLowerCase()} linked to this RFQ yet.</div>
+        {/* TAB 3: ASSOCIATED TASKS */}
+        {activeTab === "Associated Tasks" && (
+          <div className="rfq-tab-pane">
+            <div className="rfq-detail-lineitems-heading">
+              <ShieldCheck size={13} />
+              RFQ Approval Lifecycle Tasks ({approvalTasks.length})
+            </div>
+
+            {approvalTasks.length > 0 ? (
+              <div className="rfq-detail-table-wrapper">
+                <table className="rfq-detail-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 44 }}>#</th>
+                      <th>Task Name</th>
+                      <th>Department</th>
+                      <th>Role</th>
+                      <th>SLA</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: "center" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {approvalTasks.map((task) => {
+                      const isActive = task.statecode === 0;
+                      const approvalStatus = getTaskApprovalStatusLabel(task);
+                      const isPending = approvalStatus === "Pending";
+                      const isApproved = approvalStatus === "Approved";
+                      const isRejected = approvalStatus === "Rejected";
+
+                      const deptLabel =
+                        task.cr49f_department && Cr49f_approvaltasksescr49f_department[task.cr49f_department]
+                          ? Cr49f_approvaltasksescr49f_department[task.cr49f_department]
+                          : "Administrator";
+
+                      const roleLabel =
+                        task.cr49f_role && Cr49f_approvaltasksescr49f_role[task.cr49f_role]
+                          ? Cr49f_approvaltasksescr49f_role[task.cr49f_role]
+                          : "Procurement Approver";
+
+                      const slaUnitLabel =
+                        task.cr49f_slaunit && Cr49f_approvaltasksescr49f_slaunit[task.cr49f_slaunit]
+                          ? Cr49f_approvaltasksescr49f_slaunit[task.cr49f_slaunit]
+                          : "Hours";
+
+                      const slaLabel = `${task.cr49f_slanumber ?? 24} ${slaUnitLabel}`;
+
+                      return (
+                        <tr key={task.cr49f_approvaltasksid}>
+                          <td><strong>{task.cr49f_sequence ?? 1}</strong></td>
+                          <td>
+                            <strong
+                              className="rfq-task-table-title"
+                              onClick={() => navigate(`/tasks/${task.cr49f_approvaltasksid}`)}
+                              title="Click to view full task page"
+                            >
+                              {task.cr49f_task}
+                            </strong>
+                            {task.cr49f_id && task.cr49f_id !== task.cr49f_task && (
+                              <span className="rfq-task-subid">{task.cr49f_id}</span>
+                            )}
+                          </td>
+                          <td>{deptLabel}</td>
+                          <td>{roleLabel}</td>
+                          <td>{slaLabel}</td>
+                          <td>
+                            <span
+                              className={`rfq-task-status-pill ${
+                                isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"
+                              }`}
+                            >
+                              {isApproved ? "Approved" : isRejected ? "Rejected" : isActive ? "Active" : "Pending"}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "center" }}>
+                            {isActive && isPending ? (
+                              <div className="rfq-task-actions-row">
+                                <button
+                                  type="button"
+                                  className="rfq-btn-xs rfq-btn-approve"
+                                  onClick={() => void handleApprove(task)}
+                                  disabled={actioningTaskId === task.cr49f_approvaltasksid}
+                                  title="Approve step"
+                                >
+                                  <ThumbsUp size={11} /> Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rfq-btn-xs rfq-btn-reject"
+                                  onClick={() => void handleReject(task)}
+                                  disabled={actioningTaskId === task.cr49f_approvaltasksid}
+                                  title="Reject step"
+                                >
+                                  <ThumbsDown size={11} /> Reject
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="rfq-btn-xs rfq-btn-outline"
+                                onClick={() => navigate(`/tasks/${task.cr49f_approvaltasksid}`)}
+                              >
+                                View Task
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rfq-detail-tab-empty">
+                <ShieldCheck size={28} style={{ opacity: 0.6, marginBottom: 8 }} />
+                <p>No approval tasks recorded for this RFQ.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: SUPPLIER RESPONSES */}
+        {activeTab === "Supplier Responses" && (
+          <div className="rfq-tab-pane">
+            <div className="rfq-detail-lineitems-heading">
+              <Users size={13} />
+              Invited Vendors &amp; Quotation Responses ({rfqData.invitedSuppliers.length})
+            </div>
+
+            <div className="rfq-detail-table-wrapper">
+              <table className="rfq-detail-table">
+                <thead>
+                  <tr>
+                    <th>Supplier Details</th>
+                    <th>Contact Person</th>
+                    <th>Email</th>
+                    <th>Facility Location</th>
+                    <th>Submission Status</th>
+                    <th>Quotation Ref</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rfqData.invitedSuppliers.map((supplier) => (
+                    <tr key={supplier.id}>
+                      <td>
+                        <div className="rfq-detail-table-avatar">
+                          <span>{getInitials(supplier.name)}</span>
+                          <strong>{supplier.name}</strong>
+                          {supplier.verified && (
+                            <ShieldCheck size={12} className="rfq-supplier-verified" style={{ marginLeft: 4 }} />
+                          )}
+                        </div>
+                      </td>
+                      <td>{supplier.phone ? "Direct Representative" : "Supplier Desk"}</td>
+                      <td>{supplier.email}</td>
+                      <td>{supplier.address}</td>
+                      <td>
+                        <span className={`rfq-supplier-rewarded-pill ${supplier.hasResponse ? "submitted" : "pending"}`}>
+                          {supplier.hasResponse ? "Quotation Submitted" : "Pending Bid"}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{supplier.hasResponse ? `QT-${supplier.name.slice(0, 3).toUpperCase()}-2026` : "—"}</strong>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {responseLines.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <div className="rfq-detail-lineitems-heading">
+                  <ClipboardList size={13} />
+                  Quotation Response Lines ({responseLines.length})
+                </div>
+                <div className="rfq-detail-table-wrapper">
+                  <table className="rfq-detail-table">
+                    <thead>
+                      <tr>
+                        <th>Response Line ID</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>Discount</th>
+                        <th>Tax</th>
+                        <th>Total Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {responseLines.map((r, i) => (
+                        <tr key={r.cr49f_rfqresponselineid || i}>
+                          <td><strong>{r.cr49f_responselineid || `RESP-${i + 1}`}</strong></td>
+                          <td>{r.cr49f_quantity ?? "—"}</td>
+                          <td>${r.cr49f_unitprice ?? 0}</td>
+                          <td>{r.cr49f_discount ? `${r.cr49f_discount}%` : "—"}</td>
+                          <td>{r.cr49f_tax ? `${r.cr49f_tax}%` : "—"}</td>
+                          <td><strong>${r.cr49f_totalprice ?? 0}</strong></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 5: NOTES */}
+        {activeTab === "Notes" && (
+          <div className="rfq-tab-pane">
+            <div className="rfq-notes-section">
+              <div className="rfq-notes-heading">
+                <div>
+                  <div className="rfq-detail-lineitems-heading">
+                    <ClipboardList size={13} />
+                    Internal Notes &amp; Clarifications ({notes.length})
+                  </div>
+                  <p>Document committee notes, vendor questions, and evaluation remarks</p>
+                </div>
+                <button
+                  type="button"
+                  className="rfq-detail-primary-btn"
+                  onClick={() => setIsAddNoteOpen(true)}
+                >
+                  <Plus size={12} /> Add Note
+                </button>
+              </div>
+
+              {notes.length === 0 ? (
+                <div className="rfq-detail-tab-empty">
+                  <ClipboardList size={28} style={{ opacity: 0.6, marginBottom: 8 }} />
+                  <p>No notes or clarifications recorded for this RFQ yet.</p>
+                  <span>Click "Add Note" to document evaluation notes or meeting minutes.</span>
+                </div>
+              ) : (
+                <div className="rfq-notes-list">
+                  {notes.map((note) => (
+                    <div key={note.id} className="rfq-note-card">
+                      <div className="rfq-note-card-top">
+                        <div className="rfq-note-author-row">
+                          <span className="rfq-note-author-avatar">{getInitials(note.author)}</span>
+                          <div className="rfq-note-author-info">
+                            <strong>{note.author}</strong>
+                            <time>{note.createdAt}</time>
+                          </div>
+                        </div>
+                        <div className="rfq-note-card-actions">
+                          <span className={`rfq-note-visibility ${note.type.toLowerCase()}`}>
+                            {note.type}
+                          </span>
+                          <button
+                            type="button"
+                            className="rfq-note-delete-btn"
+                            onClick={() => handleDeleteNote(note.id)}
+                            aria-label={`Delete note: ${note.title}`}
+                            title="Delete note"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      <h4>{note.title}</h4>
+                      <p>{note.body}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: ATTACHMENTS */}
+        {activeTab === "Attachments" && (
+          <div className="rfq-tab-pane">
+            <div className="rfq-detail-lineitems-heading">
+              <Paperclip size={13} />
+              Procurement Specifications &amp; Documents (3)
+            </div>
+
+            <div className="rfq-attachments-grid">
+              <div className="rfq-attachment-card">
+                <div className="rfq-attachment-icon pdf">
+                  <FileText size={20} />
+                </div>
+                <div className="rfq-attachment-info">
+                  <strong>RFQ-Technical-Specifications-2026.pdf</strong>
+                  <span>Hardware specification schedule, quantities &amp; delivery criteria · 2.4 MB</span>
+                </div>
+              </div>
+
+              <div className="rfq-attachment-card">
+                <div className="rfq-attachment-icon xls">
+                  <ClipboardList size={20} />
+                </div>
+                <div className="rfq-attachment-info">
+                  <strong>Commercial-Quotation-Matrix.xlsx</strong>
+                  <span>Vendor pricing schedule, discount breakdown &amp; warranty terms · 820 KB</span>
+                </div>
+              </div>
+
+              <div className="rfq-attachment-card">
+                <div className="rfq-attachment-icon sec">
+                  <ShieldCheck size={20} />
+                </div>
+                <div className="rfq-attachment-info">
+                  <strong>Standard-Vendor-Confidentiality-Agreement.pdf</strong>
+                  <span>Non-disclosure agreement &amp; legal compliance conditions · 1.1 MB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: ORDERS */}
+        {activeTab === "Orders" && (
+          <div className="rfq-tab-pane">
+            <div className="rfq-orders-card">
+              <div className="rfq-orders-icon">
+                <Building2 size={36} />
+              </div>
+              <h3>Purchase Order Generation</h3>
+              {isApprovedOrRewarded ? (
+                <>
+                  <p>This RFQ evaluation has concluded and is approved for Purchase Order issuance.</p>
+                  <button
+                    type="button"
+                    className="rfq-detail-primary-btn"
+                    onClick={() => navigate("/orders")}
+                  >
+                    <FileText size={12} />
+                    Create Purchase Order
+                  </button>
+                </>
+              ) : (
+                <p>
+                  Purchase orders can be generated once this RFQ has been evaluated and approved by the procurement committee.
+                </p>
+              )}
+            </div>
+          </div>
         )}
       </section>
+
+      {/* Note Creation Modal */}
+      {isAddNoteOpen && (
+        <div className="rfq-modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && setIsAddNoteOpen(false)}>
+          <div className="rfq-note-modal" role="dialog" aria-modal="true" aria-labelledby="add-note-title">
+            <div className="rfq-note-modal-header">
+              <h2 id="add-note-title">Add RFQ Note / Clarification</h2>
+              <button type="button" onClick={() => setIsAddNoteOpen(false)} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleAddNote}>
+              <div className="rfq-note-field">
+                <label htmlFor="noteTitle">Note Title</label>
+                <input
+                  id="noteTitle"
+                  type="text"
+                  placeholder="e.g. Technical evaluation meeting minutes"
+                  value={newNoteTitle}
+                  onChange={(e) => setNewNoteTitle(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="rfq-note-field">
+                <label htmlFor="noteType">Visibility Type</label>
+                <select
+                  id="noteType"
+                  value={newNoteType}
+                  onChange={(e) => setNewNoteType(e.target.value as "Internal" | "Clarification")}
+                >
+                  <option value="Internal">Internal (Procurement Team Only)</option>
+                  <option value="Clarification">Public Clarification (Visible to Vendors)</option>
+                </select>
+              </div>
+
+              <div className="rfq-note-field">
+                <label htmlFor="noteBody">Content</label>
+                <textarea
+                  id="noteBody"
+                  rows={4}
+                  placeholder="Write your note or clarification text here..."
+                  value={newNoteBody}
+                  onChange={(e) => setNewNoteBody(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="rfq-note-modal-actions">
+                <button type="button" className="rfq-btn-ghost" onClick={() => setIsAddNoteOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="rfq-detail-primary-btn">
+                  Save Note
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
