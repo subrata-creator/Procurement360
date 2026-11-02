@@ -313,6 +313,40 @@ export function resolveSuppliersFromRecommendations(
       };
     }
 
+    // Check INITIAL_SAMPLE_SUPPLIERS (covers SUP-1001 through SUP-1010)
+    const sampleItem = INITIAL_SAMPLE_SUPPLIERS.find(
+      (item) =>
+        item.supplier.cr49f_supplierid1?.trim().toUpperCase() === normalized.toUpperCase() ||
+        item.supplier.cr49f_name?.trim().toLowerCase() === normalized.toLowerCase()
+    );
+
+    if (sampleItem) {
+      return {
+        cr49f_supplierid: `sup-${normalized.toLowerCase()}`,
+        cr49f_supplierid1: sampleItem.supplier.cr49f_supplierid1,
+        cr49f_name: sampleItem.supplier.cr49f_name,
+        cr49f_suppliercategory: sampleItem.supplier.cr49f_suppliercategory,
+        cr49f_suppliertypename:
+          Number(sampleItem.supplier.cr49f_suppliertype) === 1
+            ? "Manufacturer"
+            : Number(sampleItem.supplier.cr49f_suppliertype) === 3
+            ? "Service Provider"
+            : "Distributor",
+        cr49f_suppliertype: sampleItem.supplier.cr49f_suppliertype,
+        cr49f_contactperson: sampleItem.supplier.cr49f_contactperson,
+        cr49f_email: sampleItem.supplier.cr49f_email,
+        cr49f_phonenumber: sampleItem.supplier.cr49f_phonenumber,
+        cr49f_city: sampleItem.supplier.cr49f_city,
+        cr49f_state: sampleItem.supplier.cr49f_state,
+        cr49f_country: sampleItem.supplier.cr49f_country,
+        cr49f_website: sampleItem.supplier.cr49f_website,
+        statecode: 0,
+        ownerid: "system",
+        flowRank: rec.rank ?? (index + 1),
+        flowReason: rec.reason,
+      };
+    }
+
     // Generate realistic supplier record for newly matched flow codes (e.g. SUP-1008 / SUP-1009)
     const isNetworking = normalized.includes("1008");
     const isManaged = normalized.includes("1009");

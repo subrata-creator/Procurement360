@@ -1874,3 +1874,37 @@
 .dark .rfq-summary-rec-text {
   color: #e2e8f0;
 }
+
+.rfq-flow-badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(99, 102, 241, 0.15) 100%);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.rfq-flow-loading-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.dark .rfq-flow-badge-tag {
+  background: rgba(37, 99, 235, 0.2);
+  color: #93c5fd;
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.dark .rfq-flow-loading-pill {
+  color: #93c5fd;
+}

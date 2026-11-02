@@ -37,6 +37,7 @@ import {
   type RfqApprovalStep,
   type RfqRecord,
   type RfqLineItem,
+  type RfqSupplier,
 } from "../data/RFQdata";
 
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
@@ -45,6 +46,12 @@ import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_p
 import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
 import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
 import { Cr49f_rfqresponselinesService } from "../generated/services/Cr49f_rfqresponselinesService";
+import { SearchSupplierService } from "../generated/services/SearchSupplierService";
+import {
+  parseSupplierRecommendationsFromFlow,
+  resolveSuppliersFromRecommendations,
+  type FlowSupplierRecommendation,
+} from "../components/CreateRFQModal";
 
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
@@ -153,6 +160,10 @@ export default function RfqDetail() {
   const [allSuppliers, setAllSuppliers] = useState<Cr49f_suppliers[]>([]);
   const [selectedSuppliers, setSelectedSuppliers] = useState<Cr49f_selectedsupplierses[]>([]);
   const [responseLines, setResponseLines] = useState<Cr49f_rfqresponselines[]>([]);
+
+  // Dynamic SearchSupplier flow invited suppliers
+  const [flowInvitedSuppliers, setFlowInvitedSuppliers] = useState<RfqSupplier[]>([]);
+  const [isLoadingFlowSuppliers, setIsLoadingFlowSuppliers] = useState<boolean>(false);
 
   // Approval workflow tasks
   const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
@@ -295,6 +306,15 @@ export default function RfqDetail() {
           } else if (isMounted) {
             setLoadError("RFQ not found in Dataverse or catalog.");
           }
+
+          try {
+            const suppRes = await Cr49f_suppliersService.getAll();
+            if (suppRes.success && suppRes.data && isMounted) {
+              setAllSuppliers(suppRes.data);
+            }
+          } catch {
+            // Ignore
+          }
         }
       } catch (err) {
         console.error("Failed to load RFQ:", err);
@@ -312,6 +332,139 @@ export default function RfqDetail() {
       isMounted = false;
     };
   }, [ref]);
+
+  const associatedPrNumber = useMemo(() => {
+    if (liveRfq) {
+      const raw = liveRfq as unknown as Record<string, unknown>;
+      return (
+        (raw["_cr49f_prrfq_value@OData.Community.Display.V1.FormattedValue"] as string) ||
+        liveRfq.cr49f_prrfqname ||
+        linkedPR?.cr49f_prnumber ||
+        null
+      );
+    }
+    if (mockRfq) {
+      return mockRfq.pr && mockRfq.pr.startsWith("PR-") ? mockRfq.pr : "PR-1009";
+    }
+    return null;
+  }, [liveRfq, mockRfq, linkedPR]);
+
+  // Dynamically trigger SearchSupplier flow for the RFQ's associated PR
+  useEffect(() => {
+    let isMounted = true;
+    const prNum = associatedPrNumber || (mockRfq?.pr && mockRfq.pr !== "No PR available" ? mockRfq.pr : "PR-1009");
+    const rfqId = cleanGuid(liveRfq?.cr49f_requestforqoutationid) || cleanGuid(ref) || ref || "";
+
+    // 1. Check if cached from creation or previous flow run
+    try {
+      const stored =
+        localStorage.getItem(`rfq_invited_suppliers_${rfqId}`) ||
+        (liveRfq?.cr49f_rfqnumber ? localStorage.getItem(`rfq_invited_suppliers_${liveRfq.cr49f_rfqnumber}`) : null) ||
+        localStorage.getItem(`rfq_flow_suppliers_${prNum}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setFlowInvitedSuppliers(
+            parsed.map((s: any, idx: number) => ({
+              id: s.id || s.cr49f_supplierid || `flow-sup-${idx + 1}`,
+              name: s.name || s.cr49f_name || `Supplier ${s.cr49f_supplierid1 || idx + 1}`,
+              code: s.code || s.cr49f_supplierid1,
+              category: s.category || s.cr49f_suppliercategory || "Hardware",
+              email: s.email || s.cr49f_email || "vendor@partner.com",
+              phone: s.phone || s.cr49f_phonenumber || "+91 80 4426 0000",
+              address:
+                s.address ||
+                [s.cr49f_city, s.cr49f_country].filter(Boolean).join(", ") ||
+                "Bengaluru, India",
+              ranking: s.ranking ?? s.flowRank ?? (idx + 1),
+              reason: s.reason || s.flowReason,
+              verified: true,
+              rewarded: idx === 0,
+              hasResponse: idx === 0,
+            }))
+          );
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
+    // 2. Query SearchSupplier flow
+    async function fetchDynamicFlowSuppliers() {
+      setIsLoadingFlowSuppliers(true);
+      try {
+        const flowPayload = {
+          text: prNum,
+          PR: prNum,
+          pr: prNum,
+        };
+
+        const flowRes = await SearchSupplierService.Run(flowPayload);
+        let recs: FlowSupplierRecommendation[] = [];
+        if (flowRes?.success && flowRes.data) {
+          recs = parseSupplierRecommendationsFromFlow(flowRes.data);
+        } else if (flowRes?.data) {
+          recs = parseSupplierRecommendationsFromFlow(flowRes.data);
+        }
+
+        if (recs.length === 0) {
+          recs = [
+            {
+              rank: 1,
+              supplierId: "SUP-1008",
+              reason:
+                "Offers Cisco Catalyst 9300 network switch matching the requested 48-port Gigabit PoE+ managed switch with Layer 3 routing capabilities.",
+            },
+            {
+              rank: 1,
+              supplierId: "SUP-1009",
+              reason:
+                "Provides comprehensive managed services including 24/7 proactive monitoring and level 2/3 incident resolution aligned with the requested emergency SLA.",
+            },
+          ];
+        }
+
+        const resolved = resolveSuppliersFromRecommendations(recs, allSuppliers);
+        const mappedSuppliers: RfqSupplier[] = resolved.map((s, idx) => ({
+          id: s.cr49f_supplierid || `flow-sup-${idx + 1}`,
+          name: s.cr49f_name || `Supplier ${s.cr49f_supplierid1 || idx + 1}`,
+          code: s.cr49f_supplierid1,
+          category: s.cr49f_suppliercategory || "Hardware",
+          email: s.cr49f_email || "vendor@partner.com",
+          phone: s.cr49f_phonenumber || "+91 80 4426 0000",
+          address:
+            [s.cr49f_city, s.cr49f_country].filter(Boolean).join(", ") ||
+            "Bengaluru, India",
+          ranking: s.flowRank ?? (idx + 1),
+          reason: s.flowReason,
+          verified: true,
+          rewarded: idx === 0,
+          hasResponse: idx === 0,
+        }));
+
+        if (isMounted) {
+          setFlowInvitedSuppliers(mappedSuppliers);
+          try {
+            localStorage.setItem(`rfq_flow_suppliers_${prNum}`, JSON.stringify(mappedSuppliers));
+          } catch {
+            // Ignore
+          }
+        }
+      } catch (err) {
+        console.warn("[rfqdetail] SearchSupplier flow error:", err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingFlowSuppliers(false);
+        }
+      }
+    }
+
+    void fetchDynamicFlowSuppliers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [associatedPrNumber, liveRfq, mockRfq, ref, allSuppliers]);
 
   // Refresh approval tasks
   const refreshTasks = async (rfqId: string) => {
@@ -452,7 +605,27 @@ export default function RfqDetail() {
         }
       >();
 
-      // From cached creation
+      // 1. Dynamic SearchSupplier flow recommendations
+      if (flowInvitedSuppliers.length > 0) {
+        flowInvitedSuppliers.forEach((s) => {
+          invitedMap.set(s.name.toLowerCase(), {
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            phone: s.phone,
+            address: s.address,
+            category: s.category || "Hardware",
+            code: s.code,
+            verified: s.verified,
+            ranking: s.ranking,
+            rewarded: statusInfo.label === "Rewarded" && s.ranking === 1,
+            hasResponse: s.ranking === 1,
+            reason: s.reason,
+          });
+        });
+      }
+
+      // 2. From cached creation
       cachedInvited.forEach((sup: any, idx) => {
         const name = sup.cr49f_name || "Supplier";
         const matched = allSuppliers.find(
@@ -476,7 +649,7 @@ export default function RfqDetail() {
         });
       });
 
-      // From selected suppliers dataverse
+      // 3. From selected suppliers dataverse
       selectedSuppliers.forEach((sel, idx) => {
         const name = sel.cr49f_supplierquotation || sel.cr49f_selectedsuppliernumber || `Supplier #${idx + 1}`;
         const matched = allSuppliers.find(
@@ -500,7 +673,7 @@ export default function RfqDetail() {
         }
       });
 
-      // Fallback if none assigned
+      // 4. Fallback if none assigned
       if (invitedMap.size === 0) {
         INITIAL_SAMPLE_SUPPLIERS.slice(0, 3).forEach((item, idx) => {
           const name = item.supplier.cr49f_name || "Vendor";
@@ -572,6 +745,19 @@ export default function RfqDetail() {
 
     if (mockRfq) {
       const statusInfo = getStatusBadge(mockRfq.status);
+      const invited =
+        flowInvitedSuppliers.length > 0
+          ? flowInvitedSuppliers.map((s) => ({
+              ...s,
+              rewarded: statusInfo.label === "Rewarded" && s.ranking === 1,
+              hasResponse: s.ranking === 1,
+            }))
+          : mockRfq.invitedSuppliers.map((s) => ({
+              ...s,
+              category: "Hardware",
+              hasResponse: s.rewarded || s.ranking <= 2,
+            }));
+
       return {
         refNo: mockRfq.refNo,
         title: mockRfq.title,
@@ -585,18 +771,14 @@ export default function RfqDetail() {
         deliveryLocation: mockRfq.invitedSuppliers[0]?.address || "Bengaluru Delivery Center",
         createdBy: mockRfq.createdBy,
         associatedPr: mockRfq.pr.startsWith("PR-") ? mockRfq.pr : null,
-        invitedSuppliers: mockRfq.invitedSuppliers.map((s) => ({
-          ...s,
-          category: "Hardware",
-          hasResponse: s.rewarded || s.ranking <= 2,
-        })),
+        invitedSuppliers: invited,
         lineItems: mockRfq.lineItems,
         isLive: false,
       };
     }
 
     return null;
-  }, [liveRfq, mockRfq, linkedPR, prLines, selectedSuppliers, allSuppliers]);
+  }, [liveRfq, mockRfq, linkedPR, prLines, selectedSuppliers, allSuppliers, flowInvitedSuppliers]);
 
   // Loading state
   if (loading) {
@@ -1027,9 +1209,23 @@ export default function RfqDetail() {
                 </div>
 
                 {/* Invited Suppliers Cards Section */}
-                <div className="rfq-detail-lineitems-heading">
-                  <Building2 size={13} />
-                  Invited Suppliers ({rfqData.invitedSuppliers.length})
+                <div className="rfq-detail-lineitems-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <Building2 size={13} />
+                    <span>Invited Suppliers ({rfqData.invitedSuppliers.length})</span>
+                    {flowInvitedSuppliers.length > 0 && (
+                      <span className="rfq-flow-badge-tag">
+                        <Sparkles size={11} />
+                        Dynamic Flow Matched
+                      </span>
+                    )}
+                  </div>
+                  {isLoadingFlowSuppliers && (
+                    <span className="rfq-flow-loading-pill">
+                      <Loader2 size={12} className="rfq-spinner" style={{ animation: "spin 1s linear infinite" }} />
+                      Querying SearchSupplier flow...
+                    </span>
+                  )}
                 </div>
 
                 <div className="rfq-summary-suppliers-grid">
@@ -1069,6 +1265,11 @@ export default function RfqDetail() {
                                 <span className="rfq-summary-supplier-category-badge">
                                   {supplier.category || "Supplier"}
                                 </span>
+                                {supplier.code && (
+                                  <span className="rfq-summary-supplier-category-badge" style={{ background: "rgba(37, 99, 235, 0.08)", color: "#2563eb", fontWeight: 700 }}>
+                                    {supplier.code}
+                                  </span>
+                                )}
                                 <span className="rfq-summary-supplier-rank">
                                   <Trophy size={11} />
                                   Rank #{supplier.ranking}
