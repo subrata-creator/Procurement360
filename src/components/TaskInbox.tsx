@@ -20,15 +20,6 @@ import {
 } from "../Services/ApprovalWorkflowService";
 
 const PAGE_SIZE = 4;
-type Tab = "Needs Action" | "Approvals" | "Contracts" | "Invoices" | "Completed";
-
-const tabs: Tab[] = [
-  "Needs Action",
-  "Approvals",
-  "Contracts",
-  "Invoices",
-  "Completed",
-];
 
 export interface WorkQueueItem {
   id: string;
@@ -60,12 +51,13 @@ const badge = (t: string) =>
 
 const TaskInbox: React.FC = () => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("Needs Action");
   const [page, setPage] = useState(1);
   const [dataverseTasks, setDataverseTasks] = useState<WorkQueueItem[]>([]);
-  const [, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const fetchTasks = useCallback(async () => {
+    setIsLoading(true);
     try {
       const [tasksRes, prsRes, rfqsRes] = await Promise.allSettled([
         Cr49f_approvaltasksesService.getAll(),
@@ -108,15 +100,16 @@ const TaskInbox: React.FC = () => {
           cleanGuid(raw.cr49f_po as string);
 
         const statusLabel = getTaskApprovalStatusLabel(t);
-        const isActive = t.statecode === 0;
+        const isActive =
+          (t.statecode === 0 || t.statecode === undefined || Number(t.statecode) === 0) &&
+          Number(t.statuscode ?? 1) !== 2;
 
         let taskType: WorkQueueItem["taskType"] = "Purchase Request";
         let title = t.cr49f_task || `Task #${t.cr49f_sequence || idx + 1}`;
-        let targetUrl = "/";
         let priority: "Low" | "Normal" | "High" = "Normal";
 
         const taskId = cleanGuid(t.cr49f_approvaltasksid) || String(idx);
-        targetUrl = `/tasks/${taskId}`;
+        const targetUrl = `/tasks/${taskId}`;
 
         if (prId || t.cr49f_object === 1) {
           taskType = "Purchase Request";
@@ -176,6 +169,7 @@ const TaskInbox: React.FC = () => {
       console.warn("Failed to load approval tasks from Dataverse:", e);
     } finally {
       setIsLoading(false);
+      setHasLoaded(true);
     }
   }, []);
 
@@ -191,82 +185,39 @@ const TaskInbox: React.FC = () => {
     };
   }, [fetchTasks]);
 
-  const allTasks = useMemo(() => {
-    if (dataverseTasks.length > 0) {
-      // 100% Dynamic tasks from Dataverse table cr49f_approvaltasks
-      return dataverseTasks;
+  // STRICT FILTER:
+  // Show only approval tasks which are active (statecode === 0) AND pending.
+  // If a task gets approved or rejected, or is inactive, it will NOT be shown.
+  const activePendingTasks = useMemo(() => {
+    const source =
+      dataverseTasks.length > 0 || hasLoaded
+        ? dataverseTasks
+        : taskInboxItems.map((task): WorkQueueItem => ({
+            id: `sample-${task.id}`,
+            taskName: task.taskName,
+            taskType: task.taskType as WorkQueueItem["taskType"],
+            assignedTo: task.assignedTo,
+            assignedOn: task.assignedOn,
+            description: task.description,
+            priority: task.priority ?? "Normal",
+            status: "Pending" as const,
+            isActive: true,
+            targetUrl: `/tasks/${task.id}`,
+          }));
+
+    return source.filter((task) => task.isActive && task.status === "Pending");
+  }, [dataverseTasks, hasLoaded]);
+
+  const pages = Math.max(1, Math.ceil(activePendingTasks.length / PAGE_SIZE));
+  const start = activePendingTasks.length ? (page - 1) * PAGE_SIZE : 0;
+  const shown = activePendingTasks.slice(start, start + PAGE_SIZE);
+
+  // Automatically reset to last valid page if total count changes
+  useEffect(() => {
+    if (page > pages) {
+      setPage(pages);
     }
-
-    // Fallback placeholder if no tasks in Dataverse yet
-    return taskInboxItems.map((task): WorkQueueItem => ({
-      id: `sample-${task.id}`,
-      taskName: task.taskName,
-      taskType: task.taskType as WorkQueueItem["taskType"],
-      assignedTo: task.assignedTo,
-      assignedOn: task.assignedOn,
-      description: task.description,
-      priority: task.priority ?? "Normal",
-      status: "Pending" as const,
-      isActive: true,
-      targetUrl: `/tasks/${task.id}`,
-    }));
-  }, [dataverseTasks]);
-
-  const rows = useMemo(() => {
-    return allTasks.filter((task) => {
-      if (tab === "Needs Action") {
-        return task.isActive && task.status === "Pending";
-      }
-      if (tab === "Approvals") {
-        return (
-          (task.taskType === "Purchase Request" ||
-            task.taskType === "Request for Quotation" ||
-            task.taskType === "Purchase Order") &&
-          task.status === "Pending"
-        );
-      }
-      if (tab === "Invoices") {
-        return task.taskType === "Invoice" && task.status === "Pending";
-      }
-      if (tab === "Contracts") {
-        return task.taskType === "Contract" && task.status === "Pending";
-      }
-      if (tab === "Completed") {
-        return task.status === "Approved";
-      }
-      return true;
-    });
-  }, [allTasks, tab]);
-
-  const countForTab = (target: Tab) => {
-    return allTasks.filter((task) => {
-      if (target === "Needs Action") {
-        return task.isActive && task.status === "Pending";
-      }
-      if (target === "Approvals") {
-        return (
-          (task.taskType === "Purchase Request" ||
-            task.taskType === "Request for Quotation" ||
-            task.taskType === "Purchase Order") &&
-          task.status === "Pending"
-        );
-      }
-      if (target === "Invoices") {
-        return task.taskType === "Invoice" && task.status === "Pending";
-      }
-      if (target === "Contracts") {
-        return task.taskType === "Contract" && task.status === "Pending";
-      }
-      if (target === "Completed") {
-        return task.status === "Approved";
-      }
-      return true;
-    }).length;
-  };
-
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const start = rows.length ? (page - 1) * PAGE_SIZE : 0;
-  const shown = rows.slice(start, start + PAGE_SIZE);
+  }, [page, pages]);
 
   const taskIcon = (taskType: string) =>
     taskType === "Invoice" ? (
@@ -294,29 +245,17 @@ const TaskInbox: React.FC = () => {
           <span className="cc-eyebrow">WORK QUEUE</span>
           <h2>My Procurement Tasks</h2>
         </div>
-        <span className="work-queue-total">{countForTab("Needs Action")} open</span>
+        <span className="work-queue-total">
+          {activePendingTasks.length} {activePendingTasks.length === 1 ? "task" : "tasks"} pending
+        </span>
       </header>
 
-      <nav className="work-queue-tabs" aria-label="Task categories">
-        {tabs.map((item) => (
-          <button
-            type="button"
-            key={item}
-            className={tab === item ? "active" : ""}
-            aria-pressed={tab === item}
-            onClick={() => {
-              setTab(item);
-              setPage(1);
-            }}
-          >
-            {item}
-            <span>{countForTab(item)}</span>
-          </button>
-        ))}
-      </nav>
-
       <div className="work-queue-list">
-        {shown.length ? (
+        {isLoading && !hasLoaded ? (
+          <div className="work-queue-empty">
+            <span>Loading pending approval tasks...</span>
+          </div>
+        ) : shown.length ? (
           shown.map((task) => (
             <article className="work-queue-row" key={task.id}>
               <span
@@ -358,15 +297,7 @@ const TaskInbox: React.FC = () => {
           ))
         ) : (
           <div className="work-queue-empty">
-            <span>
-              {tab === "Completed"
-                ? "No completed tasks yet. Approved tasks will appear here."
-                : tab === "Contracts"
-                ? "No contract signatory tasks are currently listed."
-                : tab === "Invoices"
-                ? "No invoice approval tasks are currently listed."
-                : "No tasks in this view."}
-            </span>
+            <span>No pending approval tasks. All tasks have been completed.</span>
           </div>
         )}
       </div>
@@ -382,8 +313,8 @@ const TaskInbox: React.FC = () => {
           <ChevronLeft size={14} />
         </button>
         <span>
-          {rows.length ? start + 1 : 0}–
-          {Math.min(start + PAGE_SIZE, rows.length)} of {rows.length}
+          {activePendingTasks.length ? start + 1 : 0}–
+          {Math.min(start + PAGE_SIZE, activePendingTasks.length)} of {activePendingTasks.length}
         </span>
         <button
           type="button"
