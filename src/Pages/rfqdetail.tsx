@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertCircle,
   ArrowLeft,
+  BarChart3,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   Loader2,
   Mail,
   MapPin,
+  Package,
   Paperclip,
   Percent,
   Phone,
@@ -77,8 +79,13 @@ import {
 } from "../Services/ApprovalWorkflowService";
 
 import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
+import {
+  getSupplierResponsesForRfq,
+  type FullSupplierResponse,
+} from "../Services/RfqSupplierResponseService";
 
 import "../Styles/RFQSummary.css";
+import "../Styles/SupplierPortal.css";
 
 const TABS = [
   "Summary",
@@ -159,7 +166,10 @@ export default function RfqDetail() {
   const [prLines, setPrLines] = useState<Cr49f_purchaserequestlines[]>([]);
   const [allSuppliers, setAllSuppliers] = useState<Cr49f_suppliers[]>([]);
   const [selectedSuppliers, setSelectedSuppliers] = useState<Cr49f_selectedsupplierses[]>([]);
-  const [responseLines, setResponseLines] = useState<Cr49f_rfqresponselines[]>([]);
+  const [_responseLines, setResponseLines] = useState<Cr49f_rfqresponselines[]>([]);
+  const [fullSupplierResponses, setFullSupplierResponses] = useState<FullSupplierResponse[]>([]);
+  const [selectedQuotationForView, setSelectedQuotationForView] = useState<FullSupplierResponse | null>(null);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
 
   // Dynamic SearchSupplier flow invited suppliers
   const [flowInvitedSuppliers, setFlowInvitedSuppliers] = useState<RfqSupplier[]>([]);
@@ -271,6 +281,16 @@ export default function RfqDetail() {
 
             if (suppRes.status === "fulfilled" && suppRes.value.success && suppRes.value.data) {
               if (isMounted) setAllSuppliers(suppRes.value.data);
+            }
+
+            // Load full structured supplier responses with quotation lines and statuses
+            try {
+              const fullResponses = await getSupplierResponsesForRfq(rfqId);
+              if (isMounted) {
+                setFullSupplierResponses(fullResponses);
+              }
+            } catch (fullRespErr) {
+              console.warn("Could not load full supplier responses:", fullRespErr);
             }
           } catch (supErr) {
             console.warn("Could not load suppliers data:", supErr);
@@ -1678,90 +1698,135 @@ export default function RfqDetail() {
         )}
 
         {/* TAB 4: SUPPLIER RESPONSES */}
-        {activeTab === "Supplier Responses" && (
-          <div className="rfq-tab-pane">
-            <div className="rfq-detail-lineitems-heading">
-              <Users size={13} />
-              Invited Vendors &amp; Quotation Responses ({rfqData.invitedSuppliers.length})
-            </div>
+        {activeTab === "Supplier Responses" && (() => {
+          const displayResponses: FullSupplierResponse[] =
+            fullSupplierResponses.length > 0
+              ? fullSupplierResponses
+              : rfqData.invitedSuppliers.map((s) => ({
+                  responseId: s.id,
+                  rfqId: cleanGuid(ref) || "",
+                  supplierId: s.id,
+                  supplierCode: s.id,
+                  supplierName: s.name,
+                  supplierEmail: s.email,
+                  status: (s.hasResponse ? "Submitted" : "Invited") as "Invited" | "Draft" | "Submitted",
+                  statuscode: s.hasResponse ? 2 : 1,
+                  statecode: s.hasResponse ? 1 : 0,
+                  totalAmount: 0,
+                  lines: [],
+                }));
 
-            <div className="rfq-detail-table-wrapper">
-              <table className="rfq-detail-table">
-                <thead>
-                  <tr>
-                    <th>Supplier Details</th>
-                    <th>Contact Person</th>
-                    <th>Email</th>
-                    <th>Facility Location</th>
-                    <th>Submission Status</th>
-                    <th>Quotation Ref</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rfqData.invitedSuppliers.map((supplier) => (
-                    <tr key={supplier.id}>
-                      <td>
-                        <div className="rfq-detail-table-avatar">
-                          <span>{getInitials(supplier.name)}</span>
-                          <strong>{supplier.name}</strong>
-                          {supplier.verified && (
-                            <ShieldCheck size={12} className="rfq-supplier-verified" style={{ marginLeft: 4 }} />
-                          )}
-                        </div>
-                      </td>
-                      <td>{supplier.phone ? "Direct Representative" : "Supplier Desk"}</td>
-                      <td>{supplier.email}</td>
-                      <td>{supplier.address}</td>
-                      <td>
-                        <span className={`rfq-supplier-rewarded-pill ${supplier.hasResponse ? "submitted" : "pending"}`}>
-                          {supplier.hasResponse ? "Quotation Submitted" : "Pending Bid"}
-                        </span>
-                      </td>
-                      <td>
-                        <strong>{supplier.hasResponse ? `QT-${supplier.name.slice(0, 3).toUpperCase()}-2026` : "—"}</strong>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          const submittedCount = displayResponses.filter((r) => r.status === "Submitted").length;
+          const draftCount = displayResponses.filter((r) => r.status === "Draft").length;
+          const invitedCount = displayResponses.filter((r) => r.status === "Invited").length;
 
-            {responseLines.length > 0 && (
-              <div style={{ marginTop: 20 }}>
-                <div className="rfq-detail-lineitems-heading">
-                  <ClipboardList size={13} />
-                  Quotation Response Lines ({responseLines.length})
+          return (
+            <div className="rfq-tab-pane">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div className="rfq-detail-lineitems-heading" style={{ margin: 0 }}>
+                    <Users size={14} />
+                    Invited Vendors &amp; Quotation Responses ({displayResponses.length})
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <span className="supplier-status-pill submitted" style={{ fontSize: 11 }}>
+                      <CheckCircle2 size={11} /> {submittedCount} Submitted
+                    </span>
+                    <span className="supplier-status-pill draft" style={{ fontSize: 11 }}>
+                      <Clock size={11} /> {draftCount} Draft
+                    </span>
+                    <span className="supplier-status-pill invited" style={{ fontSize: 11 }}>
+                      <Mail size={11} /> {invitedCount} Invited
+                    </span>
+                  </div>
                 </div>
-                <div className="rfq-detail-table-wrapper">
-                  <table className="rfq-detail-table">
-                    <thead>
-                      <tr>
-                        <th>Response Line ID</th>
-                        <th>Quantity</th>
-                        <th>Unit Price</th>
-                        <th>Discount</th>
-                        <th>Tax</th>
-                        <th>Total Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {responseLines.map((r, i) => (
-                        <tr key={r.cr49f_rfqresponselineid || i}>
-                          <td><strong>{r.cr49f_responselineid || `RESP-${i + 1}`}</strong></td>
-                          <td>{r.cr49f_quantity ?? "—"}</td>
-                          <td>${r.cr49f_unitprice ?? 0}</td>
-                          <td>{r.cr49f_discount ? `${r.cr49f_discount}%` : "—"}</td>
-                          <td>{r.cr49f_tax ? `${r.cr49f_tax}%` : "—"}</td>
-                          <td><strong>${r.cr49f_totalprice ?? 0}</strong></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+
+                <button
+                  type="button"
+                  className="supplier-btn-action"
+                  onClick={() => setIsCompareModalOpen(true)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, color: "#2563eb", borderColor: "#93c5fd" }}
+                >
+                  <BarChart3 size={13} />
+                  Compare Supplier Responses
+                </button>
               </div>
-            )}
-          </div>
-        )}
+
+              <div className="rfq-detail-table-wrapper">
+                <table className="rfq-detail-table">
+                  <thead>
+                    <tr>
+                      <th>Supplier Details</th>
+                      <th>Contact &amp; Email</th>
+                      <th>Response Status</th>
+                      <th>Quoted Total</th>
+                      <th>Promised Delivery</th>
+                      <th>Warranty</th>
+                      <th style={{ textAlign: "right" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayResponses.map((resp) => (
+                      <tr key={resp.responseId || resp.supplierId}>
+                        <td>
+                          <div className="rfq-detail-table-avatar">
+                            <span>{getInitials(resp.supplierName)}</span>
+                            <div>
+                              <strong>{resp.supplierName}</strong>
+                              {resp.supplierCode && (
+                                <span style={{ display: "block", fontSize: 11, color: "#64748b" }}>
+                                  {resp.supplierCode}
+                                </span>
+                              )}
+                            </div>
+                            <ShieldCheck size={12} className="rfq-supplier-verified" style={{ marginLeft: 4 }} />
+                          </div>
+                        </td>
+                        <td>
+                          <div>{resp.supplierEmail || "vendor@procurement.com"}</div>
+                        </td>
+                        <td>
+                          <span className={`supplier-status-pill ${resp.status.toLowerCase()}`}>
+                            {resp.status === "Submitted" ? (
+                              <CheckCircle2 size={11} />
+                            ) : resp.status === "Draft" ? (
+                              <Clock size={11} />
+                            ) : (
+                              <Mail size={11} />
+                            )}
+                            {resp.status}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>
+                            {resp.totalAmount && resp.totalAmount > 0
+                              ? `$${resp.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                              : resp.status === "Invited"
+                              ? "Awaiting Quote"
+                              : "—"}
+                          </strong>
+                        </td>
+                        <td>{resp.deliveryDate ? new Date(resp.deliveryDate).toLocaleDateString() : "—"}</td>
+                        <td>{resp.warranty || "Standard Terms"}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            type="button"
+                            className="supplier-btn-action"
+                            onClick={() => setSelectedQuotationForView(resp)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+                          >
+                            <FileText size={12} />
+                            View Quotation
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* TAB 5: NOTES */}
         {activeTab === "Notes" && (
@@ -1955,6 +2020,256 @@ export default function RfqDetail() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Quotation Details Modal */}
+      {selectedQuotationForView && (
+        <div
+          className="rfq-modal-overlay"
+          onMouseDown={(e) => e.target === e.currentTarget && setSelectedQuotationForView(null)}
+        >
+          <div className="rfq-quotation-modal" role="dialog" aria-modal="true">
+            <div className="rfq-modal-header">
+              <h2 className="rfq-modal-title">
+                <FileText size={17} color="#2563eb" />
+                Quotation Breakdown: {selectedQuotationForView.supplierName} ({selectedQuotationForView.supplierCode || "SUP"})
+              </h2>
+              <button
+                type="button"
+                className="rfq-modal-close-btn"
+                onClick={() => setSelectedQuotationForView(null)}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Commercial terms summary */}
+            <div className="supplier-meta-card" style={{ padding: 14 }}>
+              <div className="supplier-meta-field">
+                <span className="supplier-meta-field-label">Quotation Status</span>
+                <span className={`supplier-status-pill ${selectedQuotationForView.status.toLowerCase()}`}>
+                  {selectedQuotationForView.status}
+                </span>
+              </div>
+              <div className="supplier-meta-field">
+                <span className="supplier-meta-field-label">Total Quoted Amount</span>
+                <span className="supplier-meta-field-val" style={{ color: "#2563eb", fontSize: 16 }}>
+                  ${(selectedQuotationForView.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="supplier-meta-field">
+                <span className="supplier-meta-field-label">Promised Delivery</span>
+                <span className="supplier-meta-field-val">
+                  {selectedQuotationForView.deliveryDate ? new Date(selectedQuotationForView.deliveryDate).toLocaleDateString() : "As scheduled"}
+                </span>
+              </div>
+              <div className="supplier-meta-field">
+                <span className="supplier-meta-field-label">Payment Terms</span>
+                <span className="supplier-meta-field-val">{selectedQuotationForView.paymentTerms || "Net 30"}</span>
+              </div>
+              <div className="supplier-meta-field">
+                <span className="supplier-meta-field-label">Warranty</span>
+                <span className="supplier-meta-field-val">{selectedQuotationForView.warranty || "Standard Warranty"}</span>
+              </div>
+            </div>
+
+            {/* Lines breakdown */}
+            <div className="rfq-detail-lineitems-heading" style={{ margin: "6px 0 0" }}>
+              <Package size={13} />
+              Quotation Line Items ({selectedQuotationForView.lines.length})
+            </div>
+
+            <div className="rfq-detail-table-wrapper">
+              <table className="rfq-detail-table">
+                <thead>
+                  <tr>
+                    <th>Item Name</th>
+                    <th>Requested Qty</th>
+                    <th>Quoted Unit Price</th>
+                    <th>Offered Qty</th>
+                    <th>Lead Time</th>
+                    <th>Comments / Notes</th>
+                    <th style={{ textAlign: "right" }}>Line Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedQuotationForView.lines.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                        No line details entered yet by this vendor.
+                      </td>
+                    </tr>
+                  ) : (
+                    selectedQuotationForView.lines.map((line, idx) => (
+                      <tr key={line.id || idx}>
+                        <td>
+                          <strong>{line.itemName}</strong>
+                        </td>
+                        <td>{line.requestedQuantity}</td>
+                        <td><strong>${(line.unitPrice || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></td>
+                        <td>{line.offeredQuantity}</td>
+                        <td>{line.leadTime || "Standard"}</td>
+                        <td>{line.comments || "—"}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <strong>${(line.totalPrice || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <button
+                type="button"
+                className="supplier-btn-action"
+                onClick={() => setSelectedQuotationForView(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Side-by-Side Comparison Modal */}
+      {isCompareModalOpen && (
+        <div
+          className="rfq-modal-overlay"
+          onMouseDown={(e) => e.target === e.currentTarget && setIsCompareModalOpen(false)}
+        >
+          <div className="rfq-comparison-modal" role="dialog" aria-modal="true">
+            <div className="rfq-modal-header">
+              <h2 className="rfq-modal-title">
+                <BarChart3 size={17} color="#2563eb" />
+                Compare Supplier Quotations
+              </h2>
+              <button
+                type="button"
+                className="rfq-modal-close-btn"
+                onClick={() => setIsCompareModalOpen(false)}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {(() => {
+              const eligible = fullSupplierResponses.filter((r) => r.totalAmount > 0);
+              const minPrice = eligible.length > 0 ? Math.min(...eligible.map((r) => r.totalAmount)) : null;
+
+              return (
+                <>
+                  <div className="rfq-compare-summary-grid">
+                    {fullSupplierResponses.map((r) => {
+                      const isLowest = minPrice !== null && r.totalAmount === minPrice;
+                      return (
+                        <div key={r.responseId || r.supplierId} className={`rfq-compare-card ${isLowest ? "lowest" : ""}`}>
+                          {isLowest && (
+                            <span className="rfq-lowest-badge">
+                              <CheckCircle2 size={11} /> Lowest Bid
+                            </span>
+                          )}
+                          <div style={{ fontWeight: 700, fontSize: 13.5 }}>{r.supplierName}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: isLowest ? "#059669" : "#2563eb" }}>
+                            {r.totalAmount > 0 ? `$${r.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "Pending Quote"}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#64748b" }}>
+                            <div>Delivery: <strong>{r.deliveryDate ? new Date(r.deliveryDate).toLocaleDateString() : "Standard"}</strong></div>
+                            <div>Terms: <strong>{r.paymentTerms || "Net 30"}</strong></div>
+                            <div>Warranty: <strong>{r.warranty || "Standard"}</strong></div>
+                          </div>
+                          <span className={`supplier-status-pill ${r.status.toLowerCase()}`} style={{ alignSelf: "flex-start", marginTop: 4 }}>
+                            {r.status}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Line items comparison matrix */}
+                  <div className="rfq-detail-lineitems-heading" style={{ margin: "10px 0 0" }}>
+                    <ClipboardList size={13} />
+                    Line Items Price Comparison Matrix
+                  </div>
+
+                  <div className="rfq-detail-table-wrapper">
+                    <table className="rfq-detail-table">
+                      <thead>
+                        <tr>
+                          <th>Item Name &amp; Description</th>
+                          <th>Req. Qty</th>
+                          {fullSupplierResponses.map((r) => (
+                            <th key={r.responseId || r.supplierId}>
+                              {r.supplierName}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prLines.length > 0 ? (
+                          prLines.map((prLine, idx) => (
+                            <tr key={prLine.cr49f_purchaserequestlineid || idx}>
+                              <td>
+                                <strong>{prLine.cr49f_itemname || "RFQ Item"}</strong>
+                              </td>
+                              <td>{prLine.cr49f_quantity || 1}</td>
+                              {fullSupplierResponses.map((r) => {
+                                const matchedLine = r.lines.find(
+                                  (l) => l.itemName.toLowerCase() === (prLine.cr49f_itemname || "").toLowerCase() || idx === 0
+                                );
+                                return (
+                                  <td key={r.responseId || r.supplierId}>
+                                    {matchedLine && matchedLine.unitPrice > 0 ? (
+                                      <div>
+                                        <strong>${matchedLine.unitPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>/unit
+                                        <div style={{ fontSize: 11, color: "#64748b" }}>
+                                          Total: ${(matchedLine.totalPrice || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: "#94a3b8" }}>—</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td><strong>Total Quoted Bid</strong></td>
+                            <td>—</td>
+                            {fullSupplierResponses.map((r) => (
+                              <td key={r.responseId || r.supplierId}>
+                                <strong>
+                                  {r.totalAmount > 0
+                                    ? `$${r.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                    : "Pending"}
+                                </strong>
+                              </td>
+                            ))}
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <button
+                type="button"
+                className="supplier-btn-action"
+                onClick={() => setIsCompareModalOpen(false)}
+              >
+                Close Comparison
+              </button>
+            </div>
           </div>
         </div>
       )}

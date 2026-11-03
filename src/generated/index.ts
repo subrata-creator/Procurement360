@@ -12,6 +12,7 @@ export * as Cr49f_purchaserequestlinesModel from './models/Cr49f_purchaserequest
 export * as Cr49f_purchaserequestsModel from './models/Cr49f_purchaserequestsModel';
 export * as Cr49f_requestforqoutationsModel from './models/Cr49f_requestforqoutationsModel';
 export * as Cr49f_rfqresponselinesModel from './models/Cr49f_rfqresponselinesModel';
+export * as Cr49f_rfqsupplierresponsesModel from './models/Cr49f_rfqsupplierresponsesModel';
 export * as Cr49f_selectedsuppliersesModel from './models/Cr49f_selectedsuppliersesModel';
 export * as Cr49f_supplierproductsModel from './models/Cr49f_supplierproductsModel';
 export * as Cr49f_suppliersModel from './models/Cr49f_suppliersModel';
@@ -30,6 +31,7 @@ export * from './services/Cr49f_purchaserequestlinesService';
 export * from './services/Cr49f_purchaserequestsService';
 export * from './services/Cr49f_requestforqoutationsService';
 export * from './services/Cr49f_rfqresponselinesService';
+export * from './services/Cr49f_rfqsupplierresponsesService';
 export * from './services/Cr49f_selectedsuppliersesService';
 export * from './services/Cr49f_supplierproductsService';
 export * from './services/Cr49f_suppliersService';

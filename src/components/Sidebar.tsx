@@ -29,18 +29,30 @@ export const userNavigationItems = [
   { label: "Contracts", icon: FileSignature },
 ];
 
+export const supplierNavigationItems = [
+  { label: "Supplier Dashboard", icon: Home },
+  { label: "My RFQs", icon: ClipboardList },
+  { label: "My Quotations", icon: FileSignature },
+];
+
 export interface SidebarProps {
   activeItem: string;
   onNavigate?: (item: string) => void;
   isAdmin?: boolean;
+  isSupplier?: boolean;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
   activeItem,
   onNavigate,
   isAdmin = false,
+  isSupplier = false,
 }) => {
-  const items = isAdmin ? adminNavigationItems : userNavigationItems;
+  const items = isSupplier
+    ? supplierNavigationItems
+    : isAdmin
+    ? adminNavigationItems
+    : userNavigationItems;
 
   return (
     <aside className="sidebar">

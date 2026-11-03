@@ -25,6 +25,9 @@ import ApprovalCycleSummary from "./Pages/Admin/ApprovalCycleSummary";
 import SuppliersPage from "./Pages/SuppliersPage";
 import SupplierSummary from "./Pages/SupplierSummary";
 import ProductsPage from "./Pages/ProductsPage";
+import SupplierDashboard from "./Pages/Supplier/SupplierDashboard";
+import SupplierRfqsPage from "./Pages/Supplier/SupplierRfqsPage";
+import SupplierRfqResponsePage from "./Pages/Supplier/SupplierRfqResponsePage";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
@@ -88,7 +91,24 @@ const AppContent: React.FC = () => {
   const isOrdersRoute = location.pathname.startsWith("/orders");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
 
-  const routeNavigation = isUsersRoute
+  const isSupplier =
+    loggedInUser.userRole?.trim().toLowerCase() === "supplier";
+
+  const isSupplierDashboardRoute =
+    location.pathname === "/supplier-dashboard" ||
+    (isSupplier && location.pathname === "/");
+  const isSupplierQuotationsRoute =
+    location.pathname.startsWith("/supplier-quotations");
+  const isSupplierRfqsRoute =
+    location.pathname.startsWith("/supplier-rfqs") || isSupplierQuotationsRoute;
+
+  const routeNavigation = isSupplierDashboardRoute
+    ? "Supplier Dashboard"
+    : isSupplierQuotationsRoute
+    ? "My Quotations"
+    : isSupplierRfqsRoute
+    ? "My RFQs"
+    : isUsersRoute
     ? "Users"
     : isApprovalCycleRoute ? "Approval Cycle" : isSuppliersRoute ? "Suppliers" : isProductsRoute ? "Products / Services" : isPurchaseRequestRoute
         ? "Purchase Requests"
@@ -230,8 +250,14 @@ const AppContent: React.FC = () => {
   const handleNavigation = (item: string) => {
     setFallbackNavigation(item);
 
-    if (item === "Dashboard") {
-      navigate("/");
+    if (item === "Supplier Dashboard") {
+      navigate("/supplier-dashboard");
+    } else if (item === "My RFQs") {
+      navigate("/supplier-rfqs");
+    } else if (item === "My Quotations") {
+      navigate("/supplier-quotations");
+    } else if (item === "Dashboard") {
+      navigate(isSupplier ? "/supplier-dashboard" : "/");
     } else if (item === "Users") {
       navigate("/users");
     } else if (
@@ -270,6 +296,7 @@ const AppContent: React.FC = () => {
         activeItem={activeNavigation}
         onNavigate={handleNavigation}
         isAdmin={isAdmin}
+        isSupplier={isSupplier}
       />
 
       <div className="app-main-layout">
@@ -288,7 +315,43 @@ const AppContent: React.FC = () => {
         />
 
         <main className="dashboard">
-          {isUsersRoute ? (
+          {isSupplierRfqsRoute ? (
+            <Routes>
+              <Route
+                path="/supplier-rfqs"
+                element={
+                  <SupplierRfqsPage
+                    userEmail={loggedInUser.userEmail}
+                    userName={loggedInUser.userName}
+                  />
+                }
+              />
+              <Route
+                path="/supplier-quotations"
+                element={
+                  <SupplierRfqsPage
+                    userEmail={loggedInUser.userEmail}
+                    userName={loggedInUser.userName}
+                    defaultFilter="Submitted"
+                  />
+                }
+              />
+              <Route
+                path="/supplier-rfqs/:id"
+                element={
+                  <SupplierRfqResponsePage
+                    userEmail={loggedInUser.userEmail}
+                    userName={loggedInUser.userName}
+                  />
+                }
+              />
+            </Routes>
+          ) : isSupplierDashboardRoute ? (
+            <SupplierDashboard
+              userEmail={loggedInUser.userEmail}
+              userName={loggedInUser.userName}
+            />
+          ) : isUsersRoute ? (
             <Routes>
               <Route path="/users" element={<UsersPage />} />
             </Routes>
@@ -364,6 +427,11 @@ const AppContent: React.FC = () => {
                 element={<TaskDetail />}
               />
             </Routes>
+          ) : isSupplier ? (
+            <SupplierDashboard
+              userEmail={loggedInUser.userEmail}
+              userName={loggedInUser.userName}
+            />
           ) : (
             <Dashboard isAdmin={isAdmin} />
           )}

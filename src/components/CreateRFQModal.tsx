@@ -34,6 +34,7 @@ import {
   createApprovalTasksForObject,
   getTaskApprovalStatusLabel,
 } from "../Services/ApprovalWorkflowService";
+import { createRfqSupplierResponses } from "../Services/RfqSupplierResponseService";
 import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 import type {
   Cr49f_purchaserequests,
@@ -1247,6 +1248,20 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         );
       } catch (supErr) {
         console.warn("Could not bind RFQ to suppliers:", supErr);
+      }
+
+      // 2b. Create cr49f_rfqsupplierresponse and cr49f_rfqresponseline records for each supplier
+      try {
+        const supplierIdentities = chosenSuppliers.map(
+          (s) => s.cr49f_supplierid1 || s.cr49f_supplierid
+        );
+        await createRfqSupplierResponses(
+          createdRfqId,
+          supplierIdentities,
+          formData.purchaseRequestId
+        );
+      } catch (respInitErr) {
+        console.warn("Could not initialize supplier responses and lines:", respInitErr);
       }
 
       // 3. Cache invited suppliers locally for instant display on RFQ Summary/Detail

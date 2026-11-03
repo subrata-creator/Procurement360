@@ -98,6 +98,11 @@
           "entitySetName": "cr49f_rfqresponselines",
           "logicalName": "cr49f_rfqresponseline",
           "isHidden": false
+        },
+        "rfqsupplierresponses": {
+          "entitySetName": "cr49f_rfqsupplierresponses",
+          "logicalName": "cr49f_rfqsupplierresponse",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

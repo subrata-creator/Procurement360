@@ -1908,3 +1908,110 @@
 .dark .rfq-flow-loading-pill {
   color: #93c5fd;
 }
+
+/* =========================================================
+   QUOTATION DETAILS & COMPARISON MODALS
+========================================================= */
+
+.rfq-quotation-modal {
+  position: relative;
+  width: min(780px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--card-hex);
+  border: 1px solid var(--border-hex);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+.rfq-comparison-modal {
+  position: relative;
+  width: min(1000px, 95vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--card-hex);
+  border: 1px solid var(--border-hex);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-sizing: border-box;
+}
+
+.rfq-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-hex);
+  padding-bottom: 12px;
+}
+
+.rfq-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--foreground-hex);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rfq-modal-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--muted-foreground-hex);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.rfq-modal-close-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--foreground-hex);
+}
+
+.rfq-compare-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.rfq-compare-card {
+  border: 1px solid var(--border-hex);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--background-hex);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.rfq-compare-card.lowest {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.rfq-lowest-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #10b981;
+  color: #ffffff;
+  width: fit-content;
+}
