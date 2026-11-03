@@ -1622,15 +1622,6 @@ export default function PurchaseRequest() {
                                                 <span className={`pr-history-badge ${tStatus === "Approved" ? "approved" : tStatus === "Rejected" ? "rejected" : t.statecode === 0 ? "active" : "pending"}`}>
                                                   {tStatus === "Approved" ? "Approved" : tStatus === "Rejected" ? "Rejected" : t.statecode === 0 ? "Action Needed" : "Waiting"}
                                                 </span>
-                                                {t.cr49f_approvaltasksid && (
-                                                  <button
-                                                    type="button"
-                                                    className="pr-history-link"
-                                                    onClick={() => navigate(`/tasks/${t.cr49f_approvaltasksid}`)}
-                                                  >
-                                                    Open Task <ArrowRight size={11} />
-                                                  </button>
-                                                )}
                                               </div>
                                             </div>
                                           );
