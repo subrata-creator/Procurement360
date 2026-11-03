@@ -30,11 +30,14 @@ import { useNavigate } from "react-router-dom";
 import CreatePRModal from "../components/CreatePRModal";
 import {
   getInitials,
+  type LineItem,
   type PRStatus,
   type PurchaseRequestRecord,
 } from "../data/Purchaserequestsdata";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
+import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
@@ -150,9 +153,9 @@ function mapDataverseRequest(
   return {
     ref,
     guid: record.cr49f_purchaserequestid,
-    title: record.cr49f_prtitle?.trim() || "Development Team Laptops",
-    description: record.cr49f_businessjustification?.trim() || "High performance laptops for development team members.",
-    totalAmount: "",
+    title: record.cr49f_prtitle?.trim() || "Purchase Request",
+    description: record.cr49f_businessjustification?.trim() || record.cr49f_prtitle?.trim() || "—",
+    totalAmount: record.cr49f_totalamount != null ? `$${record.cr49f_totalamount.toLocaleString()}` : "",
     date: formatDataverseDate(record.createdon),
     rawCreatedDate: record.createdon,
     createdBy,
@@ -164,10 +167,11 @@ function mapDataverseRequest(
     rawRequiredDate: record.cr49f_requireddeliverydate,
     rfq: "",
     po: "",
-    category: "Laptops (25 units)",
+    category: "",
     department: "IT Department",
     deliveryAddress: record.cr49f_deliverylocation || "Main Office",
     approvalSteps: [],
+    lineItems: [],
   };
 }
 
@@ -334,10 +338,11 @@ export default function PurchaseRequest() {
     setRequestLoadError("");
 
     try {
-      const [result, tasksRes, rfqsRes] = await Promise.allSettled([
+      const [result, tasksRes, rfqsRes, linesRes] = await Promise.allSettled([
         Cr49f_purchaserequestsService.getAll(),
         Cr49f_approvaltasksesService.getAll(),
         Cr49f_requestforqoutationsService.getAll(),
+        Cr49f_purchaserequestlinesService.getAll(),
       ]);
 
       if (signal?.aborted) return;
@@ -355,6 +360,52 @@ export default function PurchaseRequest() {
         rfqsRes.status === "fulfilled" && rfqsRes.value.success && rfqsRes.value.data
           ? rfqsRes.value.data
           : [];
+      const allLines: Cr49f_purchaserequestlines[] =
+        linesRes.status === "fulfilled" && linesRes.value.success && linesRes.value.data
+          ? linesRes.value.data
+          : [];
+
+      // Build PR to Line Items lookup map dynamically
+      const prToLinesMap = new Map<string, Cr49f_purchaserequestlines[]>();
+      const addLineToMap = (key: string, line: Cr49f_purchaserequestlines) => {
+        if (!key) return;
+        const normalized = key.trim().toLowerCase();
+        const existing = prToLinesMap.get(normalized) || [];
+        existing.push(line);
+        prToLinesMap.set(normalized, existing);
+      };
+
+      for (const line of allLines) {
+        const raw = line as unknown as Record<string, unknown>;
+
+        // 1. GUID lookup on cr49f_PurchaseRequest
+        const linePrGuid =
+          cleanGuid(line._cr49f_purchaserequest_value) ||
+          cleanGuid(raw._cr49f_PurchaseRequest_value as string) ||
+          cleanGuid(raw.cr49f_PurchaseRequest as string) ||
+          cleanGuid(raw.cr49f_purchaserequest as string);
+        if (linePrGuid) {
+          addLineToMap(linePrGuid, line);
+        }
+
+        // 2. PR Number or display name (e.g. "PR-1028", "PR-2026-101")
+        const prFormattedName =
+          (raw["_cr49f_purchaserequest_value@OData.Community.Display.V1.FormattedValue"] as string) ||
+          (raw["_cr49f_PurchaseRequest_value@OData.Community.Display.V1.FormattedValue"] as string) ||
+          line.cr49f_purchaserequestname ||
+          (raw.cr49f_PurchaseRequestname as string) ||
+          (raw.cr49f_purchaserequestname as string);
+
+        if (typeof prFormattedName === "string" && prFormattedName.trim()) {
+          const upper = prFormattedName.trim().toUpperCase();
+          addLineToMap(upper, line);
+
+          const match = upper.match(/PR[-_]?[0-9]+(?:[-_][0-9]+)*/i);
+          if (match) {
+            addLineToMap(match[0], line);
+          }
+        }
+      }
 
       // Build PR to RFQ lookup map dynamically
       const prToRfqMap = new Map<string, string>();
@@ -420,6 +471,75 @@ export default function PurchaseRequest() {
 
           if (matchedRfq) {
             req.rfq = matchedRfq;
+          }
+
+          // Dynamically resolve line items / products
+          let matchedLines: Cr49f_purchaserequestlines[] = [];
+          if (prId && prToLinesMap.has(prId.toLowerCase())) {
+            matchedLines = prToLinesMap.get(prId.toLowerCase())!;
+          } else if (prNumber && prToLinesMap.has(prNumber.toLowerCase())) {
+            matchedLines = prToLinesMap.get(prNumber.toLowerCase())!;
+          } else if (prNumber) {
+            for (const [key, val] of prToLinesMap.entries()) {
+              if (
+                key === prNumber.toLowerCase() ||
+                key.startsWith(`${prNumber.toLowerCase()} `) ||
+                key.startsWith(`${prNumber.toLowerCase()}—`) ||
+                key.startsWith(`${prNumber.toLowerCase()}-`)
+              ) {
+                matchedLines = val;
+                break;
+              }
+            }
+          }
+
+          // Deduplicate lines if any duplicate records exist
+          const uniqueLines = matchedLines.filter(
+            (l, idx, arr) =>
+              arr.findIndex(
+                (x) =>
+                  (x.cr49f_purchaserequestlineid &&
+                    x.cr49f_purchaserequestlineid === l.cr49f_purchaserequestlineid) ||
+                  (x.cr49f_prlinenumber && x.cr49f_prlinenumber === l.cr49f_prlinenumber) ||
+                  (x.cr49f_itemname === l.cr49f_itemname && idx === arr.indexOf(l))
+              ) === idx
+          );
+
+          const mappedLineItems: LineItem[] = uniqueLines.map((l, lIdx) => {
+            const rawLine = l as unknown as Record<string, unknown>;
+            const qty = Number(l.cr49f_quantity) || 0;
+            const price = Number(l.cr49f_unitprice) || 0;
+            const itemName =
+              l.cr49f_itemname?.trim() ||
+              l.cr49f_itemdescription?.trim() ||
+              (rawLine.cr49f_productname as string)?.trim() ||
+              "Item";
+
+            return {
+              id: lIdx + 1,
+              itemCode: l.cr49f_prlinenumber || `LINE-${lIdx + 1}`,
+              itemName,
+              quantity: qty,
+              previousContract: "—",
+              unitPrice: price > 0 ? `$${price.toLocaleString()}` : "—",
+              totalAmount: qty * price > 0 ? `$${(qty * price).toLocaleString()}` : "—",
+              deliveryDate: "—",
+              deliveryAddress: record.cr49f_deliverylocation || "—",
+            };
+          });
+
+          req.lineItems = mappedLineItems;
+
+          if (mappedLineItems.length > 0) {
+            req.category = mappedLineItems
+              .map((item) =>
+                item.quantity > 0
+                  ? `${item.itemName} (${item.quantity} ${item.quantity === 1 ? "unit" : "units"})`
+                  : item.itemName
+              )
+              .join(", ");
+          } else {
+            req.category = "";
           }
 
           const prTasks = allTasks.filter((t) => {
@@ -1516,13 +1636,37 @@ export default function PurchaseRequest() {
                                         <div className="pr-meta-row span-full">
                                           <span className="label">Description</span>
                                           <span className="val desc">
-                                            {request.description || "High performance laptops for development team members."}
+                                            {request.description || "—"}
                                           </span>
                                         </div>
 
                                         <div className="pr-meta-row">
-                                          <span className="label">Products</span>
-                                          <strong className="val">{request.category || "Laptops (25 units)"}</strong>
+                                          <span className="label">
+                                            Products{request.lineItems && request.lineItems.length > 1 ? ` (${request.lineItems.length})` : ""}
+                                          </span>
+                                          <div className="val" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                            {request.lineItems && request.lineItems.length > 0 ? (
+                                              <>
+                                                {request.lineItems.slice(0, 4).map((item, idx) => (
+                                                  <span key={idx} title={item.itemName}>
+                                                    {item.itemName}
+                                                    {item.quantity > 0
+                                                      ? ` (${item.quantity} ${item.quantity === 1 ? "unit" : "units"})`
+                                                      : ""}
+                                                  </span>
+                                                ))}
+                                                {request.lineItems.length > 4 && (
+                                                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+                                                    +{request.lineItems.length - 4} more items
+                                                  </span>
+                                                )}
+                                              </>
+                                            ) : request.category ? (
+                                              <span>{request.category}</span>
+                                            ) : (
+                                              <span style={{ color: "#94a3b8", fontWeight: 500 }}>No products added</span>
+                                            )}
+                                          </div>
                                         </div>
 
                                         <div className="pr-meta-row">
