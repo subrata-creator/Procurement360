@@ -2110,18 +2110,19 @@ export default function RfqDetail() {
                 <thead>
                   <tr>
                     <th>Item Name</th>
-                    <th>Requested Qty</th>
-                    <th>Quoted Unit Price</th>
+                    <th>Req. Qty</th>
+                    <th>Unit Price</th>
                     <th>Offered Qty</th>
-                    <th>Lead Time</th>
-                    <th>Comments / Notes</th>
+                    <th>Discount</th>
+                    <th>Tax</th>
+                    <th>Addl. Charges</th>
                     <th style={{ textAlign: "right" }}>Line Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedQuotationForView.lines.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                      <td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
                         No line details entered yet by this vendor.
                       </td>
                     </tr>
@@ -2134,8 +2135,20 @@ export default function RfqDetail() {
                         <td>{line.requestedQuantity}</td>
                         <td><strong>${(line.unitPrice || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></td>
                         <td>{line.offeredQuantity}</td>
-                        <td>{line.leadTime || "Standard"}</td>
-                        <td>{line.comments || "—"}</td>
+                        <td>{line.discount ? `${line.discount}%` : "0%"}</td>
+                        <td>{line.tax ? `${line.tax}%` : "0%"}</td>
+                        <td>
+                          {line.anyAdditionalCharges ? (
+                            <div>
+                              <strong style={{ color: "#d97706" }}>+${line.additionalChargePercentage || 0}%</strong>
+                              {line.additionalChargesDetails && (
+                                <div style={{ fontSize: 11, color: "#64748b" }}>{line.additionalChargesDetails}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: "#94a3b8" }}>None</span>
+                          )}
+                        </td>
                         <td style={{ textAlign: "right" }}>
                           <strong>${(line.totalPrice || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
                         </td>
