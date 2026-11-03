@@ -358,7 +358,7 @@ export async function setTaskApprovalStatusInDataverse(
       ? REJECTED_CHOICE_CANDIDATES
       : PENDING_CHOICE_CANDIDATES;
 
-  // 1. Try updating with full extra fields first
+  // 1. Try updating with full extra fields first (choiceVal as number: 2=Approved, 3=Rejected, 1=Pending)
   for (const choiceVal of candidateValues) {
     try {
       const payload: Record<string, unknown> = {
@@ -369,15 +369,17 @@ export async function setTaskApprovalStatusInDataverse(
         cleanId,
         payload as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
       );
-      if (res && !res.error && (res.data || res.success)) {
+      if (res && !res.error && (res.data !== undefined || res.success)) {
         console.log(`[ApprovalWorkflow] Successfully updated task ${cleanId} to ${targetStatus} with choice value ${choiceVal}`);
         if (typeof window !== "undefined") {
           localStorage.setItem("cr49f_working_approved_choice", String(choiceVal));
         }
         return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...extraFields }) as Cr49f_approvaltaskses;
+      } else if (res?.error) {
+        console.warn(`[ApprovalWorkflow] Choice ${choiceVal} returned error:`, res.error);
       }
-    } catch {
-      // Try next candidate
+    } catch (err) {
+      console.warn(`[ApprovalWorkflow] Exception updating choice ${choiceVal}:`, err);
     }
   }
 
@@ -388,9 +390,9 @@ export async function setTaskApprovalStatusInDataverse(
         cleanId,
         { cr49f_approvalstatus: choiceVal } as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
       );
-      if (res && !res.error && (res.data || res.success)) {
+      if (res && !res.error && (res.data !== undefined || res.success)) {
         console.log(`[ApprovalWorkflow] Successfully updated cr49f_approvalstatus alone to ${choiceVal}`);
-        return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal }) as Cr49f_approvaltaskses;
+        return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
       }
     } catch {}
   }
@@ -400,23 +402,38 @@ export async function setTaskApprovalStatusInDataverse(
     try {
       const res = await Cr49f_approvaltasksesService.update(
         cleanId,
-        { cr49f_ApprovalStatus: choiceVal } as any
+        { cr49f_ApprovalStatus: choiceVal, ...(extraFields || {}) } as any
       );
-      if (res.data) {
-        console.log(`[ApprovalWorkflow] Successfully updated cr49f_ApprovalStatus alone to ${choiceVal}`);
-        return res.data;
+      if (res && !res.error && (res.data !== undefined || res.success)) {
+        console.log(`[ApprovalWorkflow] Successfully updated cr49f_ApprovalStatus to ${choiceVal}`);
+        return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
       }
     } catch {}
   }
 
-  // 4. Try string target
+  // 4. Try string target ("Approved", "Rejected", "Pending")
   try {
     const res = await Cr49f_approvaltasksesService.update(
       cleanId,
-      { cr49f_approvalstatus: targetStatus } as any
+      { cr49f_approvalstatus: targetStatus, ...(extraFields || {}) } as any
     );
-    if (res.data) return res.data;
+    if (res && !res.error && (res.data !== undefined || res.success)) {
+      return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: targetStatus, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
+    }
   } catch {}
+
+  // 5. Try numeric string ("2", "3", "1")
+  for (const choiceVal of candidateValues) {
+    try {
+      const res = await Cr49f_approvaltasksesService.update(
+        cleanId,
+        { cr49f_approvalstatus: String(choiceVal), ...(extraFields || {}) } as any
+      );
+      if (res && !res.error && (res.data !== undefined || res.success)) {
+        return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
+      }
+    } catch {}
+  }
 
   return null;
 }
@@ -498,6 +515,7 @@ export async function approveTask(
 
   // Step 2: Attempt Dataverse updates across all candidate choice codes
   const fullApprovalFields: Record<string, unknown> = {
+    cr49f_approvalstatus: APPROVED_CHOICE_VALUE,
     cr49f_approvedby: resolvedApprover,
     cr49f_approvedon: nowIso,
     cr49f_assignedon: taskAssignedOn,
