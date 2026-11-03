@@ -391,9 +391,12 @@ export default function PurchaseRequestDetail() {
       }
       setTaskActionNotice(
         result.nextActivatedTask
-          ? `Task "${task.cr49f_task}" approved! Next task "${result.nextActivatedTask.cr49f_task}" is now Active.`
-          : `Task "${task.cr49f_task}" approved! All approval tasks completed. PR is now Approved!`
+          ? `Task "${task.cr49f_task}" approved! Next task "${result.nextActivatedTask.cr49f_task}" is now Active. Opening dashboard...`
+          : `Task "${task.cr49f_task}" approved! All approval tasks completed. PR is now Approved! Opening dashboard...`
       );
+      setTimeout(() => {
+        navigate("/");
+      }, 700);
     } catch (err) {
       console.error("Approve failed:", err);
       setTaskActionNotice(err instanceof Error ? err.message : "Approval failed.");

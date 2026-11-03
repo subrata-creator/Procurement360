@@ -304,10 +304,13 @@ function ModernDataverseTaskDetail({
       const result = await approveTask(cleanTaskId, currentUserName);
       setNotice(
         result.parentCompleted
-          ? "Final approval complete! All sequential cycle tasks are approved and the record is Approved."
-          : `Task approved successfully! Sequence #${result.nextActivatedTask?.cr49f_sequence ?? 2} has been activated.`
+          ? "Final approval complete! All sequential cycle tasks are approved and the record is Approved. Opening dashboard..."
+          : `Task approved successfully! Sequence #${result.nextActivatedTask?.cr49f_sequence ?? 2} has been activated. Opening dashboard...`
       );
       await onRefresh();
+      setTimeout(() => {
+        navigate("/");
+      }, 700);
     } catch (err: unknown) {
       console.error("Failed to approve task:", err);
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -324,8 +327,11 @@ function ModernDataverseTaskDetail({
     try {
       const currentUserName = typeof window !== "undefined" ? (localStorage.getItem("procurement_user_name") || "Subrata Dey") : "Subrata Dey";
       await rejectTask(cleanTaskId, currentUserName);
-      setNotice("Task has been rejected. Parent procurement request has been marked as Rejected.");
+      setNotice("Task has been rejected. Parent procurement request has been marked as Rejected. Opening dashboard...");
       await onRefresh();
+      setTimeout(() => {
+        navigate("/");
+      }, 700);
     } catch (err: unknown) {
       console.error("Failed to reject task:", err);
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -961,6 +967,7 @@ function ModernDataverseTaskDetail({
 // -------------------------------------------------------------
 
 function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
+  const navigate = useNavigate();
   const [status, setStatus] = useState("In Review");
   const [assignee, setAssignee] = useState(task.id === 5 ? "Rushi Pardeshi" : "Aman Jain");
   const [notice, setNotice] = useState("");
@@ -971,6 +978,11 @@ function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
   const updateStatus = (nextStatus: string) => {
     setStatus(nextStatus);
     setNotice(`RFQ ${reference} marked ${nextStatus.toLowerCase()}.`);
+    if (nextStatus === "Approved") {
+      setTimeout(() => {
+        navigate("/");
+      }, 700);
+    }
   };
 
   const reassign = () => {
@@ -1004,6 +1016,7 @@ function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
 }
 
 function OtherApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
+  const navigate = useNavigate();
   const [status, setStatus] = useState("In Review");
   const [notice, setNotice] = useState("");
   const reference = task.taskName.match(/(?:INV|PR|PO)-\d{4}-\d{3}/)?.[0] ?? "PR-2026";
@@ -1011,6 +1024,11 @@ function OtherApprovalTask({ task, onBack }: { task: Task; onBack: () => void })
   const updateStatus = (nextStatus: string) => {
     setStatus(nextStatus);
     setNotice(`${reference} marked ${nextStatus.toLowerCase()}.`);
+    if (nextStatus === "Approved") {
+      setTimeout(() => {
+        navigate("/");
+      }, 700);
+    }
   };
 
   return (
