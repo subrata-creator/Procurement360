@@ -21,13 +21,9 @@ import TaskDetail from "./Pages/TaskDetail";
 import RfqDetail from "./Pages/rfqdetail";
 import UsersPage from "./Pages/Admin/UsersPage";
 import ApprovalCycleConfigPage from "./Pages/Admin/ApprovalCycleConfigPage";
-import ApprovalCycleSummary from "./Pages/Admin/ApprovalCycleSummary";
 import SuppliersPage from "./Pages/SuppliersPage";
-import SupplierSummary from "./Pages/SupplierSummary";
 import ProductsPage from "./Pages/ProductsPage";
-import SupplierDashboard from "./Pages/Supplier/SupplierDashboard";
-import SupplierRfqsPage from "./Pages/Supplier/SupplierRfqsPage";
-import SupplierRfqResponsePage from "./Pages/Supplier/SupplierRfqResponsePage";
+import TestCopilot from "./components/ProcurementCopilot";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
@@ -91,32 +87,15 @@ const AppContent: React.FC = () => {
   const isOrdersRoute = location.pathname.startsWith("/orders");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
 
-  const isSupplier =
-    loggedInUser.userRole?.trim().toLowerCase() === "supplier";
-
-  const isSupplierDashboardRoute =
-    location.pathname === "/supplier-dashboard" ||
-    (isSupplier && location.pathname === "/");
-  const isSupplierQuotationsRoute =
-    location.pathname.startsWith("/supplier-quotations");
-  const isSupplierRfqsRoute =
-    location.pathname.startsWith("/supplier-rfqs") || isSupplierQuotationsRoute;
-
-  const routeNavigation = isSupplierDashboardRoute
-    ? "Supplier Dashboard"
-    : isSupplierQuotationsRoute
-    ? "My Quotations"
-    : isSupplierRfqsRoute
-    ? "My RFQs"
-    : isUsersRoute
+  const routeNavigation = isUsersRoute
     ? "Users"
     : isApprovalCycleRoute ? "Approval Cycle" : isSuppliersRoute ? "Suppliers" : isProductsRoute ? "Products / Services" : isPurchaseRequestRoute
-        ? "Purchase Requests"
-        : isRfqRoute
-          ? "RFQs"
-          : isOrdersRoute
-            ? "Orders"
-            : undefined;
+      ? "Purchase Requests"
+      : isRfqRoute
+        ? "RFQs"
+        : isOrdersRoute
+          ? "Orders"
+          : undefined;
 
   const activeNavigation = routeNavigation ?? fallbackNavigation;
 
@@ -201,9 +180,6 @@ const AppContent: React.FC = () => {
           contextName ||
           contextEmail;
 
-        if (typeof window !== "undefined" && fullName) {
-          localStorage.setItem("procurement_user_name", fullName);
-        }
         setLoggedInUser({
           userName: fullName,
           userRole: role,
@@ -253,14 +229,8 @@ const AppContent: React.FC = () => {
   const handleNavigation = (item: string) => {
     setFallbackNavigation(item);
 
-    if (item === "Supplier Dashboard") {
-      navigate("/supplier-dashboard");
-    } else if (item === "My RFQs") {
-      navigate("/supplier-rfqs");
-    } else if (item === "My Quotations") {
-      navigate("/supplier-quotations");
-    } else if (item === "Dashboard") {
-      navigate(isSupplier ? "/supplier-dashboard" : "/");
+    if (item === "Dashboard") {
+      navigate("/");
     } else if (item === "Users") {
       navigate("/users");
     } else if (
@@ -273,17 +243,9 @@ const AppContent: React.FC = () => {
     } else if (item === "RFQs") {
       navigate("/rfqs");
     } else if (item === "Suppliers") {
-      if (isAdmin) {
-        navigate("/suppliers");
-      } else {
-        navigate("/");
-      }
+      navigate("/suppliers");
     } else if (item === "Products / Services" || item === "Products") {
-      if (isAdmin) {
-        navigate("/products-services");
-      } else {
-        navigate("/");
-      }
+      navigate("/products-services");
     } else if (item === "Orders") {
       navigate("/orders");
     } else {
@@ -299,7 +261,6 @@ const AppContent: React.FC = () => {
         activeItem={activeNavigation}
         onNavigate={handleNavigation}
         isAdmin={isAdmin}
-        isSupplier={isSupplier}
       />
 
       <div className="app-main-layout">
@@ -318,43 +279,7 @@ const AppContent: React.FC = () => {
         />
 
         <main className="dashboard">
-          {isSupplierRfqsRoute ? (
-            <Routes>
-              <Route
-                path="/supplier-rfqs"
-                element={
-                  <SupplierRfqsPage
-                    userEmail={loggedInUser.userEmail}
-                    userName={loggedInUser.userName}
-                  />
-                }
-              />
-              <Route
-                path="/supplier-quotations"
-                element={
-                  <SupplierRfqsPage
-                    userEmail={loggedInUser.userEmail}
-                    userName={loggedInUser.userName}
-                    defaultFilter="Submitted"
-                  />
-                }
-              />
-              <Route
-                path="/supplier-rfqs/:id"
-                element={
-                  <SupplierRfqResponsePage
-                    userEmail={loggedInUser.userEmail}
-                    userName={loggedInUser.userName}
-                  />
-                }
-              />
-            </Routes>
-          ) : isSupplierDashboardRoute ? (
-            <SupplierDashboard
-              userEmail={loggedInUser.userEmail}
-              userName={loggedInUser.userName}
-            />
-          ) : isUsersRoute ? (
+          {isUsersRoute ? (
             <Routes>
               <Route path="/users" element={<UsersPage />} />
             </Routes>
@@ -365,36 +290,19 @@ const AppContent: React.FC = () => {
                 element={<ApprovalCycleConfigPage />}
               />
               <Route
-                path="/approval-cycle-configuration/:id"
-                element={<ApprovalCycleSummary />}
-              />
-              <Route
                 path="/approval-cycles"
                 element={<ApprovalCycleConfigPage />}
               />
-              <Route
-                path="/approval-cycles/:id"
-                element={<ApprovalCycleSummary />}
-              />
             </Routes>
           ) : isSuppliersRoute ? (
-            !isAdmin && loggedInUser.userRole !== "Loading..." ? (
-              <Dashboard isAdmin={false} />
-            ) : (
-              <Routes>
-                <Route path="/suppliers" element={<SuppliersPage />} />
-                <Route path="/suppliers/:id" element={<SupplierSummary />} />
-              </Routes>
-            )
+            <Routes>
+              <Route path="/suppliers" element={<SuppliersPage />} />
+            </Routes>
           ) : isProductsRoute ? (
-            !isAdmin && loggedInUser.userRole !== "Loading..." ? (
-              <Dashboard isAdmin={false} />
-            ) : (
-              <Routes>
-                <Route path="/products-services" element={<ProductsPage />} />
-                <Route path="/products" element={<ProductsPage />} />
-              </Routes>
-            )
+            <Routes>
+              <Route path="/products-services" element={<ProductsPage />} />
+              <Route path="/products" element={<ProductsPage />} />
+            </Routes>
           ) : isPurchaseRequestRoute ? (
             <Routes>
               <Route
@@ -430,11 +338,6 @@ const AppContent: React.FC = () => {
                 element={<TaskDetail />}
               />
             </Routes>
-          ) : isSupplier ? (
-            <SupplierDashboard
-              userEmail={loggedInUser.userEmail}
-              userName={loggedInUser.userName}
-            />
           ) : (
             <Dashboard isAdmin={isAdmin} />
           )}
