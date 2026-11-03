@@ -38,7 +38,18 @@ interface StatusStrategy {
 // 2. Picklist 1: Pending, 2: Approved, 3: Rejected
 // 3. Text field: "Pending", "Approved", "Rejected"
 // 4. Fallback: Base record only (no custom field on table)
+export const APPROVED_CHOICE_CANDIDATES = [154890001, 1, 2, 100000001];
+export const REJECTED_CHOICE_CANDIDATES = [154890002, 2, 3, 100000002];
+export const PENDING_CHOICE_CANDIDATES = [154890000, 0, 1, 100000000];
+
 const STATUS_CANDIDATES: StatusStrategy[] = [
+  {
+    fieldName: "cr49f_approvalstatus",
+    pendingVal: 154890000,
+    approvedVal: 154890001,
+    rejectedVal: 154890002,
+    label: "cr49f_approvalstatus (Publisher prefix 154890000=Pending, 154890001=Approved, 154890002=Rejected)",
+  },
   {
     fieldName: "cr49f_approvalstatus",
     pendingVal: 0,
@@ -48,17 +59,24 @@ const STATUS_CANDIDATES: StatusStrategy[] = [
   },
   {
     fieldName: "cr49f_approvalstatus",
+    pendingVal: 1,
+    approvedVal: 2,
+    rejectedVal: 3,
+    label: "cr49f_approvalstatus (Picklist 1=Pending, 2=Approved, 3=Rejected)",
+  },
+  {
+    fieldName: "cr49f_approvalstatus",
+    pendingVal: 100000000,
+    approvedVal: 100000001,
+    rejectedVal: 100000002,
+    label: "cr49f_approvalstatus (Dataverse Default 100000000=Pending, 100000001=Approved, 100000002=Rejected)",
+  },
+  {
+    fieldName: "cr49f_approvalstatus",
     pendingVal: "Pending",
     approvedVal: "Approved",
     rejectedVal: "Rejected",
     label: "cr49f_approvalstatus (Text string)",
-  },
-  {
-    fieldName: "cr49f_status",
-    pendingVal: 0,
-    approvedVal: 1,
-    rejectedVal: 2,
-    label: "cr49f_status (Picklist 0, 1, 2)",
   },
   {
     fieldName: null,
@@ -322,6 +340,93 @@ export async function createApprovalTasksForObject(
  * 2. Finds the next task in sequence and activates it (statecode: 0, statuscode: 1).
  * 3. If no further tasks remain, marks the parent PR/RFQ/PO record as Approved (1)!
  */
+
+/**
+ * Adaptively updates cr49f_approvalstatus across multiple known Dataverse picklist value conventions:
+ * 1. 154890001 (Environment publisher prefix 'cr49f')
+ * 2. 1 (0-indexed choice: 0=Pending, 1=Approved, 2=Rejected)
+ * 3. 2 (1-indexed choice: 1=Pending, 2=Approved, 3=Rejected)
+ * 4. 100000001 (Default solution prefix choice)
+ * 5. String 'Approved'/'Rejected'/'Pending'
+ */
+export async function setTaskApprovalStatusInDataverse(
+  taskId: string,
+  targetStatus: "Approved" | "Rejected" | "Pending",
+  extraFields?: Record<string, unknown>
+): Promise<Cr49f_approvaltaskses | null> {
+  const cleanId = cleanGuid(taskId);
+  if (!cleanId) return null;
+
+  const candidateValues =
+    targetStatus === "Approved"
+      ? APPROVED_CHOICE_CANDIDATES
+      : targetStatus === "Rejected"
+      ? REJECTED_CHOICE_CANDIDATES
+      : PENDING_CHOICE_CANDIDATES;
+
+  // 1. Try updating with full extra fields first
+  for (const choiceVal of candidateValues) {
+    try {
+      const payload: Record<string, unknown> = {
+        cr49f_approvalstatus: choiceVal,
+        ...(extraFields || {}),
+      };
+      const res = await Cr49f_approvaltasksesService.update(
+        cleanId,
+        payload as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
+      );
+      if (res.data) {
+        console.log(`[ApprovalWorkflow] Successfully updated task ${cleanId} to ${targetStatus} with choice value ${choiceVal}`);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("cr49f_working_approved_choice", String(choiceVal));
+        }
+        return res.data;
+      }
+    } catch {
+      // Try next candidate
+    }
+  }
+
+  // 2. Try updating cr49f_approvalstatus alone
+  for (const choiceVal of candidateValues) {
+    try {
+      const res = await Cr49f_approvaltasksesService.update(
+        cleanId,
+        { cr49f_approvalstatus: choiceVal } as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
+      );
+      if (res.data) {
+        console.log(`[ApprovalWorkflow] Successfully updated cr49f_approvalstatus alone to ${choiceVal}`);
+        return res.data;
+      }
+    } catch {}
+  }
+
+  // 3. Try with PascalCase cr49f_ApprovalStatus
+  for (const choiceVal of candidateValues) {
+    try {
+      const res = await Cr49f_approvaltasksesService.update(
+        cleanId,
+        { cr49f_ApprovalStatus: choiceVal } as any
+      );
+      if (res.data) {
+        console.log(`[ApprovalWorkflow] Successfully updated cr49f_ApprovalStatus alone to ${choiceVal}`);
+        return res.data;
+      }
+    } catch {}
+  }
+
+  // 4. Try string target
+  try {
+    const res = await Cr49f_approvaltasksesService.update(
+      cleanId,
+      { cr49f_approvalstatus: targetStatus } as any
+    );
+    if (res.data) return res.data;
+  } catch {}
+
+  return null;
+}
+
 export async function approveTask(
   approvalTaskId: string,
   approverName?: string
@@ -397,83 +502,24 @@ export async function approveTask(
     (rawCurrent.createdon as string) ||
     nowIso;
 
-  // Step 2: Attempt Dataverse updates using adaptive strategies WITHOUT sending statecode/statuscode
-  // Primary goal: update cr49f_approvalstatus (1), cr49f_approvedby, cr49f_approvedon, and cr49f_assignedon
-  let updateResultRecord: Cr49f_approvaltaskses | null = null;
-
-  const fullApprovalPayload: Record<string, unknown> = {
-    cr49f_approvalstatus: 1, // 1 = Approved
+  // Step 2: Attempt Dataverse updates across all candidate choice codes
+  const fullApprovalFields: Record<string, unknown> = {
     cr49f_approvedby: resolvedApprover,
     cr49f_approvedon: nowIso,
     cr49f_assignedon: taskAssignedOn,
   };
 
+  let updateResultRecord = await setTaskApprovalStatusInDataverse(
+    cleanTaskId,
+    "Approved",
+    fullApprovalFields
+  );
+
+  // Always ensure cr49f_approvedby, cr49f_approvedon, and cr49f_assignedon are saved
   try {
-    const fullRes = await Cr49f_approvaltasksesService.update(
-      cleanTaskId,
-      fullApprovalPayload as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
-    );
-    if (fullRes.data) {
-      updateResultRecord = fullRes.data;
-      console.log(`[ApprovalWorkflow] Successfully updated task with full payload (status=1, approvedby, approvedon, assignedon)`);
-    } else {
-      console.warn("[ApprovalWorkflow] Full payload returned empty data, attempting fallback updates:", fullRes.error);
-    }
-  } catch (fullErr) {
-    console.warn("[ApprovalWorkflow] Full approval payload failed, falling back to component updates:", fullErr);
-  }
-
-  // If full update failed, try updating cr49f_approvalstatus first, then individual fields
-  if (!updateResultRecord) {
-    const strategiesToTry: Array<{ payload: Record<string, unknown>; name: string }> = [
-      {
-        payload: {
-          cr49f_approvalstatus: 1,
-          cr49f_approvedby: resolvedApprover,
-          cr49f_approvedon: nowIso,
-        },
-        name: "status=1 + approvedby + approvedon",
-      },
-      { payload: { cr49f_approvalstatus: 1 }, name: "Picklist integer 1" },
-      { payload: { cr49f_approvalstatus: "1" }, name: "String '1'" },
-      { payload: { cr49f_approvalstatus: "Approved" }, name: "String 'Approved'" },
-      { payload: { cr49f_status: 1 }, name: "cr49f_status integer 1" },
-    ];
-
-    for (const strat of strategiesToTry) {
-      try {
-        const res = await Cr49f_approvaltasksesService.update(
-          cleanTaskId,
-          strat.payload as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
-        );
-        if (res.data) {
-          updateResultRecord = res.data;
-          console.log(`[ApprovalWorkflow] Successfully updated task via strategy: ${strat.name}`);
-          break;
-        }
-      } catch (stratErr) {
-        console.warn(`[ApprovalWorkflow] Strategy "${strat.name}" failed:`, stratErr);
-      }
-    }
-
-    // Now write cr49f_approvedby, cr49f_approvedon, and cr49f_assignedon individually
-    try {
-      await Cr49f_approvaltasksesService.update(cleanTaskId, {
-        cr49f_approvedby: resolvedApprover,
-      } as any);
-    } catch {}
-
-    try {
-      await Cr49f_approvaltasksesService.update(cleanTaskId, {
-        cr49f_approvedon: nowIso,
-      } as any);
-    } catch {}
-
-    try {
-      await Cr49f_approvaltasksesService.update(cleanTaskId, {
-        cr49f_assignedon: taskAssignedOn,
-      } as any);
-    } catch {}
+    await Cr49f_approvaltasksesService.update(cleanTaskId, fullApprovalFields as any);
+  } catch (fieldErr) {
+    console.warn("[ApprovalWorkflow] Field update note:", fieldErr);
   }
 
   // Always store approval in local storage overlay for instant, deterministic UI reactivity
@@ -545,26 +591,24 @@ export async function approveTask(
         const activateRes = await Cr49f_approvaltasksesService.update(nextId, {
           statecode: 0, // Active
           statuscode: 1, // Active
-          cr49f_approvalstatus: 0, // Pending
           cr49f_assignedon: nextAssignedOn,
         } as any);
         if (activateRes.data) {
           nextActivatedTask = activateRes.data;
         }
       } catch (actErr) {
-        console.warn("[ApprovalWorkflow] Could not activate next task with assignedon, retrying basic activate:", actErr);
         try {
           const activateRes = await Cr49f_approvaltasksesService.update(nextId, {
-            statecode: 0, // Active
-            statuscode: 1, // Active
+            statecode: 0,
+            statuscode: 1,
           });
-          if (activateRes.data) {
-            nextActivatedTask = activateRes.data;
-          }
-        } catch (actErr2) {
-          console.warn("[ApprovalWorkflow] Basic activate failed:", actErr2);
-        }
+          if (activateRes.data) nextActivatedTask = activateRes.data;
+        } catch {}
       }
+
+      // Explicitly set next task to Pending using candidate choice values
+      void setTaskApprovalStatusInDataverse(nextId, "Pending");
+
       if (typeof window !== "undefined") {
         localStorage.setItem(`task_active_${nextId}`, "true");
         localStorage.setItem(`task_approved_status_${nextId}`, "Pending");
@@ -667,27 +711,14 @@ export async function rejectTask(
   }
   if (!resolvedRejector) resolvedRejector = "Subrata Dey";
 
-  let updateResultRecord: Cr49f_approvaltaskses | null = null;
-  const rejectPayload: Record<string, unknown> = {
-    cr49f_approvalstatus: 2, // 2 = Rejected
-    cr49f_approvedby: resolvedRejector,
-    cr49f_approvedon: nowIso,
-  };
-
-  try {
-    const res = await Cr49f_approvaltasksesService.update(
-      cleanTaskId,
-      rejectPayload as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
-    );
-    if (res.data) {
-      updateResultRecord = res.data;
+  let updateResultRecord = await setTaskApprovalStatusInDataverse(
+    cleanTaskId,
+    "Rejected",
+    {
+      cr49f_approvedby: resolvedRejector,
+      cr49f_approvedon: nowIso,
     }
-  } catch {
-    try {
-      const res = await Cr49f_approvaltasksesService.update(cleanTaskId, { cr49f_approvalstatus: 2 });
-      if (res.data) updateResultRecord = res.data;
-    } catch {}
-  }
+  );
 
   if (typeof window !== "undefined") {
     localStorage.setItem(`task_approved_status_${cleanTaskId}`, "Rejected");
@@ -805,7 +836,7 @@ export async function getApprovalTasksForRecord(
 
     matched.sort((a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0));
 
-    // Apply local storage overlay to ensure immediate status consistency and sequential activation
+    // Apply local storage overlay to ensure immediate status consistency, auto-heal DB, and activate sequence
     if (typeof window !== "undefined") {
       for (let i = 0; i < matched.length; i++) {
         const t = matched[i];
@@ -817,16 +848,32 @@ export async function getApprovalTasksForRecord(
         );
         if (tId) {
           const cached = localStorage.getItem(`task_approved_status_${tId}`);
-          if (cached === "Approved") {
-            t.cr49f_approvalstatus = 1;
+          const hasApprovedMetadata = Boolean(
+            t.cr49f_approvedby ||
+            t.cr49f_approvedon ||
+            raw.cr49f_approvedby ||
+            raw.cr49f_approvedon
+          );
+
+          if (cached === "Approved" || hasApprovedMetadata) {
+            t.cr49f_approvalstatus = 1 as any;
+            localStorage.setItem(`task_approved_status_${tId}`, "Approved");
+
+            // Auto-heal: If Dataverse record has approved metadata but choice column is still Pending, sync it in Dataverse!
+            const curVal = t.cr49f_approvalstatus ?? raw.cr49f_approvalstatus;
+            if (curVal === 0 || curVal === 154890000 || curVal === 100000000 || curVal === "Pending") {
+              void setTaskApprovalStatusInDataverse(tId, "Approved");
+            }
+
             // If task i is approved, the next sequential task (i+1) is active
             if (i + 1 < matched.length && matched[i + 1].statecode === 1) {
               matched[i + 1].statecode = 0;
               matched[i + 1].statuscode = 1;
             }
           } else if (cached === "Rejected") {
-            t.cr49f_approvalstatus = 2;
+            t.cr49f_approvalstatus = 2 as any;
           }
+
           const cachedApprovedBy = localStorage.getItem(`task_approved_by_${tId}`);
           if (cachedApprovedBy && !t.cr49f_approvedby) {
             t.cr49f_approvedby = cachedApprovedBy;
@@ -875,6 +922,7 @@ export function getTaskApprovalStatusLabel(
   // 1. Check formatted OData string or virtual display name field (most authoritative from Dataverse)
   const formattedVal =
     (raw["cr49f_approvalstatus@OData.Community.Display.V1.FormattedValue"] as string) ||
+    (raw["cr49f_ApprovalStatus@OData.Community.Display.V1.FormattedValue"] as string) ||
     (raw["cr49f_approvalstatusname"] as string) ||
     (raw["_cr49f_approvalstatus_value@OData.Community.Display.V1.FormattedValue"] as string);
 
@@ -886,7 +934,7 @@ export function getTaskApprovalStatusLabel(
   }
 
   // 2. Check cr49f_approvalstatus value
-  const statusVal = task.cr49f_approvalstatus ?? raw.cr49f_ApprovalStatus;
+  const statusVal = task.cr49f_approvalstatus ?? raw.cr49f_ApprovalStatus ?? raw.cr49f_approvalstatus;
   if (statusVal !== undefined && statusVal !== null) {
     if (typeof statusVal === "string") {
       const s = statusVal.trim().toLowerCase();
@@ -896,23 +944,42 @@ export function getTaskApprovalStatusLabel(
     }
 
     if (typeof statusVal === "number") {
-      // In official Dataverse schema: 0 = Pending, 1 = Approved, 2 = Rejected
-      if (statusVal === 0) return "Pending";
+      // Publisher prefix 15489xxxxx
+      if (statusVal === 154890001) return "Approved";
+      if (statusVal === 154890002) return "Rejected";
+      if (statusVal === 154890000) return "Pending";
+
+      // Dataverse default prefix 100000000
+      if (statusVal === 100000001) return "Approved";
+      if (statusVal === 100000002) return "Rejected";
+      if (statusVal === 100000000) return "Pending";
+
+      // 1-indexed (1=Pending, 2=Approved, 3=Rejected)
+      if (statusVal === 2) return "Approved";
+      if (statusVal === 3) return "Rejected";
+
+      // 0-indexed (0=Pending, 1=Approved, 2=Rejected)
       if (statusVal === 1) return "Approved";
-      if (statusVal === 2) return "Rejected";
+      if (statusVal === 0) return "Pending";
     }
   }
 
-  // 3. Fallback to cr49f_id ONLY if explicitly string "Approved" or "Rejected"
+  // 3. If approvedby and approvedon are populated in Dataverse, the task was approved!
+  if (task.cr49f_approvedby || task.cr49f_approvedon || raw.cr49f_approvedby || raw.cr49f_approvedon) {
+    return "Approved";
+  }
+
+  // 4. Fallback to cr49f_id ONLY if explicitly string "Approved" or "Rejected"
   if (task.cr49f_id === "Approved") return "Approved";
   if (task.cr49f_id === "Rejected") return "Rejected";
 
-  // 4. Default: any task not explicitly approved or rejected is Pending!
+  // 5. Default: any task not explicitly approved or rejected is Pending!
   return "Pending";
 }
 
+  
 /**
- * Scans all existing PRs and RFQs in Dataverse, and if any record has zero approval tasks,
+ * Scans all existing PRs and RFQs in Dataverse,
  * it creates the full set of sequential approval tasks on cr49f_approvaltasks for it.
  */
 export async function syncAllPendingApprovalTasks(
