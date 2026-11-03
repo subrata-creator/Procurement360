@@ -38,38 +38,32 @@ interface StatusStrategy {
 // 2. Picklist 1: Pending, 2: Approved, 3: Rejected
 // 3. Text field: "Pending", "Approved", "Rejected"
 // 4. Fallback: Base record only (no custom field on table)
-export const APPROVED_CHOICE_CANDIDATES = [154890001, 1, 2, 100000001];
-export const REJECTED_CHOICE_CANDIDATES = [154890002, 2, 3, 100000002];
-export const PENDING_CHOICE_CANDIDATES = [154890000, 0, 1, 100000000];
+// Exact Dataverse Choices for cr49f_approvalstatus:
+// 1 = Pending
+// 2 = Approved
+// 3 = Rejected
+export const APPROVED_CHOICE_VALUE = 2;
+export const REJECTED_CHOICE_VALUE = 3;
+export const PENDING_CHOICE_VALUE = 1;
+
+export const APPROVED_CHOICE_CANDIDATES = [2, 154890001, 100000001];
+export const REJECTED_CHOICE_CANDIDATES = [3, 154890002, 100000002];
+export const PENDING_CHOICE_CANDIDATES = [1, 154890000, 100000000];
 
 const STATUS_CANDIDATES: StatusStrategy[] = [
+  {
+    fieldName: "cr49f_approvalstatus",
+    pendingVal: 1,
+    approvedVal: 2,
+    rejectedVal: 3,
+    label: "cr49f_approvalstatus (Dataverse Choice: 1=Pending, 2=Approved, 3=Rejected)",
+  },
   {
     fieldName: "cr49f_approvalstatus",
     pendingVal: 154890000,
     approvedVal: 154890001,
     rejectedVal: 154890002,
     label: "cr49f_approvalstatus (Publisher prefix 154890000=Pending, 154890001=Approved, 154890002=Rejected)",
-  },
-  {
-    fieldName: "cr49f_approvalstatus",
-    pendingVal: 0,
-    approvedVal: 1,
-    rejectedVal: 2,
-    label: "cr49f_approvalstatus (Picklist 0=Pending, 1=Approved, 2=Rejected)",
-  },
-  {
-    fieldName: "cr49f_approvalstatus",
-    pendingVal: 1,
-    approvedVal: 2,
-    rejectedVal: 3,
-    label: "cr49f_approvalstatus (Picklist 1=Pending, 2=Approved, 3=Rejected)",
-  },
-  {
-    fieldName: "cr49f_approvalstatus",
-    pendingVal: 100000000,
-    approvedVal: 100000001,
-    rejectedVal: 100000002,
-    label: "cr49f_approvalstatus (Dataverse Default 100000000=Pending, 100000001=Approved, 100000002=Rejected)",
   },
   {
     fieldName: "cr49f_approvalstatus",
@@ -238,7 +232,7 @@ export async function createApprovalTasksForObject(
       cr49f_role: (t.cr49f_role || 2) as keyof typeof Cr49f_approvaltasksescr49f_role,
       cr49f_slanumber: t.cr49f_slanumber || 24,
       cr49f_slaunit: safeSlaUnit,
-      cr49f_approvalstatus: 0,
+      cr49f_approvalstatus: 1, // 1 = Pending
       cr49f_assignedon: nowIso,
       ...parentBinding,
     };
@@ -375,12 +369,12 @@ export async function setTaskApprovalStatusInDataverse(
         cleanId,
         payload as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
       );
-      if (res.data) {
+      if (res && !res.error && (res.data || res.success)) {
         console.log(`[ApprovalWorkflow] Successfully updated task ${cleanId} to ${targetStatus} with choice value ${choiceVal}`);
         if (typeof window !== "undefined") {
           localStorage.setItem("cr49f_working_approved_choice", String(choiceVal));
         }
-        return res.data;
+        return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...extraFields }) as Cr49f_approvaltaskses;
       }
     } catch {
       // Try next candidate
@@ -394,9 +388,9 @@ export async function setTaskApprovalStatusInDataverse(
         cleanId,
         { cr49f_approvalstatus: choiceVal } as Parameters<typeof Cr49f_approvaltasksesService.update>[1]
       );
-      if (res.data) {
+      if (res && !res.error && (res.data || res.success)) {
         console.log(`[ApprovalWorkflow] Successfully updated cr49f_approvalstatus alone to ${choiceVal}`);
-        return res.data;
+        return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal }) as Cr49f_approvaltaskses;
       }
     } catch {}
   }
@@ -535,7 +529,7 @@ export async function approveTask(
       cr49f_approvaltasksid: cleanTaskId,
       cr49f_task: "Approved Task",
       cr49f_sequence: currentSeq,
-      cr49f_approvalstatus: 1 as unknown as Cr49f_approvaltaskses["cr49f_approvalstatus"],
+      cr49f_approvalstatus: 2 as unknown as Cr49f_approvaltaskses["cr49f_approvalstatus"],
       cr49f_approvedby: resolvedApprover,
       cr49f_approvedon: nowIso,
       cr49f_assignedon: taskAssignedOn,
@@ -545,7 +539,7 @@ export async function approveTask(
       owneridtype: "system",
     } as unknown as Cr49f_approvaltaskses);
 
-  resolvedTask.cr49f_approvalstatus = 1 as unknown as Cr49f_approvaltaskses["cr49f_approvalstatus"];
+  resolvedTask.cr49f_approvalstatus = 2 as unknown as Cr49f_approvaltaskses["cr49f_approvalstatus"];
   resolvedTask.cr49f_approvedby = resolvedApprover;
   resolvedTask.cr49f_approvedon = nowIso;
   resolvedTask.cr49f_assignedon = taskAssignedOn;
@@ -753,7 +747,7 @@ export async function rejectTask(
   return {
     rejectedTask: updateResultRecord || currentTask || ({
       cr49f_approvaltasksid: cleanTaskId,
-      cr49f_approvalstatus: 2,
+      cr49f_approvalstatus: 3,
       cr49f_approvedby: resolvedRejector,
       cr49f_approvedon: nowIso,
     } as unknown as Cr49f_approvaltaskses),
@@ -855,13 +849,14 @@ export async function getApprovalTasksForRecord(
             raw.cr49f_approvedon
           );
 
+          const rawStatusVal = raw.cr49f_approvalstatus ?? raw.cr49f_ApprovalStatus ?? t.cr49f_approvalstatus;
+
           if (cached === "Approved" || hasApprovedMetadata) {
-            t.cr49f_approvalstatus = 1 as any;
+            t.cr49f_approvalstatus = 2 as any;
             localStorage.setItem(`task_approved_status_${tId}`, "Approved");
 
-            // Auto-heal: If Dataverse record has approved metadata but choice column is still Pending, sync it in Dataverse!
-            const curVal = t.cr49f_approvalstatus ?? raw.cr49f_approvalstatus;
-            if (curVal === 0 || curVal === 154890000 || curVal === 100000000 || curVal === "Pending") {
+            // Auto-heal: If Dataverse record has approved metadata but choice column is still Pending (1 or 0), sync 2 (Approved) in Dataverse!
+            if (rawStatusVal === 1 || rawStatusVal === 0 || rawStatusVal === 154890000 || rawStatusVal === 100000000 || rawStatusVal === "Pending") {
               void setTaskApprovalStatusInDataverse(tId, "Approved");
             }
 
@@ -871,7 +866,7 @@ export async function getApprovalTasksForRecord(
               matched[i + 1].statuscode = 1;
             }
           } else if (cached === "Rejected") {
-            t.cr49f_approvalstatus = 2 as any;
+            t.cr49f_approvalstatus = 3 as any;
           }
 
           const cachedApprovedBy = localStorage.getItem(`task_approved_by_${tId}`);
@@ -954,12 +949,10 @@ export function getTaskApprovalStatusLabel(
       if (statusVal === 100000002) return "Rejected";
       if (statusVal === 100000000) return "Pending";
 
-      // 1-indexed (1=Pending, 2=Approved, 3=Rejected)
+      // Exact Dataverse Choices (1=Pending, 2=Approved, 3=Rejected)
       if (statusVal === 2) return "Approved";
       if (statusVal === 3) return "Rejected";
-
-      // 0-indexed (0=Pending, 1=Approved, 2=Rejected)
-      if (statusVal === 1) return "Approved";
+      if (statusVal === 1) return "Pending";
       if (statusVal === 0) return "Pending";
     }
   }
