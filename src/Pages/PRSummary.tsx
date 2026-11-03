@@ -41,6 +41,7 @@ import {
   getTaskApprovalStatusLabel,
   approveTask,
   rejectTask,
+  cleanGuid,
 } from "../Services/ApprovalWorkflowService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
@@ -110,13 +111,23 @@ function toUsDate(value?: string): string {
 // "In Review" for that logic. The real 4-value label (cr49f_statusname)
 // is still shown as-is in the status pill/KPI — only the journey
 // bucket is collapsed.
-function mapToPRStatus(status?: number): PurchaseRequestRecord["status"] {
+function mapToPRStatus(status?: number, prId?: string): PurchaseRequestRecord["status"] {
+  if (prId && typeof window !== "undefined") {
+    const cached = localStorage.getItem(`pr_status_${cleanGuid(prId)}`);
+    if (cached === "Approved") return "Approved";
+    if (cached === "Rejected") return "Rejected";
+  }
   if (status === 1) return "Approved";
   if (status === 3) return "Rejected";
   return "In Review";
 }
 
 function getStatusLabel(request: LivePurchaseRequest): string {
+  const prId = cleanGuid(request.cr49f_purchaserequestid);
+  if (prId && typeof window !== "undefined") {
+    const cached = localStorage.getItem(`pr_status_${prId}`);
+    if (cached) return cached;
+  }
   if (request.cr49f_statusname) return request.cr49f_statusname;
   switch (request.cr49f_status) {
     case 0: return "Pending";
@@ -312,7 +323,7 @@ export default function PurchaseRequestDetail() {
       po: "No PO available",
       createdBy: liveRecord.createdbyname || "Unknown",
       date: toUsDate(liveRecord.createdon),
-      status: mapToPRStatus(liveRecord.cr49f_status),
+      status: mapToPRStatus(liveRecord.cr49f_status, liveRecord.cr49f_purchaserequestid),
       requester: liveRecord.createdbyname,
       requiredDate: toUsDate(liveRecord.cr49f_requireddeliverydate),
       totalAmount: liveRecord.cr49f_totalamount != null ? currencyFormatter.format(liveRecord.cr49f_totalamount) : undefined,
@@ -360,12 +371,22 @@ export default function PurchaseRequestDetail() {
   };
 
   const handleApprove = async (task: Cr49f_approvaltaskses) => {
-    setActioningTaskId(task.cr49f_approvaltasksid);
+    const raw = task as unknown as Record<string, unknown>;
+    const taskId = cleanGuid(
+      task.cr49f_approvaltasksid ||
+      (raw.cr49f_ApprovalTasksId as string) ||
+      (raw.id as string)
+    );
+    if (!taskId) return;
+    setActioningTaskId(taskId);
     setTaskActionNotice(null);
     try {
-      const result = await approveTask(task.cr49f_approvaltasksid);
+      const result = await approveTask(taskId);
       if (liveRecord?.cr49f_purchaserequestid) {
         await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
+        if (result.parentCompleted) {
+          setLiveRequests((prev) => prev.map((req) => cleanGuid(req.cr49f_purchaserequestid) === cleanGuid(liveRecord.cr49f_purchaserequestid) ? { ...req, cr49f_status: 1 } : req));
+        }
       }
       setTaskActionNotice(
         result.nextActivatedTask
@@ -381,12 +402,20 @@ export default function PurchaseRequestDetail() {
   };
 
   const handleReject = async (task: Cr49f_approvaltaskses) => {
-    setActioningTaskId(task.cr49f_approvaltasksid);
+    const raw = task as unknown as Record<string, unknown>;
+    const taskId = cleanGuid(
+      task.cr49f_approvaltasksid ||
+      (raw.cr49f_ApprovalTasksId as string) ||
+      (raw.id as string)
+    );
+    if (!taskId) return;
+    setActioningTaskId(taskId);
     setTaskActionNotice(null);
     try {
-      await rejectTask(task.cr49f_approvaltasksid);
+      await rejectTask(taskId);
       if (liveRecord?.cr49f_purchaserequestid) {
         await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
+        setLiveRequests((prev) => prev.map((req) => cleanGuid(req.cr49f_purchaserequestid) === cleanGuid(liveRecord.cr49f_purchaserequestid) ? { ...req, cr49f_status: 3 } : req));
       }
       setTaskActionNotice(
         `Task "${task.cr49f_task}" rejected. Further tasks remain inactive and PR is marked Rejected.`

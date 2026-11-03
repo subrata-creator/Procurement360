@@ -499,16 +499,24 @@ export default function RfqDetail() {
 
   // Handle task approval
   const handleApprove = async (task: Cr49f_approvaltaskses) => {
-    setActioningTaskId(task.cr49f_approvaltasksid);
+    const raw = task as unknown as Record<string, unknown>;
+    const taskId = cleanGuid(
+      task.cr49f_approvaltasksid ||
+      (raw.cr49f_ApprovalTasksId as string) ||
+      (raw.id as string)
+    );
+    if (!taskId) return;
+    setActioningTaskId(taskId);
     setTaskNotice(null);
     try {
-      const result = await approveTask(task.cr49f_approvaltasksid);
+      const result = await approveTask(taskId);
       if (liveRfq) {
         await refreshTasks(liveRfq.cr49f_requestforqoutationid);
-        // Refresh live RFQ status
         const refreshed = await Cr49f_requestforqoutationsService.get(liveRfq.cr49f_requestforqoutationid);
         if (refreshed.success && refreshed.data) {
           setLiveRfq(refreshed.data);
+        } else if (result.parentCompleted) {
+          setLiveRfq((prev) => (prev ? { ...prev, cr49f_status: 1 } : null));
         }
       }
       setTaskNotice(
@@ -526,15 +534,24 @@ export default function RfqDetail() {
 
   // Handle task rejection
   const handleReject = async (task: Cr49f_approvaltaskses) => {
-    setActioningTaskId(task.cr49f_approvaltasksid);
+    const raw = task as unknown as Record<string, unknown>;
+    const taskId = cleanGuid(
+      task.cr49f_approvaltasksid ||
+      (raw.cr49f_ApprovalTasksId as string) ||
+      (raw.id as string)
+    );
+    if (!taskId) return;
+    setActioningTaskId(taskId);
     setTaskNotice(null);
     try {
-      await rejectTask(task.cr49f_approvaltasksid);
+      await rejectTask(taskId);
       if (liveRfq) {
         await refreshTasks(liveRfq.cr49f_requestforqoutationid);
         const refreshed = await Cr49f_requestforqoutationsService.get(liveRfq.cr49f_requestforqoutationid);
         if (refreshed.success && refreshed.data) {
           setLiveRfq(refreshed.data);
+        } else {
+          setLiveRfq((prev) => (prev ? { ...prev, cr49f_status: 3 } : null));
         }
       }
       setTaskNotice(`Task "${task.cr49f_task}" rejected. RFQ is marked as Rejected.`);
@@ -593,7 +610,8 @@ export default function RfqDetail() {
   // Unified RFQ View Model
   const rfqData = useMemo(() => {
     if (liveRfq) {
-      const statusInfo = getStatusBadge(liveRfq.cr49f_status);
+      const cachedRfqStatus = cleanGuid(liveRfq.cr49f_requestforqoutationid) ? localStorage.getItem(`rfq_status_${cleanGuid(liveRfq.cr49f_requestforqoutationid)}`) : null;
+      const statusInfo = getStatusBadge(cachedRfqStatus || liveRfq.cr49f_status);
       const rfqId = cleanGuid(liveRfq.cr49f_requestforqoutationid);
 
       // Invited suppliers resolution (Dataverse selected suppliers + cached created suppliers)

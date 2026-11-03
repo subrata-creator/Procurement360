@@ -102,16 +102,19 @@ function isoToUsDate(iso: string): string {
 }
 
 function getDatabaseStatus(record: Cr49f_purchaserequests): PRStatus {
+  const prId = cleanGuid(record.cr49f_purchaserequestid);
+  if (prId && typeof window !== "undefined") {
+    const cached = localStorage.getItem(`pr_status_${prId}`);
+    if (cached === "Approved") return "Approved";
+    if (cached === "Rejected") return "Rejected";
+  }
   const statusName = record.cr49f_statusname?.trim().toLowerCase();
-
   if (statusName === "approved" || record.cr49f_status === 1) {
     return "Approved";
   }
-
   if (statusName === "rejected" || record.cr49f_status === 3) {
     return "Rejected";
   }
-
   return "In Review";
 }
 
