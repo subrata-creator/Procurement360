@@ -6,7 +6,6 @@ import {
   Briefcase,
   ChevronRight,
   Clock,
-  DollarSign,
   Layers,
   Pencil,
   Plus,
@@ -64,15 +63,6 @@ const getSlaUnitLabel = (code?: number): string => {
     return Cr49f_tasksescr49f_slaunit[code as keyof typeof Cr49f_tasksescr49f_slaunit];
   }
   return "Hours";
-};
-
-const formatCurrency = (val?: number | null): string => {
-  if (val == null || isNaN(val)) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(val);
 };
 
 export const ApprovalCycleSummary: React.FC = () => {
@@ -292,23 +282,6 @@ export const ApprovalCycleSummary: React.FC = () => {
             <span className="cycle-kpi-label">Configured Steps</span>
             <strong className="cycle-kpi-val">
               {tasks.length} {tasks.length === 1 ? "Stage Gate" : "Stage Gates"}
-            </strong>
-          </div>
-        </div>
-
-        {/* KPI 3: Threshold Limits */}
-        <div className="cycle-kpi-card">
-          <div className="cycle-kpi-icon emerald">
-            <DollarSign size={18} />
-          </div>
-          <div className="cycle-kpi-content">
-            <span className="cycle-kpi-label">Amount Thresholds</span>
-            <strong className="cycle-kpi-val">
-              {cycle.cr49f_minamount != null || cycle.cr49f_maxamount != null
-                ? `${formatCurrency(cycle.cr49f_minamount)} — ${
-                    cycle.cr49f_maxamount ? formatCurrency(cycle.cr49f_maxamount) : "No Limit"
-                  }`
-                : "All Amounts"}
             </strong>
           </div>
         </div>
