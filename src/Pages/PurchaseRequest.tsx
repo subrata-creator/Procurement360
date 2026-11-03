@@ -35,6 +35,8 @@ import {
 } from "../data/Purchaserequestsdata";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
+import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
@@ -332,9 +334,10 @@ export default function PurchaseRequest() {
     setRequestLoadError("");
 
     try {
-      const [result, tasksRes] = await Promise.allSettled([
+      const [result, tasksRes, rfqsRes] = await Promise.allSettled([
         Cr49f_purchaserequestsService.getAll(),
         Cr49f_approvaltasksesService.getAll(),
+        Cr49f_requestforqoutationsService.getAll(),
       ]);
 
       if (signal?.aborted) return;
@@ -348,12 +351,76 @@ export default function PurchaseRequest() {
         tasksRes.status === "fulfilled" && tasksRes.value.success && tasksRes.value.data
           ? tasksRes.value.data
           : [];
+      const allRfqs: Cr49f_requestforqoutations[] =
+        rfqsRes.status === "fulfilled" && rfqsRes.value.success && rfqsRes.value.data
+          ? rfqsRes.value.data
+          : [];
+
+      // Build PR to RFQ lookup map dynamically
+      const prToRfqMap = new Map<string, string>();
+      for (const rfq of allRfqs) {
+        const rfqNum = rfq.cr49f_rfqnumber?.trim() || rfq.cr49f_requestforqoutationid;
+        if (!rfqNum) continue;
+
+        const raw = rfq as unknown as Record<string, unknown>;
+
+        // 1. GUID lookup on cr49f_PRRFQ
+        const prGuid =
+          cleanGuid(rfq._cr49f_prrfq_value) ||
+          cleanGuid(raw._cr49f_PRRFQ_value as string) ||
+          cleanGuid(raw.cr49f_PRRFQ as string) ||
+          cleanGuid(raw.cr49f_prrfq as string);
+        if (prGuid) {
+          prToRfqMap.set(prGuid.toLowerCase(), rfqNum);
+        }
+
+        // 2. PR Number or display name (e.g. "PR-1017", "PR-2026-101")
+        const prFormattedName =
+          (raw["_cr49f_prrfq_value@OData.Community.Display.V1.FormattedValue"] as string) ||
+          rfq.cr49f_prrfqname ||
+          (raw.cr49f_PRRFQname as string);
+
+        if (typeof prFormattedName === "string" && prFormattedName.trim()) {
+          const trimmedUpper = prFormattedName.trim().toUpperCase();
+          prToRfqMap.set(trimmedUpper, rfqNum);
+
+          const match = trimmedUpper.match(/PR[-_]?[0-9]+(?:[-_][0-9]+)*/i);
+          if (match) {
+            prToRfqMap.set(match[0], rfqNum);
+          }
+        }
+      }
 
       setAllTasksList(allTasks);
       setRequests(
         records.map((record) => {
           const req = mapDataverseRequest(record);
           const prId = cleanGuid(record.cr49f_purchaserequestid);
+          const prNumber = record.cr49f_prnumber?.trim().toUpperCase();
+
+          // Dynamically associate linked RFQ
+          let matchedRfq = "";
+          if (prId && prToRfqMap.has(prId.toLowerCase())) {
+            matchedRfq = prToRfqMap.get(prId.toLowerCase())!;
+          } else if (prNumber && prToRfqMap.has(prNumber)) {
+            matchedRfq = prToRfqMap.get(prNumber)!;
+          } else if (prNumber) {
+            for (const [key, val] of prToRfqMap.entries()) {
+              if (
+                key === prNumber ||
+                key.startsWith(`${prNumber} `) ||
+                key.startsWith(`${prNumber}—`) ||
+                key.startsWith(`${prNumber}-`)
+              ) {
+                matchedRfq = val;
+                break;
+              }
+            }
+          }
+
+          if (matchedRfq) {
+            req.rfq = matchedRfq;
+          }
 
           const prTasks = allTasks.filter((t) => {
             const raw = t as unknown as Record<string, unknown>;
@@ -1234,11 +1301,12 @@ export default function PurchaseRequest() {
 
                           {/* 5. Associated RFQ */}
                           <td className="pr-cell-rfq">
-                            {request.rfq && request.rfq.startsWith("RFQ-") ? (
+                            {request.rfq ? (
                               <button
                                 type="button"
                                 className="pr-rfq-pill linked"
-                                onClick={() => navigate("/rfqs")}
+                                onClick={() => navigate(`/rfqs/${request.rfq}`)}
+                                title={`View RFQ ${request.rfq}`}
                               >
                                 <FileText size={12} />
                                 <span>{request.rfq}</span>
@@ -1455,6 +1523,24 @@ export default function PurchaseRequest() {
                                         <div className="pr-meta-row">
                                           <span className="label">Products</span>
                                           <strong className="val">{request.category || "Laptops (25 units)"}</strong>
+                                        </div>
+
+                                        <div className="pr-meta-row">
+                                          <span className="label">Associated RFQ</span>
+                                          <strong className="val">
+                                            {request.rfq ? (
+                                              <button
+                                                type="button"
+                                                className="pr-inline-link"
+                                                onClick={() => navigate(`/rfqs/${request.rfq}`)}
+                                                title={`View RFQ ${request.rfq}`}
+                                              >
+                                                {request.rfq}
+                                              </button>
+                                            ) : (
+                                              "Not Available"
+                                            )}
+                                          </strong>
                                         </div>
                                       </div>
                                     </div>
