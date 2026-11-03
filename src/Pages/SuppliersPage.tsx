@@ -408,7 +408,7 @@ const SuppliersPage: React.FC = () => {
                 <th>Supplier Type</th>
                 <th>Contact</th>
                 <th>Location</th>
-                <th>Products</th>
+                <th style={{ whiteSpace: "nowrap" }}>Products</th>
                 <th>Status</th>
                 <th style={{ width: 90, textAlign: "center" }}>Actions</th>
               </tr>
@@ -594,15 +594,16 @@ const SuppliersPage: React.FC = () => {
                       </td>
 
                       {/* PRODUCTS COUNT */}
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         <button
                           type="button"
                           className="admin-products-badge"
+                          style={{ whiteSpace: "nowrap" }}
                           onClick={() => setViewProductsSupplier(s)}
                           title="Click to view catalog products"
                         >
-                          <Package size={12} />
-                          <span>
+                          <Package size={12} style={{ flexShrink: 0 }} />
+                          <span style={{ whiteSpace: "nowrap" }}>
                             {prodCount} {prodCount === 1 ? "Product" : "Products"}
                           </span>
                         </button>
