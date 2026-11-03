@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   Building2,
   CheckCircle2,
-  Loader2,
+  Eye,
   Mail,
   MapPin,
   Package,
@@ -12,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Truck,
   User,
   X,
@@ -27,11 +27,6 @@ import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersSer
 import { Cr49f_supplierproductsService } from "../generated/services/Cr49f_supplierproductsService";
 import SupplierModal from "../components/SupplierModal";
 import ModernSelect, { type ModernSelectOption } from "../components/ModernSelect";
-import {
-  seedSuppliersToDataverse,
-  seedMissingSupplierProductsOnly,
-} from "../Services/SupplierSeedingService";
-import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 import "../Styles/AdminPages.css";
 
 // Helper to get friendly supplier type
@@ -53,11 +48,11 @@ const getSupplierTypeName = (supplier: Cr49f_suppliers): { label: string; classN
 };
 
 const SuppliersPage: React.FC = () => {
+  const navigate = useNavigate();
   const [suppliers, setSuppliers] = useState<Cr49f_suppliers[]>([]);
   const [products, setProducts] = useState<Cr49f_supplierproducts[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [addingProductsForSupId, setAddingProductsForSupId] = useState<string | null>(null);
 
   // Helper to normalize GUIDs across OData casing / braces
   const normalizeId = (id?: string): string => {
@@ -94,8 +89,8 @@ const SuppliersPage: React.FC = () => {
           suppRes.status === "fulfilled"
             ? suppRes.value.error?.message
             : suppRes.reason instanceof Error
-            ? suppRes.reason.message
-            : "Failed to load suppliers from Dataverse.";
+              ? suppRes.reason.message
+              : "Failed to load suppliers from Dataverse.";
         setLoadError(errMsg || "Failed to load suppliers from Dataverse.");
         setSuppliers([]);
       }
@@ -115,80 +110,7 @@ const SuppliersPage: React.FC = () => {
 
   useEffect(() => {
     void fetchSuppliersData();
-    const w = window as unknown as {
-      seedSuppliers: typeof seedSuppliersToDataverse;
-      seedSupplierProductsOnly: typeof seedMissingSupplierProductsOnly;
-    };
-    w.seedSuppliers = seedSuppliersToDataverse;
-    w.seedSupplierProductsOnly = seedMissingSupplierProductsOnly;
   }, []);
-
-  // Add catalog products specifically for one supplier
-  const handleAddProductsForSupplier = async (sup: Cr49f_suppliers) => {
-    const cleanId = normalizeId(sup.cr49f_supplierid);
-    if (!cleanId) return;
-
-    setAddingProductsForSupId(sup.cr49f_supplierid);
-    try {
-      const targetName = (sup.cr49f_name || "").toLowerCase().trim();
-      const targetCode = (sup.cr49f_supplierid1 || "").toLowerCase().trim();
-
-      const matchedSample =
-        INITIAL_SAMPLE_SUPPLIERS.find((item) => {
-          const sName = (item.supplier.cr49f_name || "").toLowerCase().trim();
-          const sCode = (item.supplier.cr49f_supplierid1 || "").toLowerCase().trim();
-          return (targetName && sName === targetName) || (targetCode && sCode === targetCode);
-        }) || INITIAL_SAMPLE_SUPPLIERS[0];
-
-      const existingForSup = productsBySupplier[cleanId] ?? [];
-      const addedList: Cr49f_supplierproducts[] = [];
-      for (const prod of matchedSample.products) {
-        const prodName = prod.cr49f_productname.trim().toLowerCase();
-        const alreadyHas = existingForSup.some(
-          (ep) => (ep.cr49f_productname || "").trim().toLowerCase() === prodName
-        );
-        if (alreadyHas) continue;
-
-        const prodPayload = {
-          "cr49f_Supplier@odata.bind": `/cr49f_suppliers(${cleanId})`,
-          cr49f_productname: prod.cr49f_productname.slice(0, 95),
-          cr49f_supplierproductnumber: prod.cr49f_supplierproductnumber.slice(0, 95),
-          cr49f_producttype: prod.cr49f_producttype,
-          cr49f_category: (prod.cr49f_category || "").slice(0, 95),
-          cr49f_unitprice: String(prod.cr49f_unitprice || "").slice(0, 95),
-          cr49f_warranty: String(prod.cr49f_warranty || "").slice(0, 95),
-          cr49f_availability: prod.cr49f_availability,
-          cr49f_productdescription: (prod.cr49f_productdescription || "").slice(0, 95),
-          statecode: 0 as const,
-          statuscode: 1 as const,
-        };
-
-        const res = await Cr49f_supplierproductsService.create(prodPayload);
-        if (res.error || !res.data) {
-          throw new Error(
-            res.error?.message || `Failed to create product "${prod.cr49f_productname}"`
-          );
-        }
-        addedList.push({
-          ...res.data,
-          _cr49f_supplier_value: cleanId,
-        });
-      }
-
-      await fetchSuppliersData();
-      if (addedList.length > 0) {
-        setToastMessage(`Added ${addedList.length} new catalog products to "${sup.cr49f_name || "Supplier"}"!`);
-      } else {
-        setToastMessage(`All catalog products are already present for "${sup.cr49f_name || "Supplier"}".`);
-      }
-    } catch (err: unknown) {
-      console.error("Failed to add products for supplier:", err);
-      const msg = err instanceof Error ? err.message : "Failed to add products.";
-      setLoadError(`Error adding products: ${msg}`);
-    } finally {
-      setAddingProductsForSupId(null);
-    }
-  };
 
   // Map products by normalized supplier id
   const productsBySupplier = useMemo(() => {
@@ -507,8 +429,8 @@ const SuppliersPage: React.FC = () => {
                 <tr>
                   <td colSpan={7} className="admin-table-empty">
                     {searchQuery ||
-                    selectedTypeFilter !== "ALL" ||
-                    selectedStatusFilter !== "ALL" ? (
+                      selectedTypeFilter !== "ALL" ||
+                      selectedStatusFilter !== "ALL" ? (
                       <div>
                         <p>No suppliers matched your search filters.</p>
                         <button
@@ -562,7 +484,18 @@ const SuppliersPage: React.FC = () => {
                     <tr key={s.cr49f_supplierid}>
                       {/* COMPANY NAME & CODE */}
                       <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            cursor: "pointer",
+                          }}
+                          onClick={() =>
+                            navigate(`/suppliers/${s.cr49f_supplierid1 || s.cr49f_supplierid}`)
+                          }
+                          title={`View ${s.cr49f_name || "Supplier"} summary`}
+                        >
                           <span
                             style={{
                               width: 32,
@@ -579,7 +512,13 @@ const SuppliersPage: React.FC = () => {
                             <Building2 size={16} />
                           </span>
                           <div>
-                            <strong style={{ fontSize: 13, display: "block" }}>
+                            <strong
+                              style={{
+                                fontSize: 13,
+                                display: "block",
+                                color: "var(--primary-hex)",
+                              }}
+                            >
                               {s.cr49f_name || "Unnamed Supplier"}
                             </strong>
                             <span
@@ -672,9 +611,8 @@ const SuppliersPage: React.FC = () => {
                       {/* STATUS */}
                       <td>
                         <span
-                          className={`admin-status-pill ${
-                            s.statecode === 0 ? "active" : "inactive"
-                          }`}
+                          className={`admin-status-pill ${s.statecode === 0 ? "active" : "inactive"
+                            }`}
                         >
                           {s.statecode === 0 ? "Active" : "Inactive"}
                         </span>
@@ -682,15 +620,33 @@ const SuppliersPage: React.FC = () => {
 
                       {/* ACTIONS */}
                       <td style={{ textAlign: "center" }}>
-                        <button
-                          type="button"
-                          className="admin-edit-btn"
-                          onClick={() => handleOpenEdit(s)}
-                          title={`Edit ${s.cr49f_name || "Supplier"}`}
-                        >
-                          <Pencil size={12} />
-                          <span>Edit</span>
-                        </button>
+                        <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          <button
+                            type="button"
+                            className="admin-edit-btn"
+                            style={{
+                              background: "color-mix(in srgb, var(--primary-hex) 10%, transparent)",
+                              color: "var(--primary-hex)",
+                              borderColor: "color-mix(in srgb, var(--primary-hex) 25%, transparent)",
+                            }}
+                            onClick={() =>
+                              navigate(`/suppliers/${s.cr49f_supplierid1 || s.cr49f_supplierid}`)
+                            }
+                            title={`View ${s.cr49f_name || "Supplier"} summary`}
+                          >
+                            <Eye size={12} />
+                            <span>View</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-edit-btn"
+                            onClick={() => handleOpenEdit(s)}
+                            title={`Edit ${s.cr49f_name || "Supplier"}`}
+                          >
+                            <Pencil size={12} />
+                            <span>Edit</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -758,24 +714,6 @@ const SuppliersPage: React.FC = () => {
                       <p style={{ fontSize: 11.5, margin: "0 0 12px" }}>
                         No catalog items have been added for this supplier yet.
                       </p>
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn-secondary"
-                        style={{ margin: "0 auto" }}
-                        onClick={() => void handleAddProductsForSupplier(viewProductsSupplier)}
-                        disabled={addingProductsForSupId === viewProductsSupplier.cr49f_supplierid}
-                      >
-                        {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid ? (
-                          <Loader2 size={13} className="animate-spin" />
-                        ) : (
-                          <Sparkles size={13} />
-                        )}
-                        <span>
-                          {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid
-                            ? "Adding Products..."
-                            : "Add Catalog Products"}
-                        </span>
-                      </button>
                     </div>
                   );
                 }
@@ -865,20 +803,15 @@ const SuppliersPage: React.FC = () => {
               <button
                 type="button"
                 className="admin-btn admin-btn-secondary"
-                onClick={() => handleAddProductsForSupplier(viewProductsSupplier)}
-                disabled={addingProductsForSupId === viewProductsSupplier.cr49f_supplierid}
-                title="Add all remaining catalog products for this supplier"
+                onClick={() => {
+                  const s = viewProductsSupplier;
+                  setViewProductsSupplier(null);
+                  navigate(`/suppliers/${s.cr49f_supplierid1 || s.cr49f_supplierid}`);
+                }}
+                title="Open complete supplier summary page"
               >
-                {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <Sparkles size={13} />
-                )}
-                <span>
-                  {addingProductsForSupId === viewProductsSupplier.cr49f_supplierid
-                    ? "Adding Products..."
-                    : "Add More Products"}
-                </span>
+                <Eye size={13} />
+                <span>View Full Summary</span>
               </button>
               <button
                 type="button"

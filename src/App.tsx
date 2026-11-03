@@ -21,7 +21,9 @@ import TaskDetail from "./Pages/TaskDetail";
 import RfqDetail from "./Pages/rfqdetail";
 import UsersPage from "./Pages/Admin/UsersPage";
 import ApprovalCycleConfigPage from "./Pages/Admin/ApprovalCycleConfigPage";
+import ApprovalCycleSummary from "./Pages/Admin/ApprovalCycleSummary";
 import SuppliersPage from "./Pages/SuppliersPage";
+import SupplierSummary from "./Pages/SupplierSummary";
 import ProductsPage from "./Pages/ProductsPage";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
@@ -297,8 +299,16 @@ const AppContent: React.FC = () => {
                 element={<ApprovalCycleConfigPage />}
               />
               <Route
+                path="/approval-cycle-configuration/:id"
+                element={<ApprovalCycleSummary />}
+              />
+              <Route
                 path="/approval-cycles"
                 element={<ApprovalCycleConfigPage />}
+              />
+              <Route
+                path="/approval-cycles/:id"
+                element={<ApprovalCycleSummary />}
               />
             </Routes>
           ) : isSuppliersRoute ? (
@@ -307,6 +317,7 @@ const AppContent: React.FC = () => {
             ) : (
               <Routes>
                 <Route path="/suppliers" element={<SuppliersPage />} />
+                <Route path="/suppliers/:id" element={<SupplierSummary />} />
               </Routes>
             )
           ) : isProductsRoute ? (

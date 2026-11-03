@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle2,
+  Eye,
   Layers,
   Pencil,
   Plus,
@@ -34,6 +36,7 @@ const getObjectTypeName = (cycle: Cr49f_procurementapprovalcycles): string => {
 };
 
 const ApprovalCycleConfigPage: React.FC = () => {
+  const navigate = useNavigate();
   const [cycles, setCycles] = useState<Cr49f_procurementapprovalcycles[]>([]);
   const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -425,7 +428,22 @@ const ApprovalCycleConfigPage: React.FC = () => {
                     <tr key={c.cr49f_procurementapprovalcycleid}>
                       {/* OBJECT */}
                       <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            cursor: "pointer",
+                          }}
+                          onClick={() =>
+                            navigate(
+                              `/approval-cycles/${
+                                c.cr49f_id || c.cr49f_procurementapprovalcycleid
+                              }`
+                            )
+                          }
+                          title={`View ${getObjectTypeName(c)} approval cycle summary`}
+                        >
                           <span
                             style={{
                               width: 28,
@@ -440,7 +458,12 @@ const ApprovalCycleConfigPage: React.FC = () => {
                           >
                             <Layers size={13} style={{ color: "var(--primary-hex)" }} />
                           </span>
-                          <strong style={{ fontSize: 13 }}>
+                          <strong
+                            style={{
+                              fontSize: 13,
+                              color: "var(--primary-hex)",
+                            }}
+                          >
                             {getObjectTypeName(c)}
                           </strong>
                         </div>
@@ -469,15 +492,37 @@ const ApprovalCycleConfigPage: React.FC = () => {
 
                       {/* ACTIONS */}
                       <td style={{ textAlign: "center" }}>
-                        <button
-                          type="button"
-                          className="admin-edit-btn"
-                          onClick={() => handleOpenEdit(c)}
-                          title={`Edit ${getObjectTypeName(c)} cycle`}
-                        >
-                          <Pencil size={12} />
-                          <span>Edit</span>
-                        </button>
+                        <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          <button
+                            type="button"
+                            className="admin-edit-btn"
+                            style={{
+                              background: "color-mix(in srgb, var(--primary-hex) 10%, transparent)",
+                              color: "var(--primary-hex)",
+                              borderColor: "color-mix(in srgb, var(--primary-hex) 25%, transparent)",
+                            }}
+                            onClick={() =>
+                              navigate(
+                                `/approval-cycles/${
+                                  c.cr49f_id || c.cr49f_procurementapprovalcycleid
+                                }`
+                              )
+                            }
+                            title={`View ${getObjectTypeName(c)} approval cycle summary`}
+                          >
+                            <Eye size={12} />
+                            <span>View</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-edit-btn"
+                            onClick={() => handleOpenEdit(c)}
+                            title={`Edit ${getObjectTypeName(c)} cycle`}
+                          >
+                            <Pencil size={12} />
+                            <span>Edit</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
