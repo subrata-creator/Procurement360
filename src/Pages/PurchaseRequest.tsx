@@ -1628,7 +1628,7 @@ export default function PurchaseRequest() {
                                           <strong className="val">{request.department || "IT Equipment"}</strong>
                                         </div>
 
-                                        <div className="pr-meta-row">
+                                        <div className="pr-meta-row span-full">
                                           <span className="label">Title</span>
                                           <strong className="val">{request.title}</strong>
                                         </div>
@@ -1638,53 +1638,6 @@ export default function PurchaseRequest() {
                                           <span className="val desc">
                                             {request.description || "—"}
                                           </span>
-                                        </div>
-
-                                        <div className="pr-meta-row">
-                                          <span className="label">
-                                            Products{request.lineItems && request.lineItems.length > 1 ? ` (${request.lineItems.length})` : ""}
-                                          </span>
-                                          <div className="val" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                                            {request.lineItems && request.lineItems.length > 0 ? (
-                                              <>
-                                                {request.lineItems.slice(0, 4).map((item, idx) => (
-                                                  <span key={idx} title={item.itemName}>
-                                                    {item.itemName}
-                                                    {item.quantity > 0
-                                                      ? ` (${item.quantity} ${item.quantity === 1 ? "unit" : "units"})`
-                                                      : ""}
-                                                  </span>
-                                                ))}
-                                                {request.lineItems.length > 4 && (
-                                                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
-                                                    +{request.lineItems.length - 4} more items
-                                                  </span>
-                                                )}
-                                              </>
-                                            ) : request.category ? (
-                                              <span>{request.category}</span>
-                                            ) : (
-                                              <span style={{ color: "#94a3b8", fontWeight: 500 }}>No products added</span>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                        <div className="pr-meta-row">
-                                          <span className="label">Associated RFQ</span>
-                                          <strong className="val">
-                                            {request.rfq ? (
-                                              <button
-                                                type="button"
-                                                className="pr-inline-link"
-                                                onClick={() => navigate(`/rfqs/${request.rfq}`)}
-                                                title={`View RFQ ${request.rfq}`}
-                                              >
-                                                {request.rfq}
-                                              </button>
-                                            ) : (
-                                              "Not Available"
-                                            )}
-                                          </strong>
                                         </div>
                                       </div>
                                     </div>
