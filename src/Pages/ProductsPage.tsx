@@ -4,7 +4,6 @@ import {
   Briefcase,
   CheckCircle2,
   Layers,
-  Loader2,
   Package,
   PackageSearch,
   Pencil,
@@ -12,7 +11,6 @@ import {
   RefreshCw,
   Ruler,
   Search,
-  Sparkles,
   Tag,
   X,
   XCircle,
@@ -150,10 +148,6 @@ const ProductsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Seeding state
-  const [seeding, setSeeding] = useState(false);
-  const [seedProgress, setSeedProgress] = useState<string | null>(null);
-
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
@@ -216,32 +210,6 @@ const ProductsPage: React.FC = () => {
     setToastMessage(
       `Product "${savedProduct.cr49f_productname || "Item"}" was successfully saved!`
     );
-  };
-
-  // Add 10 sample products handler
-  const handleAddSampleProducts = async () => {
-    setSeeding(true);
-    setSeedProgress("Preparing 10 products...");
-    try {
-      const added: Cr49f_productses[] = [];
-      for (let i = 0; i < INITIAL_SAMPLE_PRODUCTS.length; i++) {
-        const item = INITIAL_SAMPLE_PRODUCTS[i];
-        setSeedProgress(`Adding item ${i + 1} of 10: "${item.cr49f_productname}"...`);
-        const res = await Cr49f_productsesService.create(item);
-        if (res.data) {
-          added.push(res.data);
-        }
-      }
-      setProducts((prev) => [...added, ...prev]);
-      setToastMessage("Successfully created 10 products and services in Dataverse!");
-    } catch (err: unknown) {
-      console.error("Failed to add sample products:", err);
-      const msg = err instanceof Error ? err.message : "Failed to add products.";
-      setLoadError(`Error adding sample products: ${msg}`);
-    } finally {
-      setSeeding(false);
-      setSeedProgress(null);
-    }
   };
 
   // Distinct Categories derived from Dataverse records
@@ -393,32 +361,9 @@ const ProductsPage: React.FC = () => {
           </button>
           <button
             type="button"
-            className="admin-btn admin-btn-secondary"
-            onClick={handleAddSampleProducts}
-            disabled={seeding || loading}
-            title="Add 10 standardized products and services to Dataverse"
-            style={{
-              borderColor: "color-mix(in srgb, var(--primary-hex) 40%, var(--border-hex))",
-              background: "color-mix(in srgb, var(--primary-hex) 8%, transparent)",
-            }}
-          >
-            {seeding ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                <span>{seedProgress || "Adding..."}</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={14} style={{ color: "var(--primary-hex)" }} />
-                <span>Add 10 Products</span>
-              </>
-            )}
-          </button>
-          <button
-            type="button"
             className="admin-btn admin-btn-primary"
             onClick={handleOpenCreate}
-            disabled={seeding}
+            disabled={loading}
           >
             <Plus size={15} />
             <span>New Item</span>
@@ -591,20 +536,11 @@ const ProductsPage: React.FC = () => {
                           <button
                             type="button"
                             className="admin-btn admin-btn-primary"
-                            onClick={handleAddSampleProducts}
-                            disabled={seeding}
-                          >
-                            {seeding ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                            <span>{seeding ? (seedProgress || "Adding 10 Products...") : "Add 10 Sample Products"}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-secondary"
                             onClick={handleOpenCreate}
-                            disabled={seeding}
+                            disabled={loading}
                           >
                             <Plus size={14} />
-                            <span>Add Custom Product</span>
+                            <span>Add Product</span>
                           </button>
                         </div>
                       </div>

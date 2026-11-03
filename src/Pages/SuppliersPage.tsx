@@ -57,10 +57,6 @@ const SuppliersPage: React.FC = () => {
   const [products, setProducts] = useState<Cr49f_supplierproducts[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  // Seeding state
-  const [seeding, setSeeding] = useState(false);
-  const [seedProgress, setSeedProgress] = useState<string | null>(null);
   const [addingProductsForSupId, setAddingProductsForSupId] = useState<string | null>(null);
 
   // Helper to normalize GUIDs across OData casing / braces
@@ -126,26 +122,6 @@ const SuppliersPage: React.FC = () => {
     w.seedSuppliers = seedSuppliersToDataverse;
     w.seedSupplierProductsOnly = seedMissingSupplierProductsOnly;
   }, []);
-
-  // Sync / Add 10 sample suppliers & products matching Dataverse
-  const handleAddSampleSuppliers = async () => {
-    setSeeding(true);
-    setSeedProgress("Checking suppliers & products in Dataverse...");
-    try {
-      const result = await seedSuppliersToDataverse((msg) => setSeedProgress(msg));
-      await fetchSuppliersData();
-      setToastMessage(
-        `Successfully synced ${result.createdSuppliers.length} suppliers and ${result.createdProducts.length} catalog products in Dataverse!`
-      );
-    } catch (err: unknown) {
-      console.error("Failed to add sample suppliers:", err);
-      const msg = err instanceof Error ? err.message : "Failed to add sample suppliers.";
-      setLoadError(`Error adding sample suppliers: ${msg}`);
-    } finally {
-      setSeeding(false);
-      setSeedProgress(null);
-    }
-  };
 
   // Add catalog products specifically for one supplier
   const handleAddProductsForSupplier = async (sup: Cr49f_suppliers) => {
@@ -401,28 +377,9 @@ const SuppliersPage: React.FC = () => {
           </button>
           <button
             type="button"
-            className="admin-btn admin-btn-secondary"
-            onClick={handleAddSampleSuppliers}
-            disabled={seeding || loading}
-            title="Seed 10 new suppliers & catalog products matching present products in Dataverse"
-          >
-            {seeding ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                <span>{seedProgress || "Adding..."}</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={14} />
-                <span>Seed 10 Suppliers</span>
-              </>
-            )}
-          </button>
-          <button
-            type="button"
             className="admin-btn admin-btn-primary"
             onClick={handleOpenCreate}
-            disabled={seeding}
+            disabled={loading}
           >
             <Plus size={15} />
             <span>New Supplier</span>
@@ -582,26 +539,9 @@ const SuppliersPage: React.FC = () => {
                         >
                           <button
                             type="button"
-                            className="admin-btn admin-btn-secondary"
-                            onClick={handleAddSampleSuppliers}
-                            disabled={seeding}
-                          >
-                            {seeding ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Sparkles size={14} />
-                            )}
-                            <span>
-                              {seeding
-                                ? (seedProgress || "Adding 10 Suppliers...")
-                                : "Add 10 Suppliers & Products"}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
                             className="admin-btn admin-btn-primary"
                             onClick={handleOpenCreate}
-                            disabled={seeding}
+                            disabled={loading}
                           >
                             <Plus size={14} />
                             <span>Register First Supplier</span>
