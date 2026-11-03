@@ -201,6 +201,9 @@ const AppContent: React.FC = () => {
           contextName ||
           contextEmail;
 
+        if (typeof window !== "undefined" && fullName) {
+          localStorage.setItem("procurement_user_name", fullName);
+        }
         setLoggedInUser({
           userName: fullName,
           userRole: role,

@@ -381,7 +381,8 @@ export default function PurchaseRequestDetail() {
     setActioningTaskId(taskId);
     setTaskActionNotice(null);
     try {
-      const result = await approveTask(taskId);
+      const approverName = typeof window !== "undefined" ? (localStorage.getItem("procurement_user_name") || "Subrata Dey") : "Subrata Dey";
+      const result = await approveTask(taskId, approverName);
       if (liveRecord?.cr49f_purchaserequestid) {
         await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
         if (result.parentCompleted) {
@@ -412,7 +413,8 @@ export default function PurchaseRequestDetail() {
     setActioningTaskId(taskId);
     setTaskActionNotice(null);
     try {
-      await rejectTask(taskId);
+      const approverName = typeof window !== "undefined" ? (localStorage.getItem("procurement_user_name") || "Subrata Dey") : "Subrata Dey";
+      await rejectTask(taskId, approverName);
       if (liveRecord?.cr49f_purchaserequestid) {
         await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
         setLiveRequests((prev) => prev.map((req) => cleanGuid(req.cr49f_purchaserequestid) === cleanGuid(liveRecord.cr49f_purchaserequestid) ? { ...req, cr49f_status: 3 } : req));
@@ -994,6 +996,12 @@ export default function PurchaseRequestDetail() {
                             >
                               {approvalStatus}
                             </span>
+                            {isApproved && (task.cr49f_approvedby || task.cr49f_approvedon) && (
+                              <span style={{ display: "block", fontSize: 10, color: "#64748b", marginTop: 2 }}>
+                                {task.cr49f_approvedby ? `by ${task.cr49f_approvedby}` : ""}
+                                {task.cr49f_approvedon ? ` (${new Date(task.cr49f_approvedon).toLocaleDateString()})` : ""}
+                              </span>
+                            )}
                           </td>
                           <td style={{ textAlign: "center" }}>
                             {isActive && isPending ? (

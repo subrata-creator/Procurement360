@@ -50,6 +50,9 @@ export type Cr49f_approvaltasksesstatuscode = keyof typeof Cr49f_approvaltaskses
 export interface Cr49f_approvaltasksesBase {
   cr49f_approvaltasksid: string;
   cr49f_approvalstatus?: Cr49f_approvaltasksescr49f_approvalstatus;
+  cr49f_approvedby?: string;
+  cr49f_approvedon?: string;
+  cr49f_assignedon?: string;
   cr49f_department?: Cr49f_approvaltasksescr49f_department;
   cr49f_id?: string;
   cr49f_object?: Cr49f_approvaltasksescr49f_object;
@@ -71,6 +74,9 @@ export interface Cr49f_approvaltasksesBase {
 
 export interface Cr49f_approvaltaskses extends Cr49f_approvaltasksesBase {
   cr49f_approvalstatusname?: string;
+  cr49f_approvedby?: string;
+  cr49f_approvedon?: string;
+  cr49f_assignedon?: string;
   cr49f_departmentname?: string;
   cr49f_objectname?: string;
   cr49f_rolename?: string;

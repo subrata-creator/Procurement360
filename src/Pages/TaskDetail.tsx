@@ -300,7 +300,8 @@ function ModernDataverseTaskDetail({
     setActionLoading(true);
     setNotice(null);
     try {
-      const result = await approveTask(cleanTaskId);
+      const currentUserName = typeof window !== "undefined" ? (localStorage.getItem("procurement_user_name") || "Subrata Dey") : "Subrata Dey";
+      const result = await approveTask(cleanTaskId, currentUserName);
       setNotice(
         result.parentCompleted
           ? "Final approval complete! All sequential cycle tasks are approved and the record is Approved."
@@ -321,7 +322,8 @@ function ModernDataverseTaskDetail({
     setActionLoading(true);
     setNotice(null);
     try {
-      await rejectTask(cleanTaskId);
+      const currentUserName = typeof window !== "undefined" ? (localStorage.getItem("procurement_user_name") || "Subrata Dey") : "Subrata Dey";
+      await rejectTask(cleanTaskId, currentUserName);
       setNotice("Task has been rejected. Parent procurement request has been marked as Rejected.");
       await onRefresh();
     } catch (err: unknown) {

@@ -624,6 +624,28 @@
           "x-ms-dataverse-type": "BigIntType",
           "x-ms-schema-name": "VersionNumber",
           "x-ms-read-only": true
+        },
+        "cr49f_approvedby": {
+          "type": "string",
+          "title": "Approved By",
+          "x-ms-dataverse-attribute": "cr49f_approvedby",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr49f_ApprovedBy",
+          "maxLength": 100
+        },
+        "cr49f_approvedon": {
+          "type": "string",
+          "title": "Approved On",
+          "x-ms-dataverse-attribute": "cr49f_approvedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "cr49f_ApprovedOn"
+        },
+        "cr49f_assignedon": {
+          "type": "string",
+          "title": "Assigned On",
+          "x-ms-dataverse-attribute": "cr49f_assignedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "cr49f_AssignedOn"
         }
       },
       "required": [

@@ -509,7 +509,8 @@ export default function RfqDetail() {
     setActioningTaskId(taskId);
     setTaskNotice(null);
     try {
-      const result = await approveTask(taskId);
+      const approverName = typeof window !== "undefined" ? (localStorage.getItem("procurement_user_name") || "Subrata Dey") : "Subrata Dey";
+      const result = await approveTask(taskId, approverName);
       if (liveRfq) {
         await refreshTasks(liveRfq.cr49f_requestforqoutationid);
         const refreshed = await Cr49f_requestforqoutationsService.get(liveRfq.cr49f_requestforqoutationid);
@@ -544,7 +545,8 @@ export default function RfqDetail() {
     setActioningTaskId(taskId);
     setTaskNotice(null);
     try {
-      await rejectTask(taskId);
+      const approverName = typeof window !== "undefined" ? (localStorage.getItem("procurement_user_name") || "Subrata Dey") : "Subrata Dey";
+      await rejectTask(taskId, approverName);
       if (liveRfq) {
         await refreshTasks(liveRfq.cr49f_requestforqoutationid);
         const refreshed = await Cr49f_requestforqoutationsService.get(liveRfq.cr49f_requestforqoutationid);
