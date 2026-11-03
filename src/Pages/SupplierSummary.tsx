@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Building2,
-  ClipboardList,
   CreditCard,
   ExternalLink,
   MapPin,
@@ -23,9 +22,6 @@ import {
 } from "../generated/models/Cr49f_suppliersModel";
 import { Cr49f_supplierproductsService } from "../generated/services/Cr49f_supplierproductsService";
 import type { Cr49f_supplierproducts } from "../generated/models/Cr49f_supplierproductsModel";
-import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
-import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
-import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
 
 import SupplierModal from "../components/SupplierModal";
 import { cleanGuid } from "../Services/ApprovalWorkflowService";
@@ -52,10 +48,9 @@ const SupplierSummary: React.FC = () => {
 
   const [supplier, setSupplier] = useState<Cr49f_suppliers | null>(null);
   const [products, setProducts] = useState<Cr49f_supplierproducts[]>([]);
-  const [relatedRfqs, setRelatedRfqs] = useState<Cr49f_requestforqoutations[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "products" | "rfqs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "products">("overview");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
 
@@ -65,11 +60,9 @@ const SupplierSummary: React.FC = () => {
     setLoadError(null);
 
     try {
-      const [supRes, prodRes, rfqRes, selRes] = await Promise.allSettled([
+      const [supRes, prodRes] = await Promise.allSettled([
         Cr49f_suppliersService.getAll(),
         Cr49f_supplierproductsService.getAll(),
-        Cr49f_requestforqoutationsService.getAll(),
-        Cr49f_selectedsuppliersesService.getAll(),
       ]);
 
       const allSuppliers = supRes.status === "fulfilled" && supRes.value.data ? supRes.value.data : [];
@@ -103,28 +96,6 @@ const SupplierSummary: React.FC = () => {
         return pSupGuid === supGuid;
       });
       setProducts(supProducts);
-
-      // Match related RFQs
-      const allRfqs = rfqRes.status === "fulfilled" && rfqRes.value.data ? rfqRes.value.data : [];
-      const allSelected = selRes.status === "fulfilled" && selRes.value.data ? selRes.value.data : [];
-
-      const rfqIdSet = new Set<string>();
-      allSelected.forEach((sel) => {
-        const raw = sel as unknown as Record<string, unknown>;
-        const selSup = cleanGuid(raw._cr49f_supplier_value as string) || cleanGuid(raw.cr49f_supplier as string);
-        const selRfq = cleanGuid(sel._cr49f_rfq_value) || cleanGuid(raw._cr49f_RFQ_value as string);
-        if (selSup === supGuid && selRfq) {
-          rfqIdSet.add(selRfq);
-        }
-      });
-
-      const matchedRfqs = allRfqs.filter((rfq) => {
-        const rId = cleanGuid(rfq.cr49f_requestforqoutationid);
-        const raw = rfq as unknown as Record<string, unknown>;
-        const rfqSup = cleanGuid(raw._cr49f_supplier_value as string);
-        return rfqIdSet.has(rId) || rfqSup === supGuid;
-      });
-      setRelatedRfqs(matchedRfqs);
     } catch (err) {
       console.error("Failed to load supplier details:", err);
       setLoadError("An unexpected error occurred while loading supplier details.");
@@ -283,16 +254,6 @@ const SupplierSummary: React.FC = () => {
             <strong className="supplier-kpi-val">{paymentTerms}</strong>
           </div>
         </div>
-
-        <div className="supplier-kpi-card">
-          <div className="supplier-kpi-icon amber">
-            <ClipboardList size={20} />
-          </div>
-          <div className="supplier-kpi-content">
-            <span className="supplier-kpi-label">Associated RFQs</span>
-            <strong className="supplier-kpi-val">{relatedRfqs.length} Bids</strong>
-          </div>
-        </div>
       </section>
 
       {/* TABS */}
@@ -312,14 +273,6 @@ const SupplierSummary: React.FC = () => {
         >
           <Package size={14} />
           <span>Products &amp; Services ({products.length})</span>
-        </button>
-        <button
-          type="button"
-          className={`supplier-tab-btn ${activeTab === "rfqs" ? "active" : ""}`}
-          onClick={() => setActiveTab("rfqs")}
-        >
-          <ClipboardList size={14} />
-          <span>RFQs &amp; Quotes ({relatedRfqs.length})</span>
         </button>
       </nav>
 
@@ -570,90 +523,6 @@ const SupplierSummary: React.FC = () => {
                           <span className={`supplier-avail-pill ${Number(p.cr49f_availability) === 2 ? "unavailable" : "available"}`}>
                             {Number(p.cr49f_availability) === 2 ? "Unavailable" : "Available"}
                           </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* TAB 3: RFQS & QUOTATIONS */}
-      {activeTab === "rfqs" && (
-        <section className="supplier-table-card">
-          <div className="supplier-table-header">
-            <h3>Associated Request For Quotations (RFQs)</h3>
-          </div>
-          <div className="supplier-table-wrapper">
-            <table className="supplier-data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 120 }}>RFQ Number</th>
-                  <th>Title</th>
-                  <th>Deadline</th>
-                  <th>Created Date</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: "center", width: 90 }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {relatedRfqs.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: "center", padding: "36px 20px", color: "var(--muted-foreground-hex, #64748b)" }}>
-                      <ClipboardList size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
-                      <p style={{ margin: 0 }}>This supplier has not been invited to any RFQs yet.</p>
-                    </td>
-                  </tr>
-                ) : (
-                  relatedRfqs.map((rfq) => {
-                    const rfqNum = rfq.cr49f_rfqnumber || rfq.cr49f_requestforqoutationid;
-                    return (
-                      <tr key={rfq.cr49f_requestforqoutationid}>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/rfqs/${rfqNum}`)}
-                            style={{
-                              background: "transparent",
-                              border: "none",
-                              color: "#2563eb",
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              textDecoration: "underline",
-                            }}
-                          >
-                            {rfqNum}
-                          </button>
-                        </td>
-                        <td>
-                          <strong>{rfq.cr49f_rfqtitle || "Request for Quotation"}</strong>
-                        </td>
-                        <td>
-                          {rfq.cr49f_submissiondeadline
-                            ? new Date(rfq.cr49f_submissiondeadline).toLocaleDateString()
-                            : "—"}
-                        </td>
-                        <td>
-                          {rfq.createdon
-                            ? new Date(rfq.createdon).toLocaleDateString()
-                            : "—"}
-                        </td>
-                        <td>
-                          <span className="supplier-detail-status-pill active">
-                            Active
-                          </span>
-                        </td>
-                        <td style={{ textAlign: "center" }}>
-                          <button
-                            type="button"
-                            className="admin-edit-btn"
-                            onClick={() => navigate(`/rfqs/${rfqNum}`)}
-                          >
-                            <span>View</span>
-                          </button>
                         </td>
                       </tr>
                     );
