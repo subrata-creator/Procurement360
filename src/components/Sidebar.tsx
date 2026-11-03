@@ -26,8 +26,6 @@ export const userNavigationItems = [
   { label: "RFQs", icon: ClipboardList },
   { label: "Orders", icon: ShoppingBag },
   { label: "Invoices", icon: ReceiptText },
-  { label: "Products / Services", icon: PackageSearch },
-  { label: "Suppliers", icon: Truck },
   { label: "Contracts", icon: FileSignature },
 ];
 

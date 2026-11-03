@@ -242,9 +242,17 @@ const AppContent: React.FC = () => {
     } else if (item === "RFQs") {
       navigate("/rfqs");
     } else if (item === "Suppliers") {
-      navigate("/suppliers");
+      if (isAdmin) {
+        navigate("/suppliers");
+      } else {
+        navigate("/");
+      }
     } else if (item === "Products / Services" || item === "Products") {
-      navigate("/products-services");
+      if (isAdmin) {
+        navigate("/products-services");
+      } else {
+        navigate("/");
+      }
     } else if (item === "Orders") {
       navigate("/orders");
     } else {
@@ -294,14 +302,22 @@ const AppContent: React.FC = () => {
               />
             </Routes>
           ) : isSuppliersRoute ? (
-            <Routes>
-              <Route path="/suppliers" element={<SuppliersPage />} />
-            </Routes>
+            !isAdmin && loggedInUser.userRole !== "Loading..." ? (
+              <Dashboard isAdmin={false} />
+            ) : (
+              <Routes>
+                <Route path="/suppliers" element={<SuppliersPage />} />
+              </Routes>
+            )
           ) : isProductsRoute ? (
-            <Routes>
-              <Route path="/products-services" element={<ProductsPage />} />
-              <Route path="/products" element={<ProductsPage />} />
-            </Routes>
+            !isAdmin && loggedInUser.userRole !== "Loading..." ? (
+              <Dashboard isAdmin={false} />
+            ) : (
+              <Routes>
+                <Route path="/products-services" element={<ProductsPage />} />
+                <Route path="/products" element={<ProductsPage />} />
+              </Routes>
+            )
           ) : isPurchaseRequestRoute ? (
             <Routes>
               <Route
