@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -22,6 +22,14 @@ import {
   FileEdit,
   RotateCcw,
   AlertTriangle,
+  Plus,
+  Trash2,
+  Search,
+  X,
+  Package,
+  Building2,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { getTaskById } from "../data/tasks";
@@ -30,6 +38,9 @@ import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approv
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import { Cr49f_productsesService } from "../generated/services/Cr49f_productsesService";
+import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
+import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
   Cr49f_approvaltasksescr49f_department,
@@ -39,6 +50,9 @@ import {
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
 import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
+import type { Cr49f_productses } from "../generated/models/Cr49f_productsesModel";
+import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
+import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 import {
   cleanGuid,
   getTaskApprovalStatusLabel,
@@ -414,6 +428,221 @@ function ModernDataverseTaskDetail({
     }
   }, [lineItems]);
 
+  // Products from Dataverse for adding products to PR Changes Needed
+  const [availableProducts, setAvailableProducts] = useState<Cr49f_productses[]>([]);
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogCategory, setCatalogCategory] = useState("ALL");
+  const [deletedLineIds, setDeletedLineIds] = useState<string[]>([]);
+
+  // Suppliers & PR selection states for RFQ Changes Needed
+  const [availableSuppliers, setAvailableSuppliers] = useState<Cr49f_suppliers[]>([]);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
+  const [supplierSearchQuery, setSupplierSearchQuery] = useState("");
+  const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("ALL");
+  const [approvedPrs, setApprovedPrs] = useState<Cr49f_purchaserequests[]>([]);
+  const [selectedPrId, setSelectedPrId] = useState<string>(
+    cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(parentRFQ?._cr49f_prrfq_value) || ""
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCatalogAndSuppliers() {
+      try {
+        const [prodRes, supRes, prsRes, selSupRes] = await Promise.allSettled([
+          Cr49f_productsesService.getAll(),
+          Cr49f_suppliersService.getAll(),
+          Cr49f_purchaserequestsService.getAll(),
+          Cr49f_selectedsuppliersesService.getAll(),
+        ]);
+
+        if (cancelled) return;
+
+        if (prodRes.status === "fulfilled" && prodRes.value.data) {
+          const activeProds = prodRes.value.data.filter(
+            (p) => p.statecode === 0 && Boolean(p.cr49f_productname)
+          );
+          setAvailableProducts(activeProds);
+        }
+
+        let sups: Cr49f_suppliers[] = [];
+        if (supRes.status === "fulfilled" && supRes.value.data && supRes.value.data.length > 0) {
+          sups = supRes.value.data;
+        } else {
+          sups = INITIAL_SAMPLE_SUPPLIERS.map((item, idx) => ({
+            cr49f_supplierid: (item.supplier as any).cr49f_supplierid || `mock-sup-${idx + 1}`,
+            cr49f_name: item.supplier.cr49f_name,
+            cr49f_supplierid1: item.supplier.cr49f_supplierid1,
+            cr49f_suppliertype: item.supplier.cr49f_suppliertype,
+            cr49f_suppliercategory: item.supplier.cr49f_suppliercategory,
+            cr49f_contactperson: item.supplier.cr49f_contactperson,
+            cr49f_email: item.supplier.cr49f_email,
+            cr49f_phonenumber: item.supplier.cr49f_phonenumber,
+            cr49f_city: item.supplier.cr49f_city,
+            statecode: 0,
+            ownerid: "system",
+          })) as unknown as Cr49f_suppliers[];
+        }
+        setAvailableSuppliers(sups);
+
+        if (prsRes.status === "fulfilled" && prsRes.value.data) {
+          setApprovedPrs(prsRes.value.data);
+        }
+
+        // Initialize selected suppliers for this RFQ
+        const rfqId = cleanGuid(parentRFQ?.cr49f_requestforqoutationid) || cleanGuid(task._cr49f_rfq_value);
+        const initialSelected: string[] = [];
+
+        // From cr49f_selectedsupplierses in Dataverse
+        if (selSupRes.status === "fulfilled" && selSupRes.value.data) {
+          const matched = selSupRes.value.data.filter(
+            (s) => cleanGuid(s._cr49f_rfq_value) === rfqId
+          );
+          for (const m of matched) {
+            const matchedSup = sups.find(
+              (s) =>
+                (s.cr49f_supplierid1 && s.cr49f_supplierid1 === m.cr49f_selectedsuppliernumber) ||
+                (s.cr49f_name && s.cr49f_name === m.cr49f_supplierquotation) ||
+                s.cr49f_supplierid === m.cr49f_selectedsuppliernumber
+            );
+            if (matchedSup && !initialSelected.includes(matchedSup.cr49f_supplierid)) {
+              initialSelected.push(matchedSup.cr49f_supplierid);
+            }
+          }
+        }
+
+        // From localStorage cache
+        if (rfqId && typeof window !== "undefined") {
+          try {
+            const cachedStr = localStorage.getItem(`rfq_invited_suppliers_${rfqId}`);
+            if (cachedStr) {
+              const cachedList = JSON.parse(cachedStr) as Cr49f_suppliers[];
+              for (const c of cachedList) {
+                const sId = c.cr49f_supplierid;
+                if (sId && !initialSelected.includes(sId)) {
+                  initialSelected.push(sId);
+                }
+              }
+            }
+          } catch {}
+        }
+
+        setSelectedSupplierIds(initialSelected);
+      } catch (err) {
+        console.warn("Could not load products or suppliers:", err);
+      }
+    }
+
+    void loadCatalogAndSuppliers();
+    return () => {
+      cancelled = true;
+    };
+  }, [parentRFQ, task]);
+
+  // Filtered products for catalog modal
+  const filteredCatalogProducts = useMemo(() => {
+    return availableProducts.filter((p) => {
+      const matchesCat =
+        catalogCategory === "ALL" ||
+        (p.cr49f_category && p.cr49f_category.toLowerCase() === catalogCategory.toLowerCase());
+      const query = catalogSearch.trim().toLowerCase();
+      const matchesQuery =
+        !query ||
+        p.cr49f_productname?.toLowerCase().includes(query) ||
+        p.cr49f_productdescription?.toLowerCase().includes(query) ||
+        p.cr49f_productnumber?.toLowerCase().includes(query) ||
+        p.cr49f_category?.toLowerCase().includes(query);
+      return matchesCat && matchesQuery;
+    });
+  }, [availableProducts, catalogCategory, catalogSearch]);
+
+  const catalogCategories = useMemo(() => {
+    const cats = new Set<string>();
+    availableProducts.forEach((p) => {
+      if (p.cr49f_category?.trim()) cats.add(p.cr49f_category.trim());
+    });
+    return ["ALL", ...Array.from(cats)];
+  }, [availableProducts]);
+
+  // Filtered suppliers for RFQ revision
+  const filteredSuppliers = useMemo(() => {
+    return availableSuppliers.filter((s) => {
+      const matchesCat =
+        supplierCategoryFilter === "ALL" ||
+        (s.cr49f_suppliercategory &&
+          s.cr49f_suppliercategory.toLowerCase() === supplierCategoryFilter.toLowerCase());
+      const query = supplierSearchQuery.trim().toLowerCase();
+      const matchesQuery =
+        !query ||
+        s.cr49f_name?.toLowerCase().includes(query) ||
+        s.cr49f_supplierid1?.toLowerCase().includes(query) ||
+        s.cr49f_contactperson?.toLowerCase().includes(query) ||
+        s.cr49f_email?.toLowerCase().includes(query) ||
+        s.cr49f_city?.toLowerCase().includes(query);
+      return matchesCat && matchesQuery;
+    });
+  }, [availableSuppliers, supplierCategoryFilter, supplierSearchQuery]);
+
+  const supplierCategories = useMemo(() => {
+    const cats = new Set<string>();
+    availableSuppliers.forEach((s) => {
+      if (s.cr49f_suppliercategory?.trim()) cats.add(s.cr49f_suppliercategory.trim());
+    });
+    return ["ALL", ...Array.from(cats)];
+  }, [availableSuppliers]);
+
+  const handleAddProductFromCatalog = (product: Cr49f_productses) => {
+    const newLine = {
+      cr49f_purchaserequestlineid: `new_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      cr49f_itemname: product.cr49f_productname || "Product Item",
+      cr49f_itemdescription: product.cr49f_productdescription || "",
+      cr49f_category: product.cr49f_category || "General",
+      cr49f_quantity: 1,
+      cr49f_unitprice: 0,
+      statecode: 0,
+      statuscode: 1,
+    } as unknown as Cr49f_purchaserequestlines;
+    setEditableLines((prev) => [...prev, newLine]);
+    setNotice(`Added "${product.cr49f_productname}" to requested items.`);
+  };
+
+  const handleAddCustomLine = () => {
+    const newLine = {
+      cr49f_purchaserequestlineid: `new_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      cr49f_itemname: "",
+      cr49f_itemdescription: "",
+      cr49f_category: "General",
+      cr49f_quantity: 1,
+      cr49f_unitprice: 0,
+      statecode: 0,
+      statuscode: 1,
+    } as unknown as Cr49f_purchaserequestlines;
+    setEditableLines((prev) => [...prev, newLine]);
+  };
+
+  const handleRemoveLine = (idx: number) => {
+    const line = editableLines[idx];
+    if (line?.cr49f_purchaserequestlineid && !line.cr49f_purchaserequestlineid.startsWith("new_")) {
+      setDeletedLineIds((prev) => [...prev, line.cr49f_purchaserequestlineid]);
+    }
+    setEditableLines((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleToggleSupplier = (supId: string) => {
+    setSelectedSupplierIds((prev) =>
+      prev.includes(supId) ? prev.filter((id) => id !== supId) : [...prev, supId]
+    );
+  };
+
+  const handleSelectAllVisibleSuppliers = () => {
+    const visibleIds = filteredSuppliers.map((s) => s.cr49f_supplierid);
+    setSelectedSupplierIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+  };
+
+  const handleClearSupplierSelection = () => {
+    setSelectedSupplierIds([]);
+  };
+
   // Comments state persisted in localStorage
   const commentsKey = `task_comments_${cleanTaskId}`;
   const [comments, setComments] = useState<TaskComment[]>(() => {
@@ -570,11 +799,14 @@ function ModernDataverseTaskDetail({
           cr49f_totalamount: totalAmt,
         },
         updatedLines: editableLines.map((l) => ({
-          lineId: cleanGuid(l.cr49f_purchaserequestlineid) || "",
+          lineId: l.cr49f_purchaserequestlineid,
+          itemName: l.cr49f_itemname || l.cr49f_itemdescription || "Product Item",
           description: l.cr49f_itemdescription || l.cr49f_itemname || "",
+          category: l.cr49f_category || "General",
           quantity: Number(l.cr49f_quantity) || 1,
           unitPrice: Number(l.cr49f_unitprice) || 0,
         })),
+        deletedLineIds,
       });
 
       setNotice("Revisions submitted successfully! Purchase Request updated and workflow restarted from Sequence #1. Opening dashboard...");
@@ -614,7 +846,9 @@ function ModernDataverseTaskDetail({
           cr49f_submissiondeadline: editRfqDeadline ? new Date(editRfqDeadline).toISOString() : undefined,
           cr49f_deliverylocation: editRfqLocation,
           cr49f_description: editRfqDescription,
+          purchaseRequestId: selectedPrId || undefined,
         },
+        selectedSupplierIds,
       });
 
       setNotice("Revisions submitted successfully! RFQ updated and workflow restarted from Sequence #1. Opening dashboard...");
@@ -975,27 +1209,165 @@ function ModernDataverseTaskDetail({
                       />
                     </div>
                     <div className="task-changes-field">
-                      <label>Originating PR Reference</label>
-                      <input
-                        type="text"
-                        value={parentPR?.cr49f_prnumber || parentRFQ?.cr49f_prrfqname || "Direct RFQ"}
-                        readOnly
-                        disabled
-                        className="task-input"
-                        style={{ background: "#f8fafc", color: "#64748b" }}
-                      />
+                      <label>Originating Purchase Request</label>
+                      <select
+                        value={selectedPrId}
+                        onChange={(e) => {
+                          const chosenPrId = e.target.value;
+                          setSelectedPrId(chosenPrId);
+                          const chosenPR = approvedPrs.find(
+                            (p) => cleanGuid(p.cr49f_purchaserequestid) === chosenPrId
+                          );
+                          if (chosenPR?.cr49f_deliverylocation) {
+                            setEditRfqLocation(chosenPR.cr49f_deliverylocation);
+                          }
+                        }}
+                        className="task-select"
+                      >
+                        <option value="">-- Direct RFQ / No Linked PR --</option>
+                        {approvedPrs.map((pr) => {
+                          const prId = cleanGuid(pr.cr49f_purchaserequestid);
+                          const label = `${pr.cr49f_prnumber || "PR"} - ${pr.cr49f_prtitle || "Purchase Request"}`;
+                          return (
+                            <option key={prId} value={prId}>
+                              {label}
+                            </option>
+                          );
+                        })}
+                      </select>
                     </div>
                   </div>
 
                   <div className="task-changes-field">
                     <label>Scope of Work, Requirements &amp; Description</label>
                     <textarea
-                      rows={4}
+                      rows={3}
                       value={editRfqDescription}
                       onChange={(e) => setEditRfqDescription(e.target.value)}
                       className="task-textarea"
                       placeholder="Explain the revised scope of work, technical requirements, or bidding rules..."
                     />
+                  </div>
+
+                  {/* Supplier Selection Section */}
+                  <div className="task-suppliers-section">
+                    <div className="task-suppliers-header">
+                      <div>
+                        <h3><Building2 size={16} /> Invited Suppliers &amp; Quotation Participants</h3>
+                        <p>Select suppliers who will be invited to review and submit quotations for this RFQ</p>
+                      </div>
+                      <span className="task-selected-badge">
+                        {selectedSupplierIds.length} {selectedSupplierIds.length === 1 ? "supplier" : "suppliers"} selected
+                      </span>
+                    </div>
+
+                    {/* Selected Supplier Chips */}
+                    {selectedSupplierIds.length > 0 && (
+                      <div className="task-supplier-chips-wrap">
+                        {selectedSupplierIds.map((supId) => {
+                          const sup = availableSuppliers.find((s) => s.cr49f_supplierid === supId);
+                          return (
+                            <span key={supId} className="task-supplier-chip">
+                              <strong>{sup?.cr49f_supplierid1 || "SUP"}</strong>
+                              <span>{sup?.cr49f_name || "Supplier"}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSupplier(supId)}
+                                title="Remove supplier"
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Supplier Filter Toolbar */}
+                    <div className="task-suppliers-toolbar">
+                      <div className="task-suppliers-search-wrap">
+                        <Search size={14} />
+                        <input
+                          type="text"
+                          value={supplierSearchQuery}
+                          onChange={(e) => setSupplierSearchQuery(e.target.value)}
+                          placeholder="Search suppliers by name, code, contact..."
+                          className="task-suppliers-search-input"
+                        />
+                      </div>
+                      <select
+                        value={supplierCategoryFilter}
+                        onChange={(e) => setSupplierCategoryFilter(e.target.value)}
+                        className="task-select"
+                        style={{ width: "auto", minWidth: 140, padding: "7px 10px", fontSize: 12 }}
+                      >
+                        {supplierCategories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat === "ALL" ? "All Categories" : cat}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="task-suppliers-actions">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllVisibleSuppliers}
+                          className="task-btn-action-secondary"
+                          style={{ padding: "5px 10px", fontSize: 11.5 }}
+                        >
+                          <CheckSquare size={13} /> Select All
+                        </button>
+                        {selectedSupplierIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearSupplierSelection}
+                            className="task-btn-action-secondary"
+                            style={{ padding: "5px 10px", fontSize: 11.5, color: "#ef4444" }}
+                          >
+                            <X size={13} /> Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Supplier Cards Grid */}
+                    <div className="task-suppliers-grid">
+                      {filteredSuppliers.length > 0 ? (
+                        filteredSuppliers.map((sup) => {
+                          const isSelected = selectedSupplierIds.includes(sup.cr49f_supplierid);
+                          return (
+                            <div
+                              key={sup.cr49f_supplierid}
+                              className={`task-supplier-card ${isSelected ? "selected" : ""}`}
+                              onClick={() => handleToggleSupplier(sup.cr49f_supplierid)}
+                            >
+                              <div className="task-supplier-card-top">
+                                <div className="task-supplier-card-top-left">
+                                  {isSelected ? (
+                                    <CheckSquare size={16} className="task-supplier-check-icon" />
+                                  ) : (
+                                    <Square size={16} style={{ color: "#94a3b8" }} />
+                                  )}
+                                  <span className="task-supplier-card-name" title={sup.cr49f_name || ""}>
+                                    {sup.cr49f_name || "Supplier"}
+                                  </span>
+                                </div>
+                                <span className="task-supplier-card-code">
+                                  {sup.cr49f_supplierid1 || "SUP"}
+                                </span>
+                              </div>
+                              <div className="task-supplier-card-details">
+                                <span>{sup.cr49f_suppliercategory || "Vendor"}</span>
+                                <span>{sup.cr49f_city || sup.cr49f_country || "Active"}</span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "20px", color: "#64748b", fontSize: 13 }}>
+                          No suppliers found matching "{supplierSearchQuery}".
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {lineItems && lineItems.length > 0 && (
@@ -1136,26 +1508,44 @@ function ModernDataverseTaskDetail({
                 <div className="task-changes-lines-section">
                   <div className="task-changes-lines-header">
                     <div>
-                      <h3>Requested Line Items</h3>
-                      <p>Adjust item specifications, quantities, or unit prices</p>
+                      <h3>Requested Products &amp; Line Items</h3>
+                      <p>Adjust item specifications, quantities, unit prices, or add more products</p>
                     </div>
-                    <span className="task-lines-total-badge">
-                      Estimated Total: $
-                      {editableLines
-                        .reduce((sum, l) => sum + (Number(l.cr49f_quantity) || 0) * (Number(l.cr49f_unitprice) || 0), 0)
-                        .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                    <div className="task-lines-actions">
+                      <span className="task-lines-total-badge">
+                        Estimated Total: $
+                        {editableLines
+                          .reduce((sum, l) => sum + (Number(l.cr49f_quantity) || 0) * (Number(l.cr49f_unitprice) || 0), 0)
+                          .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsCatalogModalOpen(true)}
+                        className="task-btn-action-primary"
+                      >
+                        <Package size={14} /> Add Product from Catalog
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddCustomLine}
+                        className="task-btn-action-secondary"
+                      >
+                        <Plus size={14} /> Custom Item
+                      </button>
+                    </div>
                   </div>
 
                   <div className="task-table-scroll">
                     <table className="task-modern-table editable-lines-table">
                       <thead>
                         <tr>
-                          <th style={{ width: 44 }}>#</th>
-                          <th>Item / Description</th>
-                          <th style={{ width: 110 }}>Quantity</th>
-                          <th style={{ width: 140 }}>Unit Price ($)</th>
-                          <th style={{ width: 140 }}>Line Total ($)</th>
+                          <th style={{ width: 36 }}>#</th>
+                          <th style={{ width: 190 }}>Product Name</th>
+                          <th>Specification / Description</th>
+                          <th style={{ width: 90 }}>Quantity</th>
+                          <th style={{ width: 110 }}>Unit Price ($)</th>
+                          <th style={{ width: 110 }}>Line Total ($)</th>
+                          <th style={{ width: 44, textAlign: "center" }}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1170,14 +1560,27 @@ function ModernDataverseTaskDetail({
                                 <td>
                                   <input
                                     type="text"
-                                    value={line.cr49f_itemdescription || line.cr49f_itemname || ""}
+                                    value={line.cr49f_itemname || ""}
+                                    onChange={(e) => {
+                                      const updated = [...editableLines];
+                                      updated[idx] = { ...updated[idx], cr49f_itemname: e.target.value };
+                                      setEditableLines(updated);
+                                    }}
+                                    className="task-input-sm"
+                                    placeholder="Product name"
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="text"
+                                    value={line.cr49f_itemdescription || ""}
                                     onChange={(e) => {
                                       const updated = [...editableLines];
                                       updated[idx] = { ...updated[idx], cr49f_itemdescription: e.target.value };
                                       setEditableLines(updated);
                                     }}
                                     className="task-input-sm"
-                                    placeholder="Item description"
+                                    placeholder="Specification / description"
                                   />
                                 </td>
                                 <td>
@@ -1212,14 +1615,23 @@ function ModernDataverseTaskDetail({
                                     ${lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </strong>
                                 </td>
+                                <td style={{ textAlign: "center" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLine(idx)}
+                                    className="task-line-delete-btn"
+                                    title="Remove this item"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
                               </tr>
                             );
                           })
                         ) : (
                           <tr>
-                            <td>1</td>
-                            <td colSpan={4} style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
-                              No line items configured. PR header will be updated.
+                            <td colSpan={7} style={{ textAlign: "center", padding: "24px", color: "var(--muted-foreground-hex, #64748b)" }}>
+                              No products recorded on this PR. Click <strong>"Add Product from Catalog"</strong> or <strong>"Custom Item"</strong> above to add items.
                             </td>
                           </tr>
                         )}
@@ -1733,6 +2145,109 @@ function ModernDataverseTaskDetail({
               >
                 {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 Request Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Catalog Modal for Adding Products to PR */}
+      {isCatalogModalOpen && (
+        <div className="task-modal-backdrop" onClick={() => setIsCatalogModalOpen(false)}>
+          <div className="task-modal-content task-catalog-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="task-modal-header">
+              <div className="task-modal-header-icon" style={{ background: "rgba(37, 99, 235, 0.12)", color: "var(--primary-hex, #2563eb)" }}>
+                <Package size={18} />
+              </div>
+              <div>
+                <h3>Add Product from Catalog</h3>
+                <p>Browse available products in Dataverse and add them directly to this PR</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCatalogModalOpen(false)}
+                style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="task-modal-body" style={{ padding: "16px 20px" }}>
+              <div className="task-catalog-search-row">
+                <div className="task-catalog-search-wrap">
+                  <Search size={15} />
+                  <input
+                    type="text"
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    placeholder="Search products by name, code, description..."
+                    className="task-catalog-search-input"
+                    autoFocus
+                  />
+                </div>
+                <select
+                  value={catalogCategory}
+                  onChange={(e) => setCatalogCategory(e.target.value)}
+                  className="task-select"
+                  style={{ width: "auto", minWidth: 150 }}
+                >
+                  {catalogCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat === "ALL" ? "All Categories" : cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="task-catalog-grid">
+                {filteredCatalogProducts.length > 0 ? (
+                  filteredCatalogProducts.map((p) => {
+                    const alreadyAddedCount = editableLines.filter(
+                      (l) => l.cr49f_itemname?.toLowerCase() === p.cr49f_productname?.toLowerCase()
+                    ).length;
+
+                    return (
+                      <div key={p.cr49f_productsid} className="task-catalog-card">
+                        <div>
+                          <div className="task-catalog-card-header">
+                            <h4>{p.cr49f_productname}</h4>
+                            {p.cr49f_category && (
+                              <span className="task-catalog-cat-badge">{p.cr49f_category}</span>
+                            )}
+                          </div>
+                          <p>{p.cr49f_productdescription || "No description provided."}</p>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
+                          <span style={{ fontSize: 11.5, color: "#64748b" }}>
+                            {alreadyAddedCount > 0 ? `${alreadyAddedCount} added` : p.cr49f_productnumber || ""}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddProductFromCatalog(p)}
+                            className="task-catalog-add-btn"
+                          >
+                            <Plus size={13} /> Add to PR
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "30px", color: "#64748b" }}>
+                    No products found matching "{catalogSearch}".
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="task-modal-actions">
+              <button
+                type="button"
+                className="task-modal-btn-confirm"
+                onClick={() => setIsCatalogModalOpen(false)}
+                style={{ background: "var(--primary-hex, #2563eb)" }}
+              >
+                Done Adding Products ({editableLines.length} Total Items)
               </button>
             </div>
           </div>

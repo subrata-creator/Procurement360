@@ -4,6 +4,8 @@ import { Cr49f_procurementapprovalcyclesService } from "../generated/services/Cr
 import { Cr49f_tasksesService } from "../generated/services/Cr49f_tasksesService";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
+import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
   Cr49f_approvaltasksescr49f_department,
@@ -1100,17 +1102,22 @@ export async function submitChangesNeededUpdate(params: {
     cr49f_totalamount?: number;
   };
   updatedLines?: Array<{
-    lineId: string;
+    lineId?: string;
+    itemName?: string;
+    description?: string;
+    category?: string;
     quantity?: number;
     unitPrice?: number;
-    description?: string;
   }>;
+  deletedLineIds?: string[];
   updatedRFQ?: {
     cr49f_rfqtitle?: string;
     cr49f_submissiondeadline?: string;
     cr49f_deliverylocation?: string;
     cr49f_description?: string;
+    purchaseRequestId?: string;
   };
+  selectedSupplierIds?: string[];
   requesterRemarks?: string;
   requesterName?: string;
 }): Promise<{
@@ -1129,24 +1136,61 @@ export async function submitChangesNeededUpdate(params: {
   // 1. If PR updates provided, save line items and update PR record in Dataverse
   if (cleanPRId && params.updatedPR) {
     let calculatedTotal = params.updatedPR.cr49f_totalamount;
+
+    // Delete any removed line items
+    if (params.deletedLineIds && params.deletedLineIds.length > 0) {
+      for (const delId of params.deletedLineIds) {
+        const cleanDelId = cleanGuid(delId);
+        if (cleanDelId && !cleanDelId.startsWith("new_")) {
+          try {
+            await Cr49f_purchaserequestlinesService.delete(cleanDelId);
+            console.log(`[ApprovalWorkflow] Deleted removed PR line: ${cleanDelId}`);
+          } catch (delErr) {
+            console.warn(`[ApprovalWorkflow] Could not delete PR line ${cleanDelId}:`, delErr);
+          }
+        }
+      }
+    }
+
     if (params.updatedLines && params.updatedLines.length > 0) {
       let runningTotal = 0;
       for (const l of params.updatedLines) {
         const cleanLineId = cleanGuid(l.lineId);
-        if (!cleanLineId) continue;
-        const linePatch: Record<string, unknown> = {};
-        if (l.quantity !== undefined) linePatch.cr49f_quantity = l.quantity;
-        if (l.unitPrice !== undefined) linePatch.cr49f_unitprice = l.unitPrice;
-        if (l.description !== undefined) linePatch.cr49f_itemdescription = l.description;
+        const qty = Number(l.quantity) || 1;
+        const price = Number(l.unitPrice) || 0;
+        runningTotal += qty * price;
 
-        if (l.quantity !== undefined && l.unitPrice !== undefined) {
-          runningTotal += (l.quantity || 0) * (l.unitPrice || 0);
-        }
+        if (cleanLineId && !cleanLineId.startsWith("new_")) {
+          // Update existing line
+          const linePatch: Record<string, unknown> = {};
+          if (l.quantity !== undefined) linePatch.cr49f_quantity = qty;
+          if (l.unitPrice !== undefined) linePatch.cr49f_unitprice = price;
+          if (l.description !== undefined) linePatch.cr49f_itemdescription = l.description;
+          if (l.itemName !== undefined) linePatch.cr49f_itemname = l.itemName;
+          if (l.category !== undefined) linePatch.cr49f_category = l.category;
 
-        try {
-          await Cr49f_purchaserequestlinesService.update(cleanLineId, linePatch as any);
-        } catch (lineErr) {
-          console.warn(`[ApprovalWorkflow] Could not update PR line ${cleanLineId}:`, lineErr);
+          try {
+            await Cr49f_purchaserequestlinesService.update(cleanLineId, linePatch as any);
+          } catch (lineErr) {
+            console.warn(`[ApprovalWorkflow] Could not update PR line ${cleanLineId}:`, lineErr);
+          }
+        } else {
+          // Create new line
+          try {
+            await Cr49f_purchaserequestlinesService.create({
+              cr49f_itemname: l.itemName || l.description || "Product Item",
+              cr49f_itemdescription: l.description || "",
+              cr49f_category: l.category || "",
+              cr49f_quantity: qty,
+              cr49f_unitprice: price,
+              "cr49f_PurchaseRequest@odata.bind": `/cr49f_purchaserequests(${cleanPRId})`,
+              statecode: 0,
+              statuscode: 1,
+            } as any);
+            console.log(`[ApprovalWorkflow] Created new PR line for PR ${cleanPRId}`);
+          } catch (createLineErr) {
+            console.warn(`[ApprovalWorkflow] Could not create new PR line:`, createLineErr);
+          }
         }
       }
       if (runningTotal > 0 && calculatedTotal === undefined) {
@@ -1175,18 +1219,108 @@ export async function submitChangesNeededUpdate(params: {
     }
   }
 
-  // 2. If RFQ updates provided, save RFQ record in Dataverse
+  // 2. If RFQ updates provided, save RFQ record in Dataverse and sync suppliers
   if (cleanRFQId && params.updatedRFQ) {
     const rfqPayload: Record<string, unknown> = {
       ...params.updatedRFQ,
       cr49f_status: 0, // 0 = Pending in Dataverse schema
     };
 
+    if (params.updatedRFQ.purchaseRequestId) {
+      rfqPayload["cr49f_PRRFQ@odata.bind"] = `/cr49f_purchaserequests(${cleanGuid(params.updatedRFQ.purchaseRequestId)})`;
+    }
+
     try {
       await Cr49f_requestforqoutationsService.update(cleanRFQId, rfqPayload as any);
       console.log(`[ApprovalWorkflow] Updated RFQ ${cleanRFQId} to Pending (0)`);
     } catch (rfqUpdateErr) {
       console.warn(`[ApprovalWorkflow] Failed to update parent RFQ ${cleanRFQId}:`, rfqUpdateErr);
+    }
+
+    // Associate selected suppliers if provided
+    if (params.selectedSupplierIds) {
+      try {
+        const [selRes, allSupRes] = await Promise.all([
+          Cr49f_selectedsuppliersesService.getAll(),
+          Cr49f_suppliersService.getAll(),
+        ]);
+        const existingSel = (selRes.data ?? []).filter(
+          (s) => cleanGuid(s._cr49f_rfq_value) === cleanRFQId
+        );
+        const allSuppliers = allSupRes.data ?? [];
+
+        const chosenSuppliers = allSuppliers.filter((s) =>
+          params.selectedSupplierIds?.includes(s.cr49f_supplierid)
+        );
+
+        // 1. Add any newly selected suppliers not in existingSel
+        for (const sup of chosenSuppliers) {
+          const alreadyLinked = existingSel.some(
+            (e) =>
+              e.cr49f_selectedsuppliernumber === (sup.cr49f_supplierid1 || sup.cr49f_supplierid) ||
+              e.cr49f_supplierquotation === sup.cr49f_name
+          );
+          if (!alreadyLinked) {
+            try {
+              await Cr49f_selectedsuppliersesService.create({
+                "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${cleanRFQId})`,
+                cr49f_selectedsuppliernumber: sup.cr49f_supplierid1 || sup.cr49f_supplierid || "SUP",
+                cr49f_supplierquotation: sup.cr49f_name || "Invited Supplier",
+                statecode: 0,
+                statuscode: 1,
+              });
+            } catch (addSelErr) {
+              console.warn("[ApprovalWorkflow] Could not create selected supplier:", addSelErr);
+            }
+
+            if (sup.cr49f_supplierid && !sup.cr49f_supplierid.startsWith("mock-")) {
+              try {
+                await Cr49f_suppliersService.update(sup.cr49f_supplierid, {
+                  "cr49f_RFQSuppliers@odata.bind": `/cr49f_requestforqoutations(${cleanRFQId})`,
+                });
+              } catch {}
+            }
+          }
+        }
+
+        // 2. Remove unselected suppliers
+        for (const es of existingSel) {
+          const stillSelected = chosenSuppliers.some(
+            (cs) =>
+              (cs.cr49f_supplierid1 || cs.cr49f_supplierid) === es.cr49f_selectedsuppliernumber ||
+              cs.cr49f_name === es.cr49f_supplierquotation
+          );
+          if (!stillSelected) {
+            try {
+              await Cr49f_selectedsuppliersesService.delete(es.cr49f_selectedsuppliersid);
+            } catch (delSelErr) {
+              console.warn("[ApprovalWorkflow] Could not remove unselected supplier:", delSelErr);
+            }
+          }
+        }
+
+        // 3. Update localStorage cache
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`rfq_invited_suppliers_${cleanRFQId}`, JSON.stringify(chosenSuppliers));
+        }
+
+        // 4. Initialize supplier responses dynamically
+        try {
+          const { createRfqSupplierResponses } = await import("./RfqSupplierResponseService");
+          const supplierIdentities = chosenSuppliers.map(
+            (s) => s.cr49f_supplierid1 || s.cr49f_supplierid
+          );
+          await createRfqSupplierResponses(
+            cleanRFQId,
+            supplierIdentities,
+            params.updatedRFQ.purchaseRequestId
+          );
+        } catch (respErr) {
+          console.warn("[ApprovalWorkflow] Could not initialize responses:", respErr);
+        }
+      } catch (supSyncErr) {
+        console.warn("[ApprovalWorkflow] Error syncing suppliers for RFQ:", supSyncErr);
+      }
     }
 
     if (typeof window !== "undefined") {
