@@ -19,6 +19,9 @@ import {
   XCircle,
   AlertCircle,
   CheckCircle2,
+  FileEdit,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { getTaskById } from "../data/tasks";
@@ -41,6 +44,8 @@ import {
   getTaskApprovalStatusLabel,
   approveTask,
   rejectTask,
+  requestChangesOnTask,
+  submitChangesNeededUpdate,
   getApprovalTasksForRecord,
 } from "../Services/ApprovalWorkflowService";
 import "../Styles/TaskDetail.css";
@@ -248,8 +253,47 @@ function ModernDataverseTaskDetail({
   const approvalStatus = getTaskApprovalStatusLabel(task);
   const isApproved = approvalStatus === "Approved";
   const isRejected = approvalStatus === "Rejected";
-  const isPending = approvalStatus === "Pending";
-  const isActive = task.statecode === 0 && isPending;
+  const isChangesNeeded =
+    approvalStatus === "Changes Needed" ||
+    task.cr49f_id === "Changes Needed" ||
+    (task.cr49f_sequence ?? 0) === 0 ||
+    (task.cr49f_task && task.cr49f_task.toLowerCase().includes("changes needed"));
+  const isPending = approvalStatus === "Pending" && !isChangesNeeded;
+  const isActive = task.statecode === 0 && (isPending || isChangesNeeded);
+
+  // Modal for approver requesting changes
+  const [isChangesNeededModalOpen, setIsChangesNeededModalOpen] = useState(false);
+  const [changesFeedbackText, setChangesFeedbackText] = useState("");
+
+  // Revision form states when viewing an active Changes Needed task
+  const [editTitle, setEditTitle] = useState(parentPR?.cr49f_prtitle || "");
+  const [editPriority, setEditPriority] = useState<number>(parentPR?.cr49f_priority ?? 2);
+  const [editLocation, setEditLocation] = useState(parentPR?.cr49f_deliverylocation || "");
+  const [editDeliveryDate, setEditDeliveryDate] = useState(
+    parentPR?.cr49f_requireddeliverydate ? parentPR.cr49f_requireddeliverydate.slice(0, 10) : ""
+  );
+  const [editJustification, setEditJustification] = useState(parentPR?.cr49f_businessjustification || "");
+  const [editableLines, setEditableLines] = useState<Cr49f_purchaserequestlines[]>(lineItems);
+  const [requesterRemarks, setRequesterRemarks] = useState("");
+  const [submittingChanges, setSubmittingChanges] = useState(false);
+
+  useEffect(() => {
+    if (parentPR) {
+      setEditTitle(parentPR.cr49f_prtitle || "");
+      setEditPriority(parentPR.cr49f_priority ?? 2);
+      setEditLocation(parentPR.cr49f_deliverylocation || "");
+      setEditDeliveryDate(
+        parentPR.cr49f_requireddeliverydate ? parentPR.cr49f_requireddeliverydate.slice(0, 10) : ""
+      );
+      setEditJustification(parentPR.cr49f_businessjustification || "");
+    }
+  }, [parentPR]);
+
+  useEffect(() => {
+    if (lineItems && lineItems.length > 0) {
+      setEditableLines(lineItems);
+    }
+  }, [lineItems]);
 
   // Comments state persisted in localStorage
   const commentsKey = `task_comments_${cleanTaskId}`;
@@ -341,6 +385,87 @@ function ModernDataverseTaskDetail({
     }
   };
 
+  const handleRequestChanges = async () => {
+    if (!changesFeedbackText.trim()) {
+      setNotice("Please provide comments or feedback on what changes are needed.");
+      return;
+    }
+    setActionLoading(true);
+    setNotice(null);
+    try {
+      const currentUserName = typeof window !== "undefined"
+        ? (localStorage.getItem("procurement_user_name") || "Subrata Dey")
+        : "Subrata Dey";
+
+      await requestChangesOnTask(cleanTaskId, changesFeedbackText.trim(), currentUserName);
+      setIsChangesNeededModalOpen(false);
+      setNotice("Changes requested! A new 'Changes Needed' task has been created and existing tasks deactivated. Opening dashboard...");
+      await onRefresh();
+      setTimeout(() => {
+        navigate("/");
+      }, 700);
+    } catch (err: unknown) {
+      console.error("Failed to request changes:", err);
+      const msg = err instanceof Error ? err.message : "Failed to request changes";
+      setNotice(`Failed to request changes: ${msg}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSubmitChangesRevision = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (submittingChanges) return;
+    setSubmittingChanges(true);
+    setNotice(null);
+    try {
+      const prId = cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(task._cr49f_pr_value);
+      if (!prId) throw new Error("Purchase Request ID not found.");
+
+      const totalAmt = editableLines.reduce(
+        (sum, l) => sum + (Number(l.cr49f_quantity) || 0) * (Number(l.cr49f_unitprice) || 0),
+        0
+      );
+
+      const currentUserName = typeof window !== "undefined"
+        ? (localStorage.getItem("procurement_user_name") || "Subrata Dey")
+        : "Subrata Dey";
+
+      await submitChangesNeededUpdate({
+        changesNeededTaskId: cleanTaskId,
+        prId,
+        requesterRemarks: requesterRemarks.trim(),
+        requesterName: currentUserName,
+        updatedPR: {
+          cr49f_prtitle: editTitle,
+          cr49f_priority: editPriority,
+          cr49f_deliverylocation: editLocation,
+          cr49f_businessjustification: editJustification,
+          cr49f_requireddeliverydate: editDeliveryDate ? new Date(editDeliveryDate).toISOString() : undefined,
+          cr49f_totalamount: totalAmt,
+        },
+        updatedLines: editableLines.map((l) => ({
+          lineId: cleanGuid(l.cr49f_purchaserequestlineid) || "",
+          description: l.cr49f_itemdescription || l.cr49f_itemname || "",
+          quantity: Number(l.cr49f_quantity) || 1,
+          unitPrice: Number(l.cr49f_unitprice) || 0,
+        })),
+      });
+
+      setNotice("Revisions submitted successfully! Purchase Request updated and workflow restarted from Sequence #1. Opening dashboard...");
+      await onRefresh();
+      setTimeout(() => {
+        navigate("/");
+      }, 800);
+    } catch (err: unknown) {
+      console.error("Failed to submit revisions:", err);
+      const msg = err instanceof Error ? err.message : "Failed to submit revisions";
+      setNotice(`Failed to submit revisions: ${msg}`);
+    } finally {
+      setSubmittingChanges(false);
+    }
+  };
+
   const isPr = task.cr49f_object === 1 || !!parentPR;
   const isRfq = task.cr49f_object === 2 || !!parentRFQ;
 
@@ -420,12 +545,14 @@ function ModernDataverseTaskDetail({
               <span className="task-seq-pill">
                 Step {task.cr49f_sequence ?? 1} of {displaySteps.length}
               </span>
-              <span className={`task-status-pill ${isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"}`}>
+              <span className={`task-status-pill ${isApproved ? "approved" : isRejected ? "rejected" : isChangesNeeded ? "changes-needed" : isActive ? "active" : "pending"}`}>
                 <span className="dot" />
                 {isApproved
                   ? "Approved"
                   : isRejected
                   ? "Rejected"
+                  : isChangesNeeded
+                  ? (isActive ? "Changes Needed (Action Required)" : "Changes Submitted")
                   : isActive
                   ? "Action Required"
                   : "Inactive (Waiting in Sequence)"}
@@ -489,6 +616,36 @@ function ModernDataverseTaskDetail({
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* Changes Needed Alert / Completion Banners */}
+      {isChangesNeeded && isActive && (
+        <div className="task-changes-alert-banner">
+          <div className="task-changes-alert-icon">
+            <AlertTriangle size={20} />
+          </div>
+          <div className="task-changes-alert-text">
+            <h4>Approver Requested Changes</h4>
+            <p>
+              An approver reviewed this Purchase Request and requested modifications before it can proceed.
+              Please update the PR details and item specifications below and click <strong>Submit Updated PR &amp; Restart Approval Workflow</strong>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isChangesNeeded && !isActive && (
+        <div className="task-changes-completed-banner">
+          <div className="task-changes-completed-icon">
+            <CheckCircle2 size={20} />
+          </div>
+          <div className="task-changes-completed-text">
+            <h4>Revisions Completed &amp; Resubmitted</h4>
+            <p>
+              The requested revisions were submitted. This revision task is completed and the sequential approval workflow has restarted from Sequence #1.
+            </p>
+          </div>
         </div>
       )}
 
@@ -591,8 +748,206 @@ function ModernDataverseTaskDetail({
       <div className="task-grid-layout">
         {/* Left Column (Primary Request Details, Items, and Comments) */}
         <div className="task-main-col">
-          {/* Request Information Metrics Card */}
-          <section className="task-card">
+          {isChangesNeeded && isActive ? (
+            /* Interactive PR Revision Form */
+            <form onSubmit={handleSubmitChangesRevision} className="task-card task-changes-form-card">
+              <div className="task-card-header">
+                <div className="task-card-header-left">
+                  <div className="task-card-header-icon" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#d97706" }}>
+                    <FileEdit size={16} />
+                  </div>
+                  <div className="task-card-header-titles">
+                    <h2>Update Purchase Request Information</h2>
+                    <p>Revise PR specifications and line item quantities/pricing to resolve approver feedback</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="task-changes-form-body">
+                <div className="task-changes-form-row">
+                  <div className="task-changes-field">
+                    <label>Purchase Request Title</label>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      required
+                      className="task-input"
+                      placeholder="e.g. IT Equipment and Office Laptops"
+                    />
+                  </div>
+                  <div className="task-changes-field">
+                    <label>Priority</label>
+                    <select
+                      value={editPriority}
+                      onChange={(e) => setEditPriority(Number(e.target.value))}
+                      className="task-select"
+                    >
+                      <option value={0}>Low</option>
+                      <option value={1}>Medium</option>
+                      <option value={2}>Normal</option>
+                      <option value={3}>High</option>
+                      <option value={4}>Urgent</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="task-changes-form-row">
+                  <div className="task-changes-field">
+                    <label>Delivery Location</label>
+                    <input
+                      type="text"
+                      value={editLocation}
+                      onChange={(e) => setEditLocation(e.target.value)}
+                      className="task-input"
+                      placeholder="e.g. Headquarters - Floor 3"
+                    />
+                  </div>
+                  <div className="task-changes-field">
+                    <label>Required Delivery Date</label>
+                    <input
+                      type="date"
+                      value={editDeliveryDate}
+                      onChange={(e) => setEditDeliveryDate(e.target.value)}
+                      className="task-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="task-changes-field">
+                  <label>Business Need &amp; Justification</label>
+                  <textarea
+                    rows={3}
+                    value={editJustification}
+                    onChange={(e) => setEditJustification(e.target.value)}
+                    className="task-textarea"
+                    placeholder="Explain the business need or reason for the requested changes..."
+                  />
+                </div>
+
+                {/* Editable Line Items Section */}
+                <div className="task-changes-lines-section">
+                  <div className="task-changes-lines-header">
+                    <div>
+                      <h3>Requested Line Items</h3>
+                      <p>Adjust item specifications, quantities, or unit prices</p>
+                    </div>
+                    <span className="task-lines-total-badge">
+                      Estimated Total: $
+                      {editableLines
+                        .reduce((sum, l) => sum + (Number(l.cr49f_quantity) || 0) * (Number(l.cr49f_unitprice) || 0), 0)
+                        .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="task-table-scroll">
+                    <table className="task-modern-table editable-lines-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: 44 }}>#</th>
+                          <th>Item / Description</th>
+                          <th style={{ width: 110 }}>Quantity</th>
+                          <th style={{ width: 140 }}>Unit Price ($)</th>
+                          <th style={{ width: 140 }}>Line Total ($)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editableLines.length > 0 ? (
+                          editableLines.map((line, idx) => {
+                            const qty = Number(line.cr49f_quantity) || 0;
+                            const price = Number(line.cr49f_unitprice) || 0;
+                            const lineTotal = qty * price;
+                            return (
+                              <tr key={line.cr49f_purchaserequestlineid || idx}>
+                                <td><strong>{idx + 1}</strong></td>
+                                <td>
+                                  <input
+                                    type="text"
+                                    value={line.cr49f_itemdescription || line.cr49f_itemname || ""}
+                                    onChange={(e) => {
+                                      const updated = [...editableLines];
+                                      updated[idx] = { ...updated[idx], cr49f_itemdescription: e.target.value };
+                                      setEditableLines(updated);
+                                    }}
+                                    className="task-input-sm"
+                                    placeholder="Item description"
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={line.cr49f_quantity ?? 1}
+                                    onChange={(e) => {
+                                      const updated = [...editableLines];
+                                      updated[idx] = { ...updated[idx], cr49f_quantity: Number(e.target.value) };
+                                      setEditableLines(updated);
+                                    }}
+                                    className="task-input-sm"
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={line.cr49f_unitprice ?? 0}
+                                    onChange={(e) => {
+                                      const updated = [...editableLines];
+                                      updated[idx] = { ...updated[idx], cr49f_unitprice: Number(e.target.value) };
+                                      setEditableLines(updated);
+                                    }}
+                                    className="task-input-sm"
+                                  />
+                                </td>
+                                <td>
+                                  <strong style={{ color: "var(--foreground-hex, #0f172a)" }}>
+                                    ${lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </strong>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td>1</td>
+                            <td colSpan={4} style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
+                              No line items configured. PR header will be updated.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="task-changes-field" style={{ marginTop: 18 }}>
+                  <label>Requester Revision Notes (What changes did you apply?)</label>
+                  <textarea
+                    rows={2}
+                    value={requesterRemarks}
+                    onChange={(e) => setRequesterRemarks(e.target.value)}
+                    placeholder="e.g. Adjusted quantities and updated delivery schedule per approver feedback."
+                    className="task-textarea"
+                  />
+                </div>
+
+                <div className="task-changes-form-actions">
+                  <button
+                    type="submit"
+                    className="task-btn-submit-changes"
+                    disabled={submittingChanges}
+                  >
+                    {submittingChanges ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                    Submit Updated PR &amp; Restart Approval Workflow
+                  </button>
+                </div>
+              </div>
+            </form>
+          ) : (
+            <>
+              {/* Request Information Metrics Card */}
+              <section className="task-card">
             <div className="task-card-header">
               <div className="task-card-header-left">
                 <div className="task-card-header-icon">
@@ -721,6 +1076,8 @@ function ModernDataverseTaskDetail({
               </span>
             </div>
           </section>
+        </>
+      )}
 
           {/* Comments & Remarks Card */}
           <section className="task-card">
@@ -908,6 +1265,22 @@ function ModernDataverseTaskDetail({
                 <XCircle size={13} /> Task Rejected
               </span>
             </div>
+          ) : isChangesNeeded ? (
+            isActive ? (
+              <button
+                type="button"
+                className="task-btn-submit-changes"
+                onClick={() => void handleSubmitChangesRevision()}
+                disabled={submittingChanges}
+              >
+                {submittingChanges ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                Submit Updated PR &amp; Restart Approval
+              </button>
+            ) : (
+              <span className="task-status-pill approved">
+                <CheckCircle2 size={13} /> Revisions Submitted · Sequence #1 Restarted
+              </span>
+            )
           ) : !isActive ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="task-status-pill pending">
@@ -925,6 +1298,17 @@ function ModernDataverseTaskDetail({
                 <ThumbsDown size={14} /> Reject
               </button>
 
+              {isPr && (
+                <button
+                  type="button"
+                  className="task-btn-changes-needed"
+                  onClick={() => setIsChangesNeededModalOpen(true)}
+                  disabled={actionLoading}
+                >
+                  <FileEdit size={14} /> Changes Needed
+                </button>
+              )}
+
               <button
                 type="button"
                 className="task-btn-approve"
@@ -938,6 +1322,65 @@ function ModernDataverseTaskDetail({
           )}
         </div>
       </footer>
+
+      {/* Changes Needed Approver Modal */}
+      {isChangesNeededModalOpen && (
+        <div className="task-modal-backdrop" onClick={() => !actionLoading && setIsChangesNeededModalOpen(false)}>
+          <div className="task-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="task-modal-header">
+              <div className="task-modal-header-icon">
+                <FileEdit size={18} />
+              </div>
+              <div>
+                <h3>Request Changes on Purchase Request</h3>
+                <p>Specify the modifications required before this request can be approved.</p>
+              </div>
+            </div>
+
+            <div className="task-modal-body">
+              <div className="task-modal-description">
+                <strong>Workflow Impact:</strong>
+                <ul>
+                  <li>Creates a new active <strong>Changes Needed</strong> task assigned to the requester.</li>
+                  <li>Deactivates all existing approval tasks for this PR and resets them to <strong>Pending</strong>.</li>
+                  <li>Updates the Purchase Request status to <strong>Changes Needed</strong>.</li>
+                  <li>Once revisions are resubmitted, the approval workflow will restart from <strong>Sequence #1</strong>.</li>
+                </ul>
+              </div>
+
+              <label className="task-modal-label">Approver Feedback / Required Changes:</label>
+              <textarea
+                className="task-modal-textarea"
+                rows={4}
+                value={changesFeedbackText}
+                onChange={(e) => setChangesFeedbackText(e.target.value)}
+                placeholder="Describe what adjustments, price corrections, or quantity changes are needed..."
+                autoFocus
+              />
+            </div>
+
+            <div className="task-modal-actions">
+              <button
+                type="button"
+                className="task-modal-btn-cancel"
+                onClick={() => setIsChangesNeededModalOpen(false)}
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="task-modal-btn-confirm"
+                onClick={() => void handleRequestChanges()}
+                disabled={actionLoading || !changesFeedbackText.trim()}
+              >
+                {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                Request Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

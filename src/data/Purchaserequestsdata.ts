@@ -1,4 +1,4 @@
-export type PRStatus = "In Review" | "Approved" | "Rejected";
+export type PRStatus = "In Review" | "Approved" | "Rejected" | "Changes Needed";
 
 export interface ApprovalStep {
   step: number;

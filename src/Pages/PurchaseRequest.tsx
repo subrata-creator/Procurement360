@@ -56,6 +56,7 @@ const STATUS_PROGRESS: Record<PRStatus, number> = {
   "In Review": 50,
   Approved: 100,
   Rejected: 0,
+  "Changes Needed": 25,
 };
 
 type DataverseRequestWithFormattedLookups = Cr49f_purchaserequests & {

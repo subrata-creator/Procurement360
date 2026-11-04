@@ -34,7 +34,7 @@ export interface WorkQueueItem {
   assignedOn: string;
   description?: string;
   priority?: "Low" | "Normal" | "High";
-  status: "Pending" | "Approved" | "Rejected";
+  status: "Pending" | "Approved" | "Rejected" | "Changes Needed";
   isActive: boolean;
   targetUrl: string;
   sequence?: number;
@@ -205,7 +205,7 @@ const TaskInbox: React.FC = () => {
             targetUrl: `/tasks/${task.id}`,
           }));
 
-    return source.filter((task) => task.isActive && task.status === "Pending");
+    return source.filter((task) => task.isActive && (task.status === "Pending" || task.status === "Changes Needed"));
   }, [dataverseTasks, hasLoaded]);
 
   const pages = Math.max(1, Math.ceil(activePendingTasks.length / PAGE_SIZE));

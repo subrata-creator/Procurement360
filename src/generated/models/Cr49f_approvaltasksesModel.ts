@@ -5,7 +5,8 @@
 export const Cr49f_approvaltasksescr49f_approvalstatus = {
   1: 'Pending',
   2: 'Approved',
-  3: 'Rejected'
+  3: 'Rejected',
+  4: 'ChangesNeeded'
 } as const;
 export type Cr49f_approvaltasksescr49f_approvalstatus = keyof typeof Cr49f_approvaltasksescr49f_approvalstatus;
 export const Cr49f_approvaltasksescr49f_department = {

@@ -2545,3 +2545,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Changes Needed Badges */
+.pr-status-badge.changes-needed {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.pr-history-badge.changes-needed {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}

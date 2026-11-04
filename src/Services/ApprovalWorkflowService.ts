@@ -1,3 +1,4 @@
+import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import { Cr49f_procurementapprovalcyclesService } from "../generated/services/Cr49f_procurementapprovalcyclesService";
 import { Cr49f_tasksesService } from "../generated/services/Cr49f_tasksesService";
@@ -49,6 +50,8 @@ export const PENDING_CHOICE_VALUE = 1;
 export const APPROVED_CHOICE_CANDIDATES = [2, 154890001, 100000001];
 export const REJECTED_CHOICE_CANDIDATES = [3, 154890002, 100000002];
 export const PENDING_CHOICE_CANDIDATES = [1, 154890000, 100000000];
+export const CHANGES_NEEDED_CHOICE_VALUE = 4;
+export const CHANGES_NEEDED_CHOICE_CANDIDATES = [4, 154890003, 100000003, 2, 0];
 
 const STATUS_CANDIDATES: StatusStrategy[] = [
   {
@@ -345,7 +348,7 @@ export async function createApprovalTasksForObject(
  */
 export async function setTaskApprovalStatusInDataverse(
   taskId: string,
-  targetStatus: "Approved" | "Rejected" | "Pending",
+  targetStatus: "Approved" | "Rejected" | "Pending" | "Changes Needed",
   extraFields?: Record<string, unknown>
 ): Promise<Cr49f_approvaltaskses | null> {
   const cleanId = cleanGuid(taskId);
@@ -356,6 +359,8 @@ export async function setTaskApprovalStatusInDataverse(
       ? APPROVED_CHOICE_CANDIDATES
       : targetStatus === "Rejected"
       ? REJECTED_CHOICE_CANDIDATES
+      : targetStatus === "Changes Needed"
+      ? CHANGES_NEEDED_CHOICE_CANDIDATES
       : PENDING_CHOICE_CANDIDATES;
 
   // 1. Try updating with full extra fields first (choiceVal as number: 2=Approved, 3=Rejected, 1=Pending)
@@ -777,6 +782,417 @@ export async function rejectTask(
  * Retrieves all approval tasks for a given PR, RFQ, or PO sorted by sequence.
  * Uses comprehensive lookup resolution to match uppercase and lowercase Dataverse property names.
  */
+/**
+ * Executes the "Changes Needed" workflow on an approval task:
+ * 1. Creates a new record in cr49f_approvaltasks with Approval Status = "Changes Needed" and record Status = "Active".
+ * 2. Deactivates all existing approval tasks for the same PR and resets their Approval Status to "Pending".
+ * 3. Updates parent PR status in Dataverse to Changes Needed (cr49f_status: 2).
+ */
+export async function requestChangesOnTask(
+  approvalTaskId: string,
+  approverRemarks: string,
+  approverName?: string
+): Promise<{
+  changesNeededTask: Cr49f_approvaltaskses;
+  parentPRId: string;
+}> {
+  const cleanTaskId = cleanGuid(approvalTaskId);
+  if (!cleanTaskId) throw new Error("Invalid approval task ID");
+
+  console.log(`[ApprovalWorkflow] Requesting Changes Needed on task: ${cleanTaskId}`);
+
+  // Fetch all tasks to locate current task and its sibling tasks
+  let allTasks: Cr49f_approvaltaskses[] = [];
+  try {
+    const allRes = await Cr49f_approvaltasksesService.getAll();
+    allTasks = allRes.data ?? [];
+  } catch (fetchErr) {
+    console.warn("[ApprovalWorkflow] Failed to fetch tasks:", fetchErr);
+  }
+
+  const currentTask = allTasks.find((t) => {
+    const raw = t as unknown as Record<string, unknown>;
+    const tId = cleanGuid(
+      t.cr49f_approvaltasksid ||
+      (raw.cr49f_ApprovalTasksId as string) ||
+      (raw.id as string)
+    );
+    return tId === cleanTaskId;
+  });
+
+  const rawCurrent = (currentTask || {}) as unknown as Record<string, unknown>;
+  const parentPRId =
+    cleanGuid(currentTask?._cr49f_pr_value) ||
+    cleanGuid(rawCurrent._cr49f_PR_value as string) ||
+    cleanGuid(rawCurrent.cr49f_pr as string) ||
+    cleanGuid(rawCurrent.cr49f_PR as string);
+
+  if (!parentPRId) {
+    throw new Error("Changes Needed workflow requires an associated Purchase Request (PR).");
+  }
+
+  // 1. Locate all sibling approval tasks for the same PR
+  const siblingTasks = allTasks.filter((t) => {
+    const raw = t as unknown as Record<string, unknown>;
+    const tPR =
+      cleanGuid(t._cr49f_pr_value) ||
+      cleanGuid(raw._cr49f_PR_value as string) ||
+      cleanGuid(raw.cr49f_pr as string) ||
+      cleanGuid(raw.cr49f_PR as string);
+    return tPR === parentPRId;
+  });
+
+  // 2. Deactivate all existing approval tasks for this PR and reset their Approval Status to Pending
+  for (const t of siblingTasks) {
+    const tId = cleanGuid(
+      t.cr49f_approvaltasksid ||
+      (t as unknown as Record<string, string>).cr49f_ApprovalTasksId ||
+      (t as unknown as Record<string, string>).id
+    );
+    if (!tId) continue;
+
+    // Reset local caches
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`task_approved_status_${tId}`, "Pending");
+      localStorage.removeItem(`task_approved_by_${tId}`);
+      localStorage.removeItem(`task_approved_on_${tId}`);
+      localStorage.removeItem(`task_active_${tId}`);
+    }
+
+    try {
+      // In Dataverse: statecode: 1 (Inactive), statuscode: 2 (Inactive), cr49f_approvalstatus: 1 (Pending)
+      await Cr49f_approvaltasksesService.update(tId, {
+        statecode: 1,
+        statuscode: 2,
+        cr49f_approvalstatus: 1 as any,
+        cr49f_approvedby: "",
+      } as any);
+    } catch (resetErr) {
+      console.warn(`[ApprovalWorkflow] Could not reset task ${tId} to inactive pending:`, resetErr);
+    }
+  }
+
+  // 3. Create a new record in cr49f_approvaltasks with Approval Status = "Changes Needed" and Status = "Active"
+  const nowIso = new Date().toISOString();
+  const summaryTaskName = approverRemarks?.trim()
+    ? `Changes Needed: ${approverRemarks.trim().slice(0, 60)}`
+    : `Changes Needed: Purchase Request Revision`;
+
+  const newChangesNeededPayload: Record<string, unknown> = {
+    cr49f_task: summaryTaskName,
+    cr49f_object: 1, // Purchase Request
+    cr49f_sequence: 0, // Sits before sequence 1
+    cr49f_role: 1, // Requester
+    cr49f_department: currentTask?.cr49f_department || 1,
+    cr49f_slanumber: 48,
+    cr49f_slaunit: 1, // Hours
+    cr49f_approvalstatus: 4, // Changes Needed
+    cr49f_id: "Changes Needed",
+    cr49f_assignedon: nowIso,
+    statecode: 0, // Active
+    statuscode: 1, // Active
+    "cr49f_PR@odata.bind": `/cr49f_purchaserequests(${parentPRId})`,
+  };
+
+  let createdTask: Cr49f_approvaltaskses | null = null;
+  try {
+    const createRes = await Cr49f_approvaltasksesService.create(
+      newChangesNeededPayload as Parameters<typeof Cr49f_approvaltasksesService.create>[0]
+    );
+    if (createRes.data) {
+      createdTask = createRes.data;
+    }
+  } catch (createErr) {
+    console.warn("[ApprovalWorkflow] Failed creating Changes Needed task in Dataverse:", createErr);
+  }
+
+  // Fallback if needed
+  const newTaskId = cleanGuid(createdTask?.cr49f_approvaltasksid) || `cn_${Date.now()}`;
+  const finalChangesTask: Cr49f_approvaltaskses = createdTask || ({
+    cr49f_approvaltasksid: newTaskId,
+    cr49f_task: summaryTaskName,
+    cr49f_object: 1,
+    cr49f_sequence: 0,
+    cr49f_role: 1,
+    cr49f_department: currentTask?.cr49f_department || 1,
+    cr49f_slanumber: 48,
+    cr49f_slaunit: 1,
+    cr49f_approvalstatus: 4 as any,
+    cr49f_id: "Changes Needed",
+    cr49f_assignedon: nowIso,
+    statecode: 0,
+    statuscode: 1,
+    _cr49f_pr_value: parentPRId,
+  } as unknown as Cr49f_approvaltaskses);
+
+  // Set explicit Changes Needed status in Dataverse
+  if (createdTask) {
+    void setTaskApprovalStatusInDataverse(newTaskId, "Changes Needed");
+  }
+
+  // Local storage caching for instant reactivity
+  if (typeof window !== "undefined") {
+    localStorage.setItem(`task_approved_status_${newTaskId}`, "Changes Needed");
+    localStorage.setItem(`task_changes_reason_${newTaskId}`, approverRemarks || "Revisions requested by approver.");
+    localStorage.setItem(`pr_status_${parentPRId}`, "Changes Needed");
+    localStorage.setItem(`pr_changes_reason_${parentPRId}`, approverRemarks || "Revisions requested by approver.");
+
+    // Add initial comment
+    const initialComment = {
+      id: `c_${Date.now()}`,
+      text: `Changes Needed requested: ${approverRemarks || "Please revise the required PR information."}`,
+      author: approverName || "Approver",
+      timestamp: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+    localStorage.setItem(`task_comments_${newTaskId}`, JSON.stringify([initialComment]));
+  }
+
+  // 4. Update parent PR status to Changes Needed (cr49f_status: 2) in Dataverse
+  try {
+    await Cr49f_purchaserequestsService.update(parentPRId, {
+      cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema!
+    });
+  } catch (prErr) {
+    console.warn("[ApprovalWorkflow] Could not update parent PR status to Changes Needed:", prErr);
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+  }
+
+  return {
+    changesNeededTask: finalChangesTask,
+    parentPRId,
+  };
+}
+
+/**
+ * Saves updated PR information, marks the Changes Needed task as completed/inactive,
+ * and restarts the approval workflow from the first approval level (Step 1 active, all subsequent inactive pending).
+ */
+export async function submitChangesNeededUpdate(params: {
+  changesNeededTaskId: string;
+  prId: string;
+  updatedPR: {
+    cr49f_prtitle?: string;
+    cr49f_businessjustification?: string;
+    cr49f_deliverylocation?: string;
+    cr49f_requireddeliverydate?: string;
+    cr49f_priority?: number;
+    cr49f_totalamount?: number;
+  };
+  updatedLines?: Array<{
+    lineId: string;
+    quantity?: number;
+    unitPrice?: number;
+    description?: string;
+  }>;
+  requesterRemarks?: string;
+  requesterName?: string;
+}): Promise<{
+  success: boolean;
+  firstActivatedTask: Cr49f_approvaltaskses | null;
+}> {
+  const cleanTaskId = cleanGuid(params.changesNeededTaskId);
+  const cleanPRId = cleanGuid(params.prId);
+  if (!cleanPRId) throw new Error("Invalid Purchase Request ID");
+
+  console.log(`[ApprovalWorkflow] Submitting PR changes for PR: ${cleanPRId}, task: ${cleanTaskId}`);
+
+  const nowIso = new Date().toISOString();
+  const requester = params.requesterName?.trim() || "Requester";
+
+  // 1. If line items were updated, save them to Dataverse
+  let calculatedTotal = params.updatedPR.cr49f_totalamount;
+  if (params.updatedLines && params.updatedLines.length > 0) {
+    let runningTotal = 0;
+    for (const l of params.updatedLines) {
+      const cleanLineId = cleanGuid(l.lineId);
+      if (!cleanLineId) continue;
+      const linePatch: Record<string, unknown> = {};
+      if (l.quantity !== undefined) linePatch.cr49f_quantity = l.quantity;
+      if (l.unitPrice !== undefined) linePatch.cr49f_unitprice = l.unitPrice;
+      if (l.description !== undefined) linePatch.cr49f_itemdescription = l.description;
+
+      if (l.quantity !== undefined && l.unitPrice !== undefined) {
+        runningTotal += (l.quantity || 0) * (l.unitPrice || 0);
+      }
+
+      try {
+        await Cr49f_purchaserequestlinesService.update(cleanLineId, linePatch as any);
+      } catch (lineErr) {
+        console.warn(`[ApprovalWorkflow] Could not update PR line ${cleanLineId}:`, lineErr);
+      }
+    }
+    if (runningTotal > 0 && calculatedTotal === undefined) {
+      calculatedTotal = runningTotal;
+    }
+  }
+
+  // 2. Save changes to existing PR record and reset its status to Pending (0)
+  const prPayload: Record<string, unknown> = {
+    ...params.updatedPR,
+    cr49f_status: 0, // 0 = Pending in Dataverse schema
+  };
+  if (calculatedTotal !== undefined) {
+    prPayload.cr49f_totalamount = calculatedTotal;
+  }
+
+  try {
+    await Cr49f_purchaserequestsService.update(cleanPRId, prPayload as any);
+  } catch (prUpdateErr) {
+    console.warn(`[ApprovalWorkflow] Failed to update parent PR ${cleanPRId}:`, prUpdateErr);
+  }
+
+  if (typeof window !== "undefined") {
+    localStorage.setItem(`pr_status_${cleanPRId}`, "Pending");
+    localStorage.removeItem(`pr_changes_reason_${cleanPRId}`);
+  }
+
+  // 3. Mark the Changes Needed task as completed/inactive
+  if (cleanTaskId) {
+    try {
+      await Cr49f_approvaltasksesService.update(cleanTaskId, {
+        statecode: 1, // Inactive
+        statuscode: 2, // Inactive
+        cr49f_approvalstatus: 2 as any, // Resolved / Approved
+        cr49f_approvedby: requester,
+        cr49f_approvedon: nowIso,
+      } as any);
+    } catch (deactErr) {
+      console.warn(`[ApprovalWorkflow] Could not mark Changes Needed task ${cleanTaskId} as inactive:`, deactErr);
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`task_approved_status_${cleanTaskId}`, "Approved");
+      localStorage.setItem(`task_approved_by_${cleanTaskId}`, requester);
+      localStorage.setItem(`task_approved_on_${cleanTaskId}`, nowIso);
+
+      // Record requester remark in task comments
+      if (params.requesterRemarks) {
+        const existingCommentsStr = localStorage.getItem(`task_comments_${cleanTaskId}`);
+        let existingComments = [];
+        try {
+          if (existingCommentsStr) existingComments = JSON.parse(existingCommentsStr);
+        } catch {}
+        existingComments.push({
+          id: `c_${Date.now()}`,
+          text: `Revisions submitted: ${params.requesterRemarks}`,
+          author: requester,
+          timestamp: new Date().toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        });
+        localStorage.setItem(`task_comments_${cleanTaskId}`, JSON.stringify(existingComments));
+      }
+    }
+  }
+
+  // 4. Restart approval workflow from the first approval level:
+  // Fetch all tasks for this PR, filter out Changes Needed task (sequence <= 0)
+  let allTasks: Cr49f_approvaltaskses[] = [];
+  try {
+    const allRes = await Cr49f_approvaltasksesService.getAll();
+    allTasks = allRes.data ?? [];
+  } catch (fetchErr) {
+    console.warn("[ApprovalWorkflow] Failed to fetch tasks:", fetchErr);
+  }
+
+  const siblingTasks = allTasks.filter((t) => {
+    const raw = t as unknown as Record<string, unknown>;
+    const tPR =
+      cleanGuid(t._cr49f_pr_value) ||
+      cleanGuid(raw._cr49f_PR_value as string) ||
+      cleanGuid(raw.cr49f_pr as string) ||
+      cleanGuid(raw.cr49f_PR as string);
+    const tSeq = t.cr49f_sequence ?? 0;
+    // Only standard sequential approval tasks (sequence >= 1)
+    return tPR === cleanPRId && tSeq >= 1;
+  });
+
+  siblingTasks.sort((a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0));
+
+  let firstActivatedTask: Cr49f_approvaltaskses | null = null;
+
+  if (siblingTasks.length > 0) {
+    // 5. Activate the first task (Sequence 1)
+    const firstTask = siblingTasks[0];
+    const firstId = cleanGuid(
+      firstTask.cr49f_approvaltasksid ||
+      (firstTask as unknown as Record<string, string>).cr49f_ApprovalTasksId
+    );
+
+    if (firstId) {
+      try {
+        const actRes = await Cr49f_approvaltasksesService.update(firstId, {
+          statecode: 0, // Active
+          statuscode: 1, // Active
+          cr49f_approvalstatus: 1 as any, // Pending
+          cr49f_assignedon: nowIso,
+          cr49f_approvedby: "",
+        } as any);
+        if (actRes.data) firstActivatedTask = actRes.data;
+      } catch (actErr) {
+        console.warn(`[ApprovalWorkflow] Could not activate task 1 (${firstId}):`, actErr);
+      }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`task_approved_status_${firstId}`, "Pending");
+        localStorage.setItem(`task_active_${firstId}`, "true");
+        localStorage.removeItem(`task_approved_by_${firstId}`);
+        localStorage.removeItem(`task_approved_on_${firstId}`);
+      }
+      void setTaskApprovalStatusInDataverse(firstId, "Pending");
+    }
+
+    // 6. Keep all subsequent tasks inactive with Approval Status = Pending
+    for (let i = 1; i < siblingTasks.length; i++) {
+      const subTask = siblingTasks[i];
+      const subId = cleanGuid(
+        subTask.cr49f_approvaltasksid ||
+        (subTask as unknown as Record<string, string>).cr49f_ApprovalTasksId
+      );
+      if (!subId) continue;
+
+      try {
+        await Cr49f_approvaltasksesService.update(subId, {
+          statecode: 1, // Inactive
+          statuscode: 2, // Inactive
+          cr49f_approvalstatus: 1 as any, // Pending
+          cr49f_approvedby: "",
+        } as any);
+      } catch {}
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`task_approved_status_${subId}`, "Pending");
+        localStorage.removeItem(`task_active_${subId}`);
+        localStorage.removeItem(`task_approved_by_${subId}`);
+        localStorage.removeItem(`task_approved_on_${subId}`);
+      }
+      void setTaskApprovalStatusInDataverse(subId, "Pending");
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+  }
+
+  return {
+    success: true,
+    firstActivatedTask,
+  };
+}
+
 export async function getApprovalTasksForRecord(
   objectType: 1 | 2 | 3,
   recordId: string
@@ -916,7 +1332,7 @@ export async function getApprovalTasksForRecord(
  */
 export function getTaskApprovalStatusLabel(
   task: Cr49f_approvaltaskses
-): "Pending" | "Approved" | "Rejected" {
+): "Pending" | "Approved" | "Rejected" | "Changes Needed" {
   const raw = task as unknown as Record<string, unknown>;
   const cleanId = cleanGuid(
     task.cr49f_approvaltasksid ||
