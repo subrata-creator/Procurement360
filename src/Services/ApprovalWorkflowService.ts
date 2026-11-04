@@ -783,8 +783,8 @@ export async function rejectTask(
  * Uses comprehensive lookup resolution to match uppercase and lowercase Dataverse property names.
  */
 /**
- * Executes the "Changes Needed" workflow on an approval task:
- * - Updates the parent Purchase Request (PR) status to Changes Needed (cr49f_status: 2) in Dataverse.
+ * Executes the "Changes Needed" workflow on ANY approval task (PR, RFQ, PO):
+ * - Updates the parent record status (PR / RFQ / PO) to Changes Needed (cr49f_status: 2) in Dataverse.
  * - Does NOT create a new approval task record in cr49f_approvaltasks.
  * - Does NOT change the approval status of existing tasks to Pending.
  * - Records the approver's remarks in the task comment stream for the audit trail.
@@ -794,7 +794,9 @@ export async function requestChangesOnTask(
   approverRemarks: string,
   approverName?: string
 ): Promise<{
-  parentPRId: string;
+  parentPRId?: string;
+  parentRFQId?: string;
+  parentPOId?: string;
   success: boolean;
 }> {
   const cleanTaskId = cleanGuid(approvalTaskId);
@@ -802,7 +804,7 @@ export async function requestChangesOnTask(
 
   console.log(`[ApprovalWorkflow] Requesting Changes Needed on task: ${cleanTaskId}`);
 
-  // Fetch all tasks to locate current task and its parent PR
+  // Fetch all tasks to locate current task and its parent record
   let allTasks: Cr49f_approvaltaskses[] = [];
   try {
     const allRes = await Cr49f_approvaltasksesService.getAll();
@@ -822,32 +824,67 @@ export async function requestChangesOnTask(
   });
 
   const rawCurrent = (currentTask || {}) as unknown as Record<string, unknown>;
+
   const parentPRId =
     cleanGuid(currentTask?._cr49f_pr_value) ||
     cleanGuid(rawCurrent._cr49f_PR_value as string) ||
     cleanGuid(rawCurrent.cr49f_pr as string) ||
     cleanGuid(rawCurrent.cr49f_PR as string);
 
-  if (!parentPRId) {
-    throw new Error("Changes Needed workflow requires an associated Purchase Request (PR).");
+  const parentRFQId =
+    cleanGuid(currentTask?._cr49f_rfq_value) ||
+    cleanGuid(rawCurrent._cr49f_RFQ_value as string) ||
+    cleanGuid(rawCurrent.cr49f_rfq as string) ||
+    cleanGuid(rawCurrent.cr49f_RFQ as string);
+
+  const parentPOId =
+    cleanGuid(rawCurrent._cr49f_po_value as string) ||
+    cleanGuid(rawCurrent._cr49f_PO_value as string) ||
+    cleanGuid(rawCurrent.cr49f_po as string) ||
+    cleanGuid(rawCurrent.cr49f_PO as string);
+
+  // 1. If associated with a Purchase Request (PR), update PR to Changes Needed (cr49f_status: 2)
+  if (parentPRId) {
+    try {
+      await Cr49f_purchaserequestsService.update(parentPRId, {
+        cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema
+      });
+      console.log(`[ApprovalWorkflow] Successfully updated PR ${parentPRId} status to Changes Needed (2)`);
+    } catch (prErr) {
+      console.warn("[ApprovalWorkflow] Could not update parent PR status to Changes Needed:", prErr);
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`pr_status_${parentPRId}`, "Changes Needed");
+      localStorage.setItem(`pr_changes_reason_${parentPRId}`, approverRemarks || "Revisions requested by approver.");
+    }
   }
 
-  // 1. Update parent PR status to Changes Needed (cr49f_status: 2) in Dataverse
-  try {
-    await Cr49f_purchaserequestsService.update(parentPRId, {
-      cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema
-    });
-    console.log(`[ApprovalWorkflow] Successfully updated PR ${parentPRId} status to Changes Needed (2)`);
-  } catch (prErr) {
-    console.warn("[ApprovalWorkflow] Could not update parent PR status to Changes Needed:", prErr);
+  // 2. If associated with a Request for Quotation (RFQ), update RFQ to Changes Needed (cr49f_status: 2)
+  if (parentRFQId) {
+    try {
+      await Cr49f_requestforqoutationsService.update(parentRFQId, {
+        cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema
+      });
+      console.log(`[ApprovalWorkflow] Successfully updated RFQ ${parentRFQId} status to Changes Needed (2)`);
+    } catch (rfqErr) {
+      console.warn("[ApprovalWorkflow] Could not update parent RFQ status to Changes Needed:", rfqErr);
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`rfq_status_${parentRFQId}`, "Changes Needed");
+      localStorage.setItem(`rfq_changes_reason_${parentRFQId}`, approverRemarks || "Revisions requested by approver.");
+    }
   }
 
-  // 2. Persist in local storage for fast reactivity & audit trail
+  // 3. If associated with PO / Orders
+  if (parentPOId) {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`po_status_${parentPOId}`, "Changes Needed");
+      localStorage.setItem(`po_changes_reason_${parentPOId}`, approverRemarks || "Revisions requested by approver.");
+    }
+  }
+
+  // 4. Record approver remarks in the task comments for the audit trail
   if (typeof window !== "undefined") {
-    localStorage.setItem(`pr_status_${parentPRId}`, "Changes Needed");
-    localStorage.setItem(`pr_changes_reason_${parentPRId}`, approverRemarks || "Revisions requested by approver.");
-
-    // Add approver remarks to the task's comments for audit trail
     if (approverRemarks?.trim()) {
       const commentsKey = `task_comments_${cleanTaskId}`;
       const existingStr = localStorage.getItem(commentsKey);
@@ -875,6 +912,8 @@ export async function requestChangesOnTask(
 
   return {
     parentPRId,
+    parentRFQId,
+    parentPOId,
     success: true,
   };
 }

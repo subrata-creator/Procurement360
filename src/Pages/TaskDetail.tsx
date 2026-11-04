@@ -268,6 +268,19 @@ function ModernDataverseTaskDetail({
     parentPR?.cr49f_statusname?.toLowerCase().includes("change") ||
     cachedPrStatus === "Changes Needed";
 
+  const rfqIdClean = cleanGuid(parentRFQ?.cr49f_requestforqoutationid) || cleanGuid(task._cr49f_rfq_value);
+  const cachedRfqStatus = rfqIdClean && typeof window !== "undefined" ? localStorage.getItem(`rfq_status_${rfqIdClean}`) : null;
+  const isRfqChangesNeeded =
+    parentRFQ?.cr49f_status === 2 ||
+    parentRFQ?.cr49f_statusname?.toLowerCase().includes("change") ||
+    cachedRfqStatus === "Changes Needed";
+
+  const isRecordChangesNeeded = isPrChangesNeeded || isRfqChangesNeeded;
+  const changesReason =
+    (prIdClean && typeof window !== "undefined" && localStorage.getItem(`pr_changes_reason_${prIdClean}`)) ||
+    (rfqIdClean && typeof window !== "undefined" && localStorage.getItem(`rfq_changes_reason_${rfqIdClean}`)) ||
+    "An approver has requested modifications before approval can proceed.";
+
   // Modal for approver requesting changes
   const [isChangesNeededModalOpen, setIsChangesNeededModalOpen] = useState(false);
   const [changesFeedbackText, setChangesFeedbackText] = useState("");
@@ -626,19 +639,15 @@ function ModernDataverseTaskDetail({
         </div>
       )}
 
-      {/* Changes Needed Alert / Completion Banners */}
-      {isPrChangesNeeded && (
+      {/* Changes Needed Alert Banner */}
+      {isRecordChangesNeeded && (
         <div className="task-changes-alert-banner">
           <div className="task-changes-alert-icon">
             <AlertTriangle size={20} />
           </div>
           <div className="task-changes-alert-text">
-            <h4>Purchase Request Status: Changes Needed</h4>
-            <p>
-              {typeof window !== "undefined" && prIdClean && localStorage.getItem(`pr_changes_reason_${prIdClean}`)
-                ? localStorage.getItem(`pr_changes_reason_${prIdClean}`)
-                : "An approver has requested revisions to this Purchase Request before approval can proceed."}
-            </p>
+            <h4>{isPr ? "Purchase Request" : isRfq ? "RFQ" : "Record"} Status: Changes Needed</h4>
+            <p>{changesReason}</p>
           </div>
         </div>
       )}
@@ -1306,16 +1315,14 @@ function ModernDataverseTaskDetail({
                 <ThumbsDown size={14} /> Reject
               </button>
 
-              {isPr && (
-                <button
-                  type="button"
-                  className="task-btn-changes-needed"
-                  onClick={() => setIsChangesNeededModalOpen(true)}
-                  disabled={actionLoading}
-                >
-                  <FileEdit size={14} /> Changes Needed
-                </button>
-              )}
+              <button
+                type="button"
+                className="task-btn-changes-needed"
+                onClick={() => setIsChangesNeededModalOpen(true)}
+                disabled={actionLoading}
+              >
+                <FileEdit size={14} /> Changes Needed
+              </button>
 
               <button
                 type="button"
