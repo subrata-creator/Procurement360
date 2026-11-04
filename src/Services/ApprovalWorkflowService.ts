@@ -784,24 +784,25 @@ export async function rejectTask(
  */
 /**
  * Executes the "Changes Needed" workflow on an approval task:
- * 1. Creates a new record in cr49f_approvaltasks with Approval Status = "Changes Needed" and record Status = "Active".
- * 2. Deactivates all existing approval tasks for the same PR and resets their Approval Status to "Pending".
- * 3. Updates parent PR status in Dataverse to Changes Needed (cr49f_status: 2).
+ * - Updates the parent Purchase Request (PR) status to Changes Needed (cr49f_status: 2) in Dataverse.
+ * - Does NOT create a new approval task record in cr49f_approvaltasks.
+ * - Does NOT change the approval status of existing tasks to Pending.
+ * - Records the approver's remarks in the task comment stream for the audit trail.
  */
 export async function requestChangesOnTask(
   approvalTaskId: string,
   approverRemarks: string,
   approverName?: string
 ): Promise<{
-  changesNeededTask: Cr49f_approvaltaskses;
   parentPRId: string;
+  success: boolean;
 }> {
   const cleanTaskId = cleanGuid(approvalTaskId);
   if (!cleanTaskId) throw new Error("Invalid approval task ID");
 
   console.log(`[ApprovalWorkflow] Requesting Changes Needed on task: ${cleanTaskId}`);
 
-  // Fetch all tasks to locate current task and its sibling tasks
+  // Fetch all tasks to locate current task and its parent PR
   let allTasks: Cr49f_approvaltaskses[] = [];
   try {
     const allRes = await Cr49f_approvaltasksesService.getAll();
@@ -831,144 +832,50 @@ export async function requestChangesOnTask(
     throw new Error("Changes Needed workflow requires an associated Purchase Request (PR).");
   }
 
-  // 1. Locate all sibling approval tasks for the same PR
-  const siblingTasks = allTasks.filter((t) => {
-    const raw = t as unknown as Record<string, unknown>;
-    const tPR =
-      cleanGuid(t._cr49f_pr_value) ||
-      cleanGuid(raw._cr49f_PR_value as string) ||
-      cleanGuid(raw.cr49f_pr as string) ||
-      cleanGuid(raw.cr49f_PR as string);
-    return tPR === parentPRId;
-  });
-
-  // 2. Deactivate all existing approval tasks for this PR and reset their Approval Status to Pending
-  for (const t of siblingTasks) {
-    const tId = cleanGuid(
-      t.cr49f_approvaltasksid ||
-      (t as unknown as Record<string, string>).cr49f_ApprovalTasksId ||
-      (t as unknown as Record<string, string>).id
-    );
-    if (!tId) continue;
-
-    // Reset local caches
-    if (typeof window !== "undefined") {
-      localStorage.setItem(`task_approved_status_${tId}`, "Pending");
-      localStorage.removeItem(`task_approved_by_${tId}`);
-      localStorage.removeItem(`task_approved_on_${tId}`);
-      localStorage.removeItem(`task_active_${tId}`);
-    }
-
-    try {
-      // In Dataverse: statecode: 1 (Inactive), statuscode: 2 (Inactive), cr49f_approvalstatus: 1 (Pending)
-      await Cr49f_approvaltasksesService.update(tId, {
-        statecode: 1,
-        statuscode: 2,
-        cr49f_approvalstatus: 1 as any,
-        cr49f_approvedby: "",
-      } as any);
-    } catch (resetErr) {
-      console.warn(`[ApprovalWorkflow] Could not reset task ${tId} to inactive pending:`, resetErr);
-    }
-  }
-
-  // 3. Create a new record in cr49f_approvaltasks with Approval Status = "Changes Needed" and Status = "Active"
-  const nowIso = new Date().toISOString();
-  const summaryTaskName = approverRemarks?.trim()
-    ? `Changes Needed: ${approverRemarks.trim().slice(0, 60)}`
-    : `Changes Needed: Purchase Request Revision`;
-
-  const newChangesNeededPayload: Record<string, unknown> = {
-    cr49f_task: summaryTaskName,
-    cr49f_object: 1, // Purchase Request
-    cr49f_sequence: 0, // Sits before sequence 1
-    cr49f_role: 1, // Requester
-    cr49f_department: currentTask?.cr49f_department || 1,
-    cr49f_slanumber: 48,
-    cr49f_slaunit: 1, // Hours
-    cr49f_approvalstatus: 4, // Changes Needed
-    cr49f_id: "Changes Needed",
-    cr49f_assignedon: nowIso,
-    statecode: 0, // Active
-    statuscode: 1, // Active
-    "cr49f_PR@odata.bind": `/cr49f_purchaserequests(${parentPRId})`,
-  };
-
-  let createdTask: Cr49f_approvaltaskses | null = null;
-  try {
-    const createRes = await Cr49f_approvaltasksesService.create(
-      newChangesNeededPayload as Parameters<typeof Cr49f_approvaltasksesService.create>[0]
-    );
-    if (createRes.data) {
-      createdTask = createRes.data;
-    }
-  } catch (createErr) {
-    console.warn("[ApprovalWorkflow] Failed creating Changes Needed task in Dataverse:", createErr);
-  }
-
-  // Fallback if needed
-  const newTaskId = cleanGuid(createdTask?.cr49f_approvaltasksid) || `cn_${Date.now()}`;
-  const finalChangesTask: Cr49f_approvaltaskses = createdTask || ({
-    cr49f_approvaltasksid: newTaskId,
-    cr49f_task: summaryTaskName,
-    cr49f_object: 1,
-    cr49f_sequence: 0,
-    cr49f_role: 1,
-    cr49f_department: currentTask?.cr49f_department || 1,
-    cr49f_slanumber: 48,
-    cr49f_slaunit: 1,
-    cr49f_approvalstatus: 4 as any,
-    cr49f_id: "Changes Needed",
-    cr49f_assignedon: nowIso,
-    statecode: 0,
-    statuscode: 1,
-    _cr49f_pr_value: parentPRId,
-  } as unknown as Cr49f_approvaltaskses);
-
-  // Set explicit Changes Needed status in Dataverse
-  if (createdTask) {
-    void setTaskApprovalStatusInDataverse(newTaskId, "Changes Needed");
-  }
-
-  // Local storage caching for instant reactivity
-  if (typeof window !== "undefined") {
-    localStorage.setItem(`task_approved_status_${newTaskId}`, "Changes Needed");
-    localStorage.setItem(`task_changes_reason_${newTaskId}`, approverRemarks || "Revisions requested by approver.");
-    localStorage.setItem(`pr_status_${parentPRId}`, "Changes Needed");
-    localStorage.setItem(`pr_changes_reason_${parentPRId}`, approverRemarks || "Revisions requested by approver.");
-
-    // Add initial comment
-    const initialComment = {
-      id: `c_${Date.now()}`,
-      text: `Changes Needed requested: ${approverRemarks || "Please revise the required PR information."}`,
-      author: approverName || "Approver",
-      timestamp: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-    };
-    localStorage.setItem(`task_comments_${newTaskId}`, JSON.stringify([initialComment]));
-  }
-
-  // 4. Update parent PR status to Changes Needed (cr49f_status: 2) in Dataverse
+  // 1. Update parent PR status to Changes Needed (cr49f_status: 2) in Dataverse
   try {
     await Cr49f_purchaserequestsService.update(parentPRId, {
-      cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema!
+      cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema
     });
+    console.log(`[ApprovalWorkflow] Successfully updated PR ${parentPRId} status to Changes Needed (2)`);
   } catch (prErr) {
     console.warn("[ApprovalWorkflow] Could not update parent PR status to Changes Needed:", prErr);
   }
 
+  // 2. Persist in local storage for fast reactivity & audit trail
   if (typeof window !== "undefined") {
+    localStorage.setItem(`pr_status_${parentPRId}`, "Changes Needed");
+    localStorage.setItem(`pr_changes_reason_${parentPRId}`, approverRemarks || "Revisions requested by approver.");
+
+    // Add approver remarks to the task's comments for audit trail
+    if (approverRemarks?.trim()) {
+      const commentsKey = `task_comments_${cleanTaskId}`;
+      const existingStr = localStorage.getItem(commentsKey);
+      let existingComments = [];
+      try {
+        if (existingStr) existingComments = JSON.parse(existingStr);
+      } catch {}
+      existingComments.push({
+        id: `c_${Date.now()}`,
+        text: `Changes Needed: ${approverRemarks.trim()}`,
+        author: approverName?.trim() || "Approver",
+        timestamp: new Date().toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      });
+      localStorage.setItem(commentsKey, JSON.stringify(existingComments));
+    }
+
     window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
   }
 
   return {
-    changesNeededTask: finalChangesTask,
     parentPRId,
+    success: true,
   };
 }
 

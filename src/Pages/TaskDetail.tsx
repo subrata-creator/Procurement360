@@ -259,7 +259,14 @@ function ModernDataverseTaskDetail({
     (task.cr49f_sequence ?? 0) === 0 ||
     (task.cr49f_task && task.cr49f_task.toLowerCase().includes("changes needed"));
   const isPending = approvalStatus === "Pending" && !isChangesNeeded;
-  const isActive = task.statecode === 0 && (isPending || isChangesNeeded);
+  const isActive = task.statecode === 0 && isPending;
+
+  const prIdClean = cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(task._cr49f_pr_value);
+  const cachedPrStatus = prIdClean && typeof window !== "undefined" ? localStorage.getItem(`pr_status_${prIdClean}`) : null;
+  const isPrChangesNeeded =
+    parentPR?.cr49f_status === 2 ||
+    parentPR?.cr49f_statusname?.toLowerCase().includes("change") ||
+    cachedPrStatus === "Changes Needed";
 
   // Modal for approver requesting changes
   const [isChangesNeededModalOpen, setIsChangesNeededModalOpen] = useState(false);
@@ -399,7 +406,7 @@ function ModernDataverseTaskDetail({
 
       await requestChangesOnTask(cleanTaskId, changesFeedbackText.trim(), currentUserName);
       setIsChangesNeededModalOpen(false);
-      setNotice("Changes requested! A new 'Changes Needed' task has been created and existing tasks deactivated. Opening dashboard...");
+      setNotice("Purchase Request marked as Changes Needed successfully! Opening dashboard...");
       await onRefresh();
       setTimeout(() => {
         navigate("/");
@@ -620,16 +627,17 @@ function ModernDataverseTaskDetail({
       )}
 
       {/* Changes Needed Alert / Completion Banners */}
-      {isChangesNeeded && isActive && (
+      {isPrChangesNeeded && (
         <div className="task-changes-alert-banner">
           <div className="task-changes-alert-icon">
             <AlertTriangle size={20} />
           </div>
           <div className="task-changes-alert-text">
-            <h4>Approver Requested Changes</h4>
+            <h4>Purchase Request Status: Changes Needed</h4>
             <p>
-              An approver reviewed this Purchase Request and requested modifications before it can proceed.
-              Please update the PR details and item specifications below and click <strong>Submit Updated PR &amp; Restart Approval Workflow</strong>.
+              {typeof window !== "undefined" && prIdClean && localStorage.getItem(`pr_changes_reason_${prIdClean}`)
+                ? localStorage.getItem(`pr_changes_reason_${prIdClean}`)
+                : "An approver has requested revisions to this Purchase Request before approval can proceed."}
             </p>
           </div>
         </div>
@@ -1339,13 +1347,10 @@ function ModernDataverseTaskDetail({
 
             <div className="task-modal-body">
               <div className="task-modal-description">
-                <strong>Workflow Impact:</strong>
-                <ul>
-                  <li>Creates a new active <strong>Changes Needed</strong> task assigned to the requester.</li>
-                  <li>Deactivates all existing approval tasks for this PR and resets them to <strong>Pending</strong>.</li>
-                  <li>Updates the Purchase Request status to <strong>Changes Needed</strong>.</li>
-                  <li>Once revisions are resubmitted, the approval workflow will restart from <strong>Sequence #1</strong>.</li>
-                </ul>
+                <strong>Action Summary:</strong>
+                <p style={{ margin: "4px 0 0", color: "#475569" }}>
+                  This will update the Purchase Request status to <strong>Changes Needed</strong> in Dataverse and record your feedback in the task audit trail. Existing approval tasks will maintain their sequence and status.
+                </p>
               </div>
 
               <label className="task-modal-label">Approver Feedback / Required Changes:</label>
