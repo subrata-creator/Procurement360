@@ -106,7 +106,44 @@ export default function TaskDetail() {
           cleanGuid(rawMatched._cr49f_RFQ_value as string) ||
           cleanGuid(rawMatched.cr49f_rfq as string);
 
-        if (prId || matched.cr49f_object === 1) {
+        const isObjectRfq = matched.cr49f_object === 2 || (Boolean(rfqId) && matched.cr49f_object !== 1);
+        const isObjectPr = matched.cr49f_object === 1 || (Boolean(prId) && !isObjectRfq);
+
+        if (isObjectRfq) {
+          const [rfqsRes, siblings, prsRes] = await Promise.all([
+            Cr49f_requestforqoutationsService.getAll(),
+            getApprovalTasksForRecord(2, rfqId || ""),
+            prId ? Cr49f_purchaserequestsService.getAll() : Promise.resolve({ data: [] }),
+          ]);
+
+          const foundRFQ = (rfqsRes.data ?? []).find(
+            (r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId
+          );
+          setParentRFQ(foundRFQ || null);
+          setSiblingTasks(siblings);
+
+          // If linked to an originating PR, load PR lines for item context
+          if (prId) {
+            const foundPR = (prsRes.data ?? []).find(
+              (p) => cleanGuid(p.cr49f_purchaserequestid) === prId
+            );
+            setParentPR(foundPR || null);
+            try {
+              const linesRes = await Cr49f_purchaserequestlinesService.getAll();
+              const matchedLines = (linesRes.data ?? []).filter((l) => {
+                const rawL = l as unknown as Record<string, unknown>;
+                const lPR =
+                  cleanGuid(l._cr49f_purchaserequest_value) ||
+                  cleanGuid(rawL._cr49f_PurchaseRequest_value as string);
+                return lPR === prId;
+              });
+              setLineItems(matchedLines);
+            } catch {}
+          } else {
+            setParentPR(null);
+            setLineItems([]);
+          }
+        } else if (isObjectPr) {
           const [prsRes, linesRes, siblings] = await Promise.all([
             Cr49f_purchaserequestsService.getAll(),
             Cr49f_purchaserequestlinesService.getAll(),
@@ -117,6 +154,7 @@ export default function TaskDetail() {
             (p) => cleanGuid(p.cr49f_purchaserequestid) === prId
           );
           setParentPR(foundPR || null);
+          setParentRFQ(null);
 
           const matchedLines = (linesRes.data ?? []).filter((l) => {
             const rawL = l as unknown as Record<string, unknown>;
@@ -126,17 +164,6 @@ export default function TaskDetail() {
             return lPR === prId;
           });
           setLineItems(matchedLines);
-          setSiblingTasks(siblings);
-        } else if (rfqId || matched.cr49f_object === 2) {
-          const [rfqsRes, siblings] = await Promise.all([
-            Cr49f_requestforqoutationsService.getAll(),
-            getApprovalTasksForRecord(2, rfqId || ""),
-          ]);
-
-          const foundRFQ = (rfqsRes.data ?? []).find(
-            (r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId
-          );
-          setParentRFQ(foundRFQ || null);
           setSiblingTasks(siblings);
         }
       }
@@ -419,7 +446,7 @@ function ModernDataverseTaskDetail({
 
       await requestChangesOnTask(cleanTaskId, changesFeedbackText.trim(), currentUserName);
       setIsChangesNeededModalOpen(false);
-      setNotice("Purchase Request marked as Changes Needed successfully! Opening dashboard...");
+      setNotice(`${shortType} (${reference}) has been marked as Changes Needed successfully! Opening dashboard...`);
       await onRefresh();
       setTimeout(() => {
         navigate("/");
@@ -486,25 +513,36 @@ function ModernDataverseTaskDetail({
     }
   };
 
-  const isPr = task.cr49f_object === 1 || !!parentPR;
-  const isRfq = task.cr49f_object === 2 || !!parentRFQ;
+  const isRfq = task.cr49f_object === 2 || (!task.cr49f_object && !!parentRFQ);
+  const isPr = (task.cr49f_object === 1 || (!task.cr49f_object && !!parentPR)) && !isRfq;
+  const isPo = task.cr49f_object === 3;
 
-  const reference = isPr
-    ? parentPR?.cr49f_prnumber || "PR-2026"
-    : isRfq
+  const objectTypeLabel = isRfq
+    ? "Request for Quotation"
+    : isPr
+    ? "Purchase Request"
+    : isPo
+    ? "Purchase Order"
+    : "Approval Task";
+
+  const shortType = isRfq ? "RFQ" : isPr ? "PR" : isPo ? "PO" : "Record";
+
+  const reference = isRfq
     ? parentRFQ?.cr49f_rfqnumber || "RFQ-2026"
+    : isPr
+    ? parentPR?.cr49f_prnumber || "PR-2026"
     : `TASK-${task.cr49f_sequence || 1}`;
 
-  const recordTitle = isPr
-    ? parentPR?.cr49f_prtitle || "Purchase Request"
-    : isRfq
+  const recordTitle = isRfq
     ? parentRFQ?.cr49f_rfqtitle || "Request for Quotation"
+    : isPr
+    ? parentPR?.cr49f_prtitle || "Purchase Request"
     : task.cr49f_task || "Approval Task";
 
-  const requesterName = isPr
-    ? parentPR?.createdbyname || "Sakshi Paliwal"
-    : isRfq
+  const requesterName = isRfq
     ? parentRFQ?.createdbyname || "Neha Sharma"
+    : isPr
+    ? parentPR?.createdbyname || "Sakshi Paliwal"
     : "Business User";
 
   const deptLabel = task.cr49f_department
@@ -543,9 +581,11 @@ function ModernDataverseTaskDetail({
           <div className="task-breadcrumb-nav">
             <span>Work Queue</span>
             <span className="separator">/</span>
-            {parentPR ? (
+            {isRfq ? (
+              <Link to="/rfq">{reference}</Link>
+            ) : isPr && parentPR ? (
               <Link to={`/purchase-requests/${parentPR.cr49f_prnumber || parentPR.cr49f_purchaserequestid}`}>
-                {parentPR.cr49f_prnumber}
+                {reference}
               </Link>
             ) : (
               <span>{reference}</span>
@@ -583,11 +623,15 @@ function ModernDataverseTaskDetail({
 
             <div className="task-subtitle-row">
               <span>Related to <strong>{reference}</strong>: {recordTitle}</span>
-              {parentPR && (
+              {isRfq ? (
+                <Link to="/rfq">
+                  Open Full RFQ Summary <ExternalLink size={12} />
+                </Link>
+              ) : isPr && parentPR ? (
                 <Link to={`/purchase-requests/${parentPR.cr49f_prnumber || parentPR.cr49f_purchaserequestid}`}>
                   Open Full PR Summary <ExternalLink size={12} />
                 </Link>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -1003,7 +1047,7 @@ function ModernDataverseTaskDetail({
                   <List size={17} />
                 </div>
                 <div className="task-metric-info">
-                  <span className="task-metric-label">PR Reference</span>
+                  <span className="task-metric-label">{shortType} Reference</span>
                   <strong className="task-metric-value">{reference}</strong>
                 </div>
               </div>
@@ -1013,9 +1057,13 @@ function ModernDataverseTaskDetail({
                   <CalendarDays size={17} />
                 </div>
                 <div className="task-metric-info">
-                  <span className="task-metric-label">Required Delivery</span>
+                  <span className="task-metric-label">
+                    {isRfq ? "Submission Deadline" : "Required Delivery"}
+                  </span>
                   <strong className="task-metric-value">
-                    {toUsDate(parentPR?.cr49f_requireddeliverydate)}
+                    {isRfq
+                      ? toUsDate(parentRFQ?.cr49f_submissiondeadline)
+                      : toUsDate(parentPR?.cr49f_requireddeliverydate)}
                   </strong>
                 </div>
               </div>
@@ -1347,8 +1395,8 @@ function ModernDataverseTaskDetail({
                 <FileEdit size={18} />
               </div>
               <div>
-                <h3>Request Changes on Purchase Request</h3>
-                <p>Specify the modifications required before this request can be approved.</p>
+                <h3>Request Changes on {shortType}</h3>
+                <p>Specify the modifications required before this {shortType} can be approved.</p>
               </div>
             </div>
 
@@ -1356,7 +1404,7 @@ function ModernDataverseTaskDetail({
               <div className="task-modal-description">
                 <strong>Action Summary:</strong>
                 <p style={{ margin: "4px 0 0", color: "#475569" }}>
-                  This will update the Purchase Request status to <strong>Changes Needed</strong> in Dataverse and record your feedback in the task audit trail. Existing approval tasks will maintain their sequence and status.
+                  This will update the {objectTypeLabel} ({reference}) status to <strong>Changes Needed</strong> in Dataverse and record your feedback in the task audit trail. Existing approval tasks will maintain their sequence and status.
                 </p>
               </div>
 
@@ -1366,7 +1414,7 @@ function ModernDataverseTaskDetail({
                 rows={4}
                 value={changesFeedbackText}
                 onChange={(e) => setChangesFeedbackText(e.target.value)}
-                placeholder="Describe what adjustments, price corrections, or quantity changes are needed..."
+                placeholder={`Describe what adjustments, price corrections, or updates are needed on this ${shortType}...`}
                 autoFocus
               />
             </div>
