@@ -620,3 +620,367 @@
   margin: 0 auto 16px;
 }
 
+
+
+/* =========================================================
+   ENHANCED SUPPLIER QUOTATION LINE-ITEMS FORM STYLES
+   Full support for cr49f_rfqresponseline fields:
+   - cr49f_unitprice, cr49f_quantity, cr49f_discount, cr49f_tax,
+   - cr49f_anyadditionalcharges, cr49f_additionalchargepercentage,
+   - cr49f_additionalchargesdetails, cr49f_totalprice
+========================================================= */
+
+.supplier-line-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.supplier-line-card {
+  background: var(--card-hex, #ffffff);
+  border: 1px solid var(--border-hex, #e2e8f0);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.supplier-line-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+}
+
+.supplier-line-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--muted-hex, #f8fafc);
+  border-bottom: 1px solid var(--border-hex, #e2e8f0);
+}
+
+.supplier-line-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.supplier-line-seq-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.supplier-line-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--foreground-hex, #0f172a);
+  margin: 0;
+}
+
+.supplier-line-category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.supplier-line-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.supplier-req-qty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted-foreground-hex, #64748b);
+  background: rgba(241, 245, 249, 0.8);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.supplier-line-total-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.supplier-line-total-preview-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--muted-foreground-hex, #64748b);
+}
+
+.supplier-line-total-preview-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.supplier-line-card-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Core Pricing Inputs 4-Column Grid */
+.supplier-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.supplier-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.supplier-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground-hex, #1e293b);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.supplier-req-star {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.supplier-field-calc-hint {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.supplier-field-calc-hint.green {
+  color: #059669;
+}
+
+.supplier-field-calc-hint.blue {
+  color: #2563eb;
+}
+
+.supplier-field-calc-hint.amber {
+  color: #d97706;
+}
+
+/* Input Container with Affix ($ or %) */
+.supplier-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.supplier-input-prefix {
+  position: absolute;
+  left: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.supplier-input-suffix {
+  position: absolute;
+  right: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.supplier-input-wrap input.has-prefix {
+  padding-left: 24px;
+}
+
+.supplier-input-wrap input.has-suffix {
+  padding-right: 28px;
+}
+
+/* Additional Charges Box */
+.supplier-addl-charges-box {
+  background: rgba(248, 250, 252, 0.7);
+  border: 1px solid var(--border-hex, #e2e8f0);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.supplier-addl-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.supplier-addl-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--foreground-hex, #1e293b);
+}
+
+.supplier-segmented-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: #e2e8f0;
+  padding: 2px;
+  border-radius: 7px;
+}
+
+.supplier-toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.supplier-toggle-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.supplier-toggle-btn.active.yes {
+  color: #d97706;
+}
+
+.supplier-addl-fields-grid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+@media (max-width: 680px) {
+  .supplier-addl-fields-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Line Calculation Formula Strip */
+.supplier-formula-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: rgba(241, 245, 249, 0.5);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.supplier-formula-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.supplier-formula-arrow {
+  color: #94a3b8;
+  font-weight: bold;
+}
+
+.supplier-formula-step strong {
+  color: #0f172a;
+}
+
+.supplier-formula-step.highlight {
+  margin-left: auto;
+  font-weight: 700;
+  color: #2563eb;
+  font-size: 13px;
+}
+
+/* Comprehensive Financial Summary Card */
+.supplier-quote-summary-card {
+  background: var(--card-hex, #ffffff);
+  border: 1px solid var(--border-hex, #e2e8f0);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+}
+
+@media (max-width: 860px) {
+  .supplier-quote-summary-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+.supplier-quote-summary-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.supplier-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #475569;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.supplier-summary-row.total {
+  border-bottom: none;
+  border-top: 2px solid #cbd5e1;
+  padding-top: 10px;
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.supplier-summary-row.total .supplier-grand-total {
+  font-size: 22px;
+  font-weight: 800;
+  color: #2563eb;
+}

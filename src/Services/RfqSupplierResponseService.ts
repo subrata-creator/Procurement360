@@ -41,11 +41,58 @@ export interface SupplierResponseLineItem {
   requestedQuantity: number;
   offeredQuantity: number;
   unitPrice: number;
-  discount: number;
-  tax: number;
+  discount: number; // cr49f_discount (%)
+  tax: number; // cr49f_tax (%)
+  anyAdditionalCharges: boolean; // cr49f_anyadditionalcharges
+  additionalChargePercentage: number; // cr49f_additionalchargepercentage (%)
+  additionalChargesDetails: string; // cr49f_additionalchargesdetails
+  totalPrice: number; // cr49f_totalprice ($)
+  leadTime?: string;
+  comments?: string;
+}
+
+/**
+ * Line item financial calculation helper across cr49f_rfqresponselines fields
+ */
+export function calculateLineTotal(
+  unitPrice: number,
+  quantity: number,
+  discountPercent: number = 0,
+  taxPercent: number = 0,
+  anyAdditionalCharges: boolean = false,
+  additionalChargePercent: number = 0
+): {
+  baseAmount: number;
+  discountAmount: number;
+  netAfterDiscount: number;
+  additionalChargesAmount: number;
+  taxableAmount: number;
+  taxAmount: number;
   totalPrice: number;
-  leadTime: string;
-  comments: string;
+} {
+  const price = Math.max(0, Number(unitPrice) || 0);
+  const qty = Math.max(0, Number(quantity) || 0);
+  const discPct = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+  const taxPct = Math.max(0, Number(taxPercent) || 0);
+  const addlPct = anyAdditionalCharges ? Math.max(0, Number(additionalChargePercent) || 0) : 0;
+
+  const baseAmount = price * qty;
+  const discountAmount = baseAmount * (discPct / 100);
+  const netAfterDiscount = Math.max(0, baseAmount - discountAmount);
+  const additionalChargesAmount = netAfterDiscount * (addlPct / 100);
+  const taxableAmount = netAfterDiscount + additionalChargesAmount;
+  const taxAmount = taxableAmount * (taxPct / 100);
+  const totalPrice = Math.round((taxableAmount + taxAmount) * 100) / 100;
+
+  return {
+    baseAmount: Math.round(baseAmount * 100) / 100,
+    discountAmount: Math.round(discountAmount * 100) / 100,
+    netAfterDiscount: Math.round(netAfterDiscount * 100) / 100,
+    additionalChargesAmount: Math.round(additionalChargesAmount * 100) / 100,
+    taxableAmount: Math.round(taxableAmount * 100) / 100,
+    taxAmount: Math.round(taxAmount * 100) / 100,
+    totalPrice,
+  };
 }
 
 export interface FullSupplierResponse {
@@ -253,10 +300,12 @@ export async function createRfqSupplierResponses(
             cr49f_responselineid: compositeLineId,
             cr49f_quantity: reqQty,
             cr49f_unitprice: 0,
-            cr49f_totalprice: 0,
             cr49f_discount: 0,
             cr49f_tax: 0,
+            cr49f_anyadditionalcharges: false,
+            cr49f_additionalchargepercentage: 0,
             cr49f_additionalchargesdetails: "",
+            cr49f_totalprice: 0,
             statecode: 0 as const,
             statuscode: 1 as const,
           };
@@ -359,20 +408,33 @@ export async function getSupplierResponsesForRfq(
     const structuredLines: SupplierResponseLineItem[] = linesForResp.map((l) => {
       const parsed = parseResponseLineId(l.cr49f_responselineid);
       const parsedCharges = parseAdditionalCharges(l.cr49f_additionalchargesdetails);
+      const anyAddl = Boolean(l.cr49f_anyadditionalcharges);
+      const addlPct = Number(l.cr49f_additionalchargepercentage) || 0;
+      const addlDetails = l.cr49f_additionalchargesdetails || parsedCharges.comments || "";
+      const disc = Number(l.cr49f_discount) || 0;
+      const tax = Number(l.cr49f_tax) || 0;
+      const unitPrice = Number(l.cr49f_unitprice) || 0;
+      const qty = Number(l.cr49f_quantity) || parsed.requestedQuantity;
+      const calc = calculateLineTotal(unitPrice, qty, disc, tax, anyAddl, addlPct);
+      const lineTotal = Number(l.cr49f_totalprice) > 0 ? Number(l.cr49f_totalprice) : calc.totalPrice;
+
       return {
         id: cleanGuid(l.cr49f_rfqresponselineid) || l.cr49f_rfqresponselineid,
         prLineId: parsed.prLineId,
         itemName: parsed.itemName,
-        description: parsedCharges.comments || "",
+        description: addlDetails || parsedCharges.comments || "",
         category: "Catalog Item",
         requestedQuantity: parsed.requestedQuantity,
-        offeredQuantity: Number(l.cr49f_quantity) || parsed.requestedQuantity,
-        unitPrice: Number(l.cr49f_unitprice) || 0,
-        discount: Number(l.cr49f_discount) || 0,
-        tax: Number(l.cr49f_tax) || 0,
-        totalPrice: Number(l.cr49f_totalprice) || 0,
+        offeredQuantity: qty,
+        unitPrice,
+        discount: disc,
+        tax,
+        anyAdditionalCharges: anyAddl,
+        additionalChargePercentage: addlPct,
+        additionalChargesDetails: addlDetails,
+        totalPrice: lineTotal,
         leadTime: parsedCharges.leadTime,
-        comments: parsedCharges.comments,
+        comments: addlDetails || parsedCharges.comments,
       };
     });
 
@@ -660,20 +722,33 @@ export async function getSupplierRfqDetails(
   const structuredLines: SupplierResponseLineItem[] = responseLines.map((l) => {
     const parsed = parseResponseLineId(l.cr49f_responselineid);
     const parsedCharges = parseAdditionalCharges(l.cr49f_additionalchargesdetails);
+    const anyAddl = Boolean(l.cr49f_anyadditionalcharges);
+    const addlPct = Number(l.cr49f_additionalchargepercentage) || 0;
+    const addlDetails = l.cr49f_additionalchargesdetails || parsedCharges.comments || "";
+    const disc = Number(l.cr49f_discount) || 0;
+    const tax = Number(l.cr49f_tax) || 0;
+    const unitPrice = Number(l.cr49f_unitprice) || 0;
+    const qty = Number(l.cr49f_quantity) || parsed.requestedQuantity;
+    const calc = calculateLineTotal(unitPrice, qty, disc, tax, anyAddl, addlPct);
+    const lineTotal = Number(l.cr49f_totalprice) > 0 ? Number(l.cr49f_totalprice) : calc.totalPrice;
+
     return {
       id: cleanGuid(l.cr49f_rfqresponselineid) || l.cr49f_rfqresponselineid,
       prLineId: parsed.prLineId,
       itemName: parsed.itemName,
-      description: parsedCharges.comments || "",
+      description: addlDetails || parsedCharges.comments || "",
       category: "Catalog Item",
       requestedQuantity: parsed.requestedQuantity,
-      offeredQuantity: Number(l.cr49f_quantity) || parsed.requestedQuantity,
-      unitPrice: Number(l.cr49f_unitprice) || 0,
-      discount: Number(l.cr49f_discount) || 0,
-      tax: Number(l.cr49f_tax) || 0,
-      totalPrice: Number(l.cr49f_totalprice) || 0,
+      offeredQuantity: qty,
+      unitPrice,
+      discount: disc,
+      tax,
+      anyAdditionalCharges: anyAddl,
+      additionalChargePercentage: addlPct,
+      additionalChargesDetails: addlDetails,
+      totalPrice: lineTotal,
       leadTime: parsedCharges.leadTime,
-      comments: parsedCharges.comments,
+      comments: addlDetails || parsedCharges.comments,
     };
   });
 
@@ -718,6 +793,9 @@ export async function saveSupplierResponseDraft(
     offeredQuantity: number;
     discount?: number;
     tax?: number;
+    anyAdditionalCharges?: boolean;
+    additionalChargePercentage?: number;
+    additionalChargesDetails?: string;
     leadTime?: string;
     comments?: string;
   }>,
@@ -737,11 +815,12 @@ export async function saveSupplierResponseDraft(
     const qty = Number(line.offeredQuantity) || 1;
     const discount = Number(line.discount) || 0;
     const tax = Number(line.tax) || 0;
+    const anyAddl = Boolean(line.anyAdditionalCharges);
+    const addlPct = anyAddl ? Number(line.additionalChargePercentage) || 0 : 0;
+    const addlDetails = (line.additionalChargesDetails ?? line.comments ?? "").trim();
 
-    const basePrice = unitPrice * qty;
-    const discounted = basePrice * (1 - discount / 100);
-    const lineTotal = discounted * (1 + tax / 100);
-    totalAmount += lineTotal;
+    const calc = calculateLineTotal(unitPrice, qty, discount, tax, anyAddl, addlPct);
+    totalAmount += calc.totalPrice;
 
     if (cleanLineId && !cleanLineId.startsWith("mock-")) {
       try {
@@ -750,8 +829,10 @@ export async function saveSupplierResponseDraft(
           cr49f_quantity: qty,
           cr49f_discount: discount,
           cr49f_tax: tax,
-          cr49f_totalprice: lineTotal,
-          cr49f_additionalchargesdetails: formatAdditionalCharges(line.leadTime, line.comments),
+          cr49f_anyadditionalcharges: anyAddl,
+          cr49f_additionalchargepercentage: addlPct,
+          cr49f_additionalchargesdetails: addlDetails,
+          cr49f_totalprice: calc.totalPrice,
           statecode: 0,
           statuscode: 1, // Draft
         });
@@ -792,6 +873,9 @@ export async function submitSupplierResponse(
     offeredQuantity: number;
     discount?: number;
     tax?: number;
+    anyAdditionalCharges?: boolean;
+    additionalChargePercentage?: number;
+    additionalChargesDetails?: string;
     leadTime?: string;
     comments?: string;
   }>,
@@ -826,11 +910,12 @@ export async function submitSupplierResponse(
     const qty = Number(line.offeredQuantity) || 1;
     const discount = Number(line.discount) || 0;
     const tax = Number(line.tax) || 0;
+    const anyAddl = Boolean(line.anyAdditionalCharges);
+    const addlPct = anyAddl ? Number(line.additionalChargePercentage) || 0 : 0;
+    const addlDetails = (line.additionalChargesDetails ?? line.comments ?? "").trim();
 
-    const basePrice = unitPrice * qty;
-    const discounted = basePrice * (1 - discount / 100);
-    const lineTotal = discounted * (1 + tax / 100);
-    totalAmount += lineTotal;
+    const calc = calculateLineTotal(unitPrice, qty, discount, tax, anyAddl, addlPct);
+    totalAmount += calc.totalPrice;
 
     if (cleanLineId && !cleanLineId.startsWith("mock-")) {
       try {
@@ -839,8 +924,10 @@ export async function submitSupplierResponse(
           cr49f_quantity: qty,
           cr49f_discount: discount,
           cr49f_tax: tax,
-          cr49f_totalprice: lineTotal,
-          cr49f_additionalchargesdetails: formatAdditionalCharges(line.leadTime, line.comments),
+          cr49f_anyadditionalcharges: anyAddl,
+          cr49f_additionalchargepercentage: addlPct,
+          cr49f_additionalchargesdetails: addlDetails,
+          cr49f_totalprice: calc.totalPrice,
           statecode: 1, // Inactive / Submitted
           statuscode: 2, // Submitted
         });
