@@ -30,7 +30,7 @@ export const userNavigationItems = [
 ];
 
 export const supplierNavigationItems = [
-  { label: "Supplier Dashboard", icon: Home },
+  { label: "Dashboard", icon: Home },
   { label: "My RFQs", icon: ClipboardList },
   { label: "My Quotations", icon: FileSignature },
 ];

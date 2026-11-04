@@ -102,7 +102,7 @@ const AppContent: React.FC = () => {
     location.pathname.startsWith("/supplier-rfqs") || isSupplierQuotationsRoute;
 
   const routeNavigation = isSupplierDashboardRoute
-    ? "Supplier Dashboard"
+    ? "Dashboard"
     : isSupplierQuotationsRoute
     ? "My Quotations"
     : isSupplierRfqsRoute
@@ -250,7 +250,11 @@ const AppContent: React.FC = () => {
     setFallbackNavigation(item);
 
     if (item === "Dashboard") {
-      navigate("/");
+      navigate(isSupplier ? "/supplier-dashboard" : "/");
+    } else if (item === "My RFQs") {
+      navigate("/supplier-rfqs");
+    } else if (item === "My Quotations") {
+      navigate("/supplier-quotations");
     } else if (item === "Users") {
       navigate("/users");
     } else if (

@@ -4,18 +4,24 @@ import {
   AlertCircle,
   ArrowLeft,
   Building2,
+  Calendar,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
   Clock,
-  DollarSign,
+  FileText,
+  Info,
   Lock,
   Mail,
+  MapPin,
   Package,
   RefreshCw,
   Save,
   Send,
   ShieldAlert,
-  Tag,
+  Sparkles,
   Truck,
 } from "lucide-react";
 
@@ -51,8 +57,8 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
 
   // Commercial terms (Parent response level)
   const [deliveryDate, setDeliveryDate] = useState<string>("");
-  const [paymentTerms, setPaymentTerms] = useState<string>("Net 30");
-  const [warranty, setWarranty] = useState<string>("1 Year Standard Warranty");
+  const [paymentTerms, setPaymentTerms] = useState<string>("Net 30 days");
+  const [warranty, setWarranty] = useState<string>("1 year standard warranty");
 
   const [activeSupplier, setActiveSupplier] = useState<Cr49f_suppliers | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -61,6 +67,10 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [accessDenied, setAccessDenied] = useState<boolean>(false);
+
+  // Accordion & Interactive states
+  const [expandedLineIndices, setExpandedLineIndices] = useState<Set<number>>(new Set([0]));
+  const [isScopeExpanded, setIsScopeExpanded] = useState<boolean>(false);
 
   // 1. Resolve Supplier Identity
   useEffect(() => {
@@ -153,7 +163,13 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
       const updated = [...prev];
       const target = { ...updated[index] };
 
-      if (field === "unitPrice" || field === "offeredQuantity" || field === "discount" || field === "tax" || field === "additionalChargePercentage") {
+      if (
+        field === "unitPrice" ||
+        field === "offeredQuantity" ||
+        field === "discount" ||
+        field === "tax" ||
+        field === "additionalChargePercentage"
+      ) {
         const numVal = Math.max(0, Number(value) || 0);
         (target as Record<string, unknown>)[field] = numVal;
       } else if (field === "anyAdditionalCharges") {
@@ -165,7 +181,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
         (target as Record<string, unknown>)[field] = value;
       }
 
-      // Re-calculate financial components using the central calculateLineTotal helper
+      // Re-calculate financial components using central calculateLineTotal helper
       const calc = calculateLineTotal(
         target.unitPrice,
         target.offeredQuantity,
@@ -181,7 +197,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
     });
   };
 
-  // Comprehensive Financial Summary (Gross, Discounts, Additional Charges, Taxes, Grand Total)
+  // Comprehensive Financial Summary
   const quotationFinancials = useMemo(() => {
     let grossTotal = 0;
     let discountTotal = 0;
@@ -213,6 +229,99 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
       grandTotal: Math.round(grandTotal * 100) / 100,
     };
   }, [lines]);
+
+  // Completed items count & progress
+  const completedLinesCount = useMemo(() => {
+    return lines.filter((l) => l.unitPrice > 0 && l.offeredQuantity > 0).length;
+  }, [lines]);
+
+  const progressPercent = useMemo(() => {
+    if (lines.length === 0) return 0;
+    const lineWeight = (completedLinesCount / lines.length) * 80;
+    const termsWeight = deliveryDate ? 20 : 0;
+    return Math.min(100, Math.round(lineWeight + termsWeight));
+  }, [completedLinesCount, lines.length, deliveryDate]);
+
+  // Submission Deadline & Days Remaining calculation
+  const deadlineInfo = useMemo(() => {
+    if (!rfq?.cr49f_submissiondeadline) {
+      return {
+        daysText: "Open",
+        dueSubtext: "No fixed deadline",
+        formattedDeadline: "Open / Ongoing",
+      };
+    }
+    const deadline = new Date(rfq.cr49f_submissiondeadline);
+    if (isNaN(deadline.getTime())) {
+      return {
+        daysText: "Open",
+        dueSubtext: "No fixed deadline",
+        formattedDeadline: String(rfq.cr49f_submissiondeadline),
+      };
+    }
+    const now = new Date();
+    const diffMs = deadline.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    const formattedDeadline = deadline.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    if (diffDays < 0) {
+      return {
+        daysText: "Expired",
+        dueSubtext: "Deadline passed",
+        formattedDeadline,
+      };
+    }
+    if (diffDays === 0) {
+      return {
+        daysText: "Due today",
+        dueSubtext: "Due by 6:00 PM IST",
+        formattedDeadline,
+      };
+    }
+    return {
+      daysText: `${diffDays} days`,
+      dueSubtext: "Due by 6:00 PM IST",
+      formattedDeadline,
+    };
+  }, [rfq?.cr49f_submissiondeadline]);
+
+  // Helper currency formatter (INR symbol ₹ matching reference design)
+  const formatCurrency = (val: number) => {
+    return (
+      "₹" +
+      (Number(val) || 0).toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+  };
+
+  // Toggle single line accordion
+  const toggleLineExpanded = (idx: number) => {
+    setExpandedLineIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
+
+  // Toggle all lines expanded / collapsed
+  const toggleAllLines = () => {
+    if (expandedLineIndices.size === lines.length) {
+      setExpandedLineIndices(new Set());
+    } else {
+      setExpandedLineIndices(new Set(lines.map((_, i) => i)));
+    }
+  };
 
   // Save as Draft action
   const handleSaveDraft = async () => {
@@ -262,14 +371,20 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
       // Validation check: Unit Price & Offered Quantity for all lines
       for (const [idx, l] of lines.entries()) {
         if (!l.unitPrice || l.unitPrice <= 0) {
-          throw new Error(`Line #${idx + 1} (${l.itemName}) requires a valid quoted unit price greater than $0.`);
+          throw new Error(`Line #${idx + 1} (${l.itemName}) requires a valid quoted unit price greater than ₹0.`);
         }
         if (!l.offeredQuantity || l.offeredQuantity <= 0) {
           throw new Error(`Line #${idx + 1} (${l.itemName}) requires an offered quantity greater than 0.`);
         }
         if (l.anyAdditionalCharges && l.additionalChargePercentage > 0 && !l.additionalChargesDetails?.trim()) {
-          throw new Error(`Line #${idx + 1} has an additional charge of ${l.additionalChargePercentage}%. Please provide description/breakdown in Additional Charges Details.`);
+          throw new Error(
+            `Line #${idx + 1} has an additional charge of ${l.additionalChargePercentage}%. Please provide description/breakdown in Additional Charges Details.`
+          );
         }
+      }
+
+      if (!deliveryDate) {
+        throw new Error("Please select a Promised Delivery Date before submitting your quotation.");
       }
 
       const formattedLines = lines.map((l) => ({
@@ -303,7 +418,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
   // Access Denied Screen (Strict Dataverse Authorization)
   if (accessDenied) {
     return (
-      <div className="supplier-portal-container">
+      <div className="supplier-portal-container supplier-rfq-response-page">
         <div className="supplier-denied-box">
           <div className="supplier-denied-icon">
             <ShieldAlert size={28} />
@@ -328,16 +443,16 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
   }
 
   return (
-    <div className="supplier-portal-container">
+    <div className="supplier-portal-container supplier-rfq-response-page">
       {/* Top Bar Navigation */}
       <div className="supplier-response-top-bar">
         <button
           type="button"
-          className="supplier-btn-back"
+          className="supplier-btn-back-link"
           onClick={() => navigate("/supplier-rfqs")}
         >
-          <ArrowLeft size={13} />
-          Back to RFQs
+          <ArrowLeft size={15} />
+          <span>Back to all RFQs</span>
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -375,16 +490,16 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
         <div className="supplier-response-view">
           {/* Notifications */}
           {error && (
-            <div style={{ padding: 12, background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: 8, color: "#b91c1c", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="supplier-feedback-banner error">
               <AlertCircle size={15} />
-              {error}
+              <span>{error}</span>
             </div>
           )}
 
           {successMsg && (
-            <div style={{ padding: 12, background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: 8, color: "#065f46", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="supplier-feedback-banner success">
               <CheckCircle2 size={15} />
-              {successMsg}
+              <span>{successMsg}</span>
             </div>
           )}
 
@@ -411,428 +526,629 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
             </div>
           )}
 
-          {/* RFQ Metadata Details Card */}
-          <div className="supplier-meta-card">
-            <div className="supplier-meta-field">
-              <span className="supplier-meta-field-label">RFQ Number</span>
-              <span className="supplier-meta-field-val" style={{ color: "#2563eb" }}>
-                {rfq?.cr49f_rfqnumber || "RFQ"}
-              </span>
+          {/* Hero Banner Card */}
+          <div className="supplier-hero-card">
+            <div className="supplier-hero-left">
+              {/* Top Tags */}
+              <div className="supplier-hero-tag-row">
+                <span className="supplier-hero-id-pill">
+                  {rfq?.cr49f_rfqnumber || "RFQ-1005"}
+                </span>
+                <span className="supplier-hero-status-pill">
+                  <span className="supplier-hero-dot" />
+                  {isSubmitted ? "RESPONSE SUBMITTED" : "RESPONSE REQUESTED"}
+                </span>
+              </div>
+
+              {/* Title & Subtitle */}
+              <h1 className="supplier-hero-title">
+                {rfq?.cr49f_rfqtitle || "Office Equipments"}
+              </h1>
+              <p className="supplier-hero-subtitle">
+                Review the request details and submit your most competitive quotation.
+              </p>
+
+              {/* Meta specifications footer */}
+              <div className="supplier-hero-meta-row">
+                <div className="supplier-hero-meta-item">
+                  <div className="supplier-hero-meta-icon">
+                    <MapPin size={16} />
+                  </div>
+                  <div className="supplier-hero-meta-text">
+                    <span className="supplier-hero-meta-label">DELIVERY LOCATION</span>
+                    <span className="supplier-hero-meta-val">
+                      {rfq?.cr49f_deliverylocation || "Jaipur, Rajasthan"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="supplier-hero-meta-item">
+                  <div className="supplier-hero-meta-icon">
+                    <Calendar size={16} />
+                  </div>
+                  <div className="supplier-hero-meta-text">
+                    <span className="supplier-hero-meta-label">SUBMISSION DEADLINE</span>
+                    <span className="supplier-hero-meta-val">
+                      {deadlineInfo.formattedDeadline}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="supplier-hero-meta-item">
+                  <div className="supplier-hero-meta-icon">
+                    <Package size={16} />
+                  </div>
+                  <div className="supplier-hero-meta-text">
+                    <span className="supplier-hero-meta-label">REQUESTED ITEMS</span>
+                    <span className="supplier-hero-meta-val">
+                      {lines.length} line items
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="supplier-meta-field">
-              <span className="supplier-meta-field-label">RFQ Title</span>
-              <span className="supplier-meta-field-val">{rfq?.cr49f_rfqtitle || "—"}</span>
-            </div>
-
-            <div className="supplier-meta-field">
-              <span className="supplier-meta-field-label">Delivery Location</span>
-              <span className="supplier-meta-field-val">{rfq?.cr49f_deliverylocation || "Main Tech Hub"}</span>
-            </div>
-
-            <div className="supplier-meta-field">
-              <span className="supplier-meta-field-label">Submission Deadline</span>
-              <span className="supplier-meta-field-val">
-                {rfq?.cr49f_submissiondeadline
-                  ? new Date(rfq.cr49f_submissiondeadline).toLocaleDateString()
-                  : "Open"}
-              </span>
+            {/* Time Remaining Translucent Card */}
+            <div className="supplier-hero-time-card">
+              <div className="supplier-hero-time-icon">
+                <Clock size={18} />
+              </div>
+              <div className="supplier-hero-time-info">
+                <span className="supplier-hero-time-label">TIME REMAINING</span>
+                <span className="supplier-hero-time-val">{deadlineInfo.daysText}</span>
+                <span className="supplier-hero-time-sub">{deadlineInfo.dueSubtext}</span>
+              </div>
             </div>
           </div>
 
-          {/* Scope / Description */}
-          {rfq?.cr49f_description && (
-            <div style={{ padding: "12px 16px", background: "rgba(241, 245, 249, 0.6)", borderRadius: 8, fontSize: 13, color: "#334155", border: "1px solid #e2e8f0" }}>
-              <strong>Scope &amp; Specifications: </strong>
-              {rfq.cr49f_description}
-            </div>
-          )}
-
-          {/* Quotation Editor Section */}
-          <div className="supplier-editor-card">
-            <div className="supplier-editor-header">
-              <div className="supplier-editor-title">
-                <Package size={15} color="#2563eb" />
-                Quotation Line Items ({lines.length})
+          {/* Scope & Specifications Banner Card */}
+          <div className="supplier-scope-card">
+            <div className="supplier-scope-card-header">
+              <div className="supplier-scope-left">
+                <div className="supplier-scope-icon-wrap">
+                  <Info size={15} />
+                </div>
+                <span className="supplier-scope-title">Scope &amp; specifications</span>
+                <span className="supplier-scope-rfq-name">
+                  {rfq?.cr49f_rfqtitle || "Procurement Scope"}
+                </span>
               </div>
-              <span style={{ fontSize: 12, color: "#64748b" }}>
-                {isSubmitted
-                  ? "Final submitted prices, discounts, taxes, and additional charges"
-                  : "Enter unit prices, discounts, tax, and any additional charges per requested item"}
-              </span>
+
+              <button
+                type="button"
+                className="supplier-scope-toggle-btn"
+                onClick={() => setIsScopeExpanded((prev) => !prev)}
+              >
+                <span>{isScopeExpanded ? "Hide details" : "View details"}</span>
+                {isScopeExpanded ? <ChevronUp size={14} /> : <ChevronRight size={14} />}
+              </button>
             </div>
 
-            {/* Redesigned Rich Line Item Cards */}
-            <div className="supplier-line-cards-list">
-              {lines.map((line, idx) => {
-                const calc = calculateLineTotal(
-                  line.unitPrice,
-                  line.offeredQuantity,
-                  line.discount,
-                  line.tax,
-                  line.anyAdditionalCharges,
-                  line.additionalChargePercentage
-                );
+            {isScopeExpanded && (
+              <div className="supplier-scope-card-body">
+                <div style={{ marginBottom: 10 }}>
+                  <strong>Description &amp; Instructions:</strong>
+                  <p style={{ margin: "4px 0 0", color: "#475569" }}>
+                    {rfq?.cr49f_description || "Standard procurement scope for requested items. Review line items and specifications below to quote your best competitive rates and timelines."}
+                  </p>
+                </div>
+                <div className="supplier-scope-meta-grid">
+                  <div>
+                    <span className="supplier-scope-label">RFQ Reference:</span> {rfq?.cr49f_rfqnumber || "—"}
+                  </div>
+                  <div>
+                    <span className="supplier-scope-label">Delivery Destination:</span> {rfq?.cr49f_deliverylocation || "Main Hub"}
+                  </div>
+                  <div>
+                    <span className="supplier-scope-label">Quotation Validity:</span> 30 Days from Submission
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
-                return (
-                  <div key={line.id || idx} className="supplier-line-card">
-                    {/* Line Card Header */}
-                    <div className="supplier-line-card-header">
-                      <div className="supplier-line-header-left">
-                        <span className="supplier-line-seq-pill">Line #{idx + 1}</span>
-                        <h4 className="supplier-line-title">{line.itemName}</h4>
-                        <span className="supplier-line-category-pill">
-                          <Tag size={11} /> {line.category || "Catalog Item"}
-                        </span>
-                      </div>
+          {/* Two-Column Quotation Layout */}
+          <div className="supplier-quote-layout">
+            {/* Left Column: Build Your Quotation & Lines */}
+            <div className="supplier-quote-main">
+              {/* Section Header */}
+              <div className="supplier-quotation-header">
+                <div className="supplier-quotation-header-left">
+                  <div className="supplier-quotation-icon">
+                    <Package size={17} />
+                  </div>
+                  <div>
+                    <h2 className="supplier-quotation-title">Build your quotation</h2>
+                    <p className="supplier-quotation-subtitle">
+                      Enter commercial details for each requested item. Click any item card to expand and edit pricing.
+                    </p>
+                  </div>
+                </div>
 
-                      <div className="supplier-line-header-right">
-                        <span className="supplier-req-qty-badge">
-                          Requested Qty: <strong>{line.requestedQuantity}</strong>
-                        </span>
-                        <div className="supplier-line-total-preview">
-                          <span className="supplier-line-total-preview-label">Line Total</span>
-                          <span className="supplier-line-total-preview-val">
-                            ${calc.totalPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                <div className="supplier-quotation-header-right">
+                  <span className="supplier-completed-pill">
+                    {completedLinesCount} of {lines.length} completed
+                  </span>
+                  <button
+                    type="button"
+                    className="supplier-btn-toggle-all"
+                    onClick={toggleAllLines}
+                  >
+                    {expandedLineIndices.size === lines.length ? "Collapse all" : "Expand all"}
+                  </button>
+                </div>
+              </div>
 
-                    {/* Line Card Body */}
-                    <div className="supplier-line-card-body">
-                      {/* Grid 1: Basic Pricing & Quantities */}
-                      <div className="supplier-pricing-grid">
-                        {/* Quoted Unit Price (cr49f_unitprice) */}
-                        <div className="supplier-field-group">
-                          <label className="supplier-field-label">
-                            <span>Quoted Unit Price<span className="supplier-req-star">*</span></span>
-                            {calc.baseAmount > 0 && (
-                              <span className="supplier-field-calc-hint blue">
-                                Gross: ${calc.baseAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                              </span>
-                            )}
-                          </label>
-                          <div className="supplier-input-wrap">
-                            <span className="supplier-input-prefix">$</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              className="supplier-input-field has-prefix"
-                              placeholder="0.00"
-                              value={line.unitPrice === 0 ? "" : line.unitPrice}
-                              onChange={(e) => handleLineChange(idx, "unitPrice", e.target.value)}
-                              disabled={isSubmitted}
-                              style={{ fontWeight: 600 }}
-                            />
+              {/* Line Item Accordion Cards */}
+              <div className="supplier-line-accordions-list">
+                {lines.map((line, idx) => {
+                  const isExpanded = expandedLineIndices.has(idx);
+                  const calc = calculateLineTotal(
+                    line.unitPrice,
+                    line.offeredQuantity,
+                    line.discount,
+                    line.tax,
+                    line.anyAdditionalCharges,
+                    line.additionalChargePercentage
+                  );
+                  const seqNum = String(idx + 1).padStart(2, "0");
+
+                  return (
+                    <div
+                      key={line.id || idx}
+                      className={`supplier-line-accordion ${isExpanded ? "expanded" : ""}`}
+                    >
+                      {/* Clickable Card Header */}
+                      <div
+                        className="supplier-line-accordion-header"
+                        onClick={() => toggleLineExpanded(idx)}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isExpanded}
+                      >
+                        <div className="supplier-line-accordion-header-left">
+                          <span className="supplier-line-seq">{seqNum}</span>
+                          <div className="supplier-line-icon-box">
+                            <Package size={16} />
+                          </div>
+                          <div className="supplier-line-info">
+                            <h4 className="supplier-line-name">{line.itemName}</h4>
+                            <span className="supplier-line-category-code">
+                              {(line.category || "GENERAL ACCESSORIES").toUpperCase()} • LOG-{seqNum}00
+                            </span>
                           </div>
                         </div>
 
-                        {/* Offered Quantity (cr49f_quantity) */}
-                        <div className="supplier-field-group">
-                          <label className="supplier-field-label">
-                            <span>Offered Quantity<span className="supplier-req-star">*</span></span>
-                            <span style={{ fontSize: 11, color: "#64748b" }}>Req: {line.requestedQuantity}</span>
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            className="supplier-input-field"
-                            value={line.offeredQuantity}
-                            onChange={(e) => handleLineChange(idx, "offeredQuantity", e.target.value)}
-                            disabled={isSubmitted}
-                          />
-                        </div>
-
-                        {/* Discount % (cr49f_discount) */}
-                        <div className="supplier-field-group">
-                          <label className="supplier-field-label">
-                            <span>Discount (%)</span>
-                            {calc.discountAmount > 0 && (
-                              <span className="supplier-field-calc-hint green">
-                                -${calc.discountAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                              </span>
-                            )}
-                          </label>
-                          <div className="supplier-input-wrap">
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              max="100"
-                              className="supplier-input-field has-suffix"
-                              placeholder="0"
-                              value={line.discount === 0 ? "" : line.discount}
-                              onChange={(e) => handleLineChange(idx, "discount", e.target.value)}
-                              disabled={isSubmitted}
-                            />
-                            <span className="supplier-input-suffix">%</span>
+                        <div className="supplier-line-accordion-header-right">
+                          <div className="supplier-line-metric">
+                            <span className="supplier-line-metric-label">REQUESTED</span>
+                            <span className="supplier-line-metric-val">
+                              {line.requestedQuantity} unit
+                            </span>
                           </div>
-                        </div>
 
-                        {/* Tax % (cr49f_tax) */}
-                        <div className="supplier-field-group">
-                          <label className="supplier-field-label">
-                            <span>Tax / GST / VAT (%)</span>
-                            {calc.taxAmount > 0 && (
-                              <span className="supplier-field-calc-hint amber">
-                                +${calc.taxAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                              </span>
-                            )}
-                          </label>
-                          <div className="supplier-input-wrap">
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              max="100"
-                              className="supplier-input-field has-suffix"
-                              placeholder="0"
-                              value={line.tax === 0 ? "" : line.tax}
-                              onChange={(e) => handleLineChange(idx, "tax", e.target.value)}
-                              disabled={isSubmitted}
-                            />
-                            <span className="supplier-input-suffix">%</span>
+                          <div className="supplier-line-metric total">
+                            <span className="supplier-line-metric-label">LINE TOTAL</span>
+                            <span className="supplier-line-metric-val price">
+                              {formatCurrency(calc.totalPrice)}
+                            </span>
                           </div>
+
+                          <button
+                            type="button"
+                            className="supplier-line-chevron-btn"
+                            aria-label={isExpanded ? "Collapse item" : "Expand item"}
+                          >
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </button>
                         </div>
                       </div>
 
-                      {/* Additional Charges Section (cr49f_anyadditionalcharges, cr49f_additionalchargepercentage, cr49f_additionalchargesdetails) */}
-                      <div className="supplier-addl-charges-box">
-                        <div className="supplier-addl-header-row">
-                          <div className="supplier-addl-title">
-                            <Truck size={14} color="#d97706" />
-                            <span>Additional Charges (Freight, Packaging, Customs, Tooling)</span>
-                          </div>
-
-                          <div className="supplier-segmented-toggle">
-                            <button
-                              type="button"
-                              className={`supplier-toggle-btn ${!line.anyAdditionalCharges ? "active" : ""}`}
-                              onClick={() => handleLineChange(idx, "anyAdditionalCharges", false)}
-                              disabled={isSubmitted}
-                            >
-                              No (Included)
-                            </button>
-                            <button
-                              type="button"
-                              className={`supplier-toggle-btn ${line.anyAdditionalCharges ? "active yes" : ""}`}
-                              onClick={() => handleLineChange(idx, "anyAdditionalCharges", true)}
-                              disabled={isSubmitted}
-                            >
-                              Yes (+ Extra Charges)
-                            </button>
-                          </div>
-                        </div>
-
-                        {line.anyAdditionalCharges && (
-                          <div className="supplier-addl-fields-grid">
-                            <div className="supplier-field-group">
-                              <label className="supplier-field-label">
-                                <span>Additional Charge (%)<span className="supplier-req-star">*</span></span>
-                                {calc.additionalChargesAmount > 0 && (
-                                  <span className="supplier-field-calc-hint amber">
-                                    +${calc.additionalChargesAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                  </span>
-                                )}
+                      {/* Expandable Form Body */}
+                      {isExpanded && (
+                        <div className="supplier-line-accordion-body">
+                          {/* 4-Column Pricing & Quantities */}
+                          <div className="supplier-pricing-grid-4">
+                            {/* Quoted Unit Price */}
+                            <div className="supplier-input-block">
+                              <label className="supplier-input-label">
+                                <span>
+                                  QUOTED UNIT PRICE <span className="supplier-req-star">*</span>
+                                </span>
                               </label>
-                              <div className="supplier-input-wrap">
+                              <div className="supplier-input-affix-wrap">
+                                <span className="supplier-input-prefix">₹</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  className="supplier-form-control has-prefix"
+                                  placeholder="0.00"
+                                  value={line.unitPrice === 0 ? "" : line.unitPrice}
+                                  onChange={(e) => handleLineChange(idx, "unitPrice", e.target.value)}
+                                  disabled={isSubmitted}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Offered Quantity */}
+                            <div className="supplier-input-block">
+                              <label className="supplier-input-label">
+                                <span>
+                                  OFFERED QUANTITY <span className="supplier-req-star">*</span>
+                                </span>
+                                <span className="supplier-req-helper">
+                                  Requested: {line.requestedQuantity}
+                                </span>
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                className="supplier-form-control"
+                                value={line.offeredQuantity}
+                                onChange={(e) => handleLineChange(idx, "offeredQuantity", e.target.value)}
+                                disabled={isSubmitted}
+                              />
+                            </div>
+
+                            {/* Discount */}
+                            <div className="supplier-input-block">
+                              <label className="supplier-input-label">
+                                <span>DISCOUNT</span>
+                              </label>
+                              <div className="supplier-input-affix-wrap">
                                 <input
                                   type="number"
                                   step="0.1"
                                   min="0"
                                   max="100"
-                                  className="supplier-input-field has-suffix"
-                                  placeholder="e.g. 5"
-                                  value={line.additionalChargePercentage === 0 ? "" : line.additionalChargePercentage}
-                                  onChange={(e) => handleLineChange(idx, "additionalChargePercentage", e.target.value)}
+                                  className="supplier-form-control has-suffix"
+                                  placeholder="0"
+                                  value={line.discount === 0 ? "" : line.discount}
+                                  onChange={(e) => handleLineChange(idx, "discount", e.target.value)}
                                   disabled={isSubmitted}
-                                  style={{ fontWeight: 600 }}
                                 />
                                 <span className="supplier-input-suffix">%</span>
                               </div>
                             </div>
 
-                            <div className="supplier-field-group">
-                              <label className="supplier-field-label">
-                                <span>Additional Charges Details &amp; Specifications<span className="supplier-req-star">*</span></span>
+                            {/* Tax / GST / VAT */}
+                            <div className="supplier-input-block">
+                              <label className="supplier-input-label">
+                                <span>TAX / GST / VAT</span>
                               </label>
-                              <input
-                                type="text"
-                                className="supplier-input-field"
-                                placeholder="Describe extra charges (e.g., Express shipping & handling, wooden palletizing, insurance, lead time: 5 days...)"
-                                value={line.additionalChargesDetails || ""}
-                                onChange={(e) => handleLineChange(idx, "additionalChargesDetails", e.target.value)}
-                                disabled={isSubmitted}
-                              />
+                              <div className="supplier-input-affix-wrap">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="100"
+                                  className="supplier-form-control has-suffix"
+                                  placeholder="0"
+                                  value={line.tax === 0 ? "" : line.tax}
+                                  onChange={(e) => handleLineChange(idx, "tax", e.target.value)}
+                                  disabled={isSubmitted}
+                                />
+                                <span className="supplier-input-suffix">%</span>
+                              </div>
                             </div>
                           </div>
-                        )}
-                      </div>
 
-                      {/* Live Calculation Math Strip */}
-                      <div className="supplier-formula-strip">
-                        <span className="supplier-formula-step">
-                          Gross: <strong>${calc.baseAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
-                        </span>
-                        <span className="supplier-formula-arrow">&rarr;</span>
-                        <span className="supplier-formula-step">
-                          Discount: <strong style={{ color: "#059669" }}>-${calc.discountAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({line.discount || 0}%)</strong>
-                        </span>
-                        <span className="supplier-formula-arrow">&rarr;</span>
-                        {line.anyAdditionalCharges && (
-                          <>
-                            <span className="supplier-formula-step">
-                              Addl Chg: <strong style={{ color: "#d97706" }}>+${calc.additionalChargesAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({line.additionalChargePercentage || 0}%)</strong>
-                            </span>
-                            <span className="supplier-formula-arrow">&rarr;</span>
-                          </>
-                        )}
-                        <span className="supplier-formula-step">
-                          Tax: <strong style={{ color: "#d97706" }}>+${calc.taxAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({line.tax || 0}%)</strong>
-                        </span>
-                        <span className="supplier-formula-step highlight">
-                          Line Total: ${calc.totalPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
+                          {/* Additional Charges Section */}
+                          <div className="supplier-charge-row-card">
+                            <div className="supplier-charge-header">
+                              <div className="supplier-charge-left">
+                                <Truck size={15} color="#64748b" />
+                                <div>
+                                  <span className="supplier-charge-title">Additional charges</span>
+                                  <span className="supplier-charge-desc">
+                                    Freight, packaging, customs or tooling
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="supplier-pill-toggle">
+                                <button
+                                  type="button"
+                                  className={`supplier-pill-toggle-btn ${!line.anyAdditionalCharges ? "active" : ""}`}
+                                  onClick={() => handleLineChange(idx, "anyAdditionalCharges", false)}
+                                  disabled={isSubmitted}
+                                >
+                                  Included
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`supplier-pill-toggle-btn ${line.anyAdditionalCharges ? "active" : ""}`}
+                                  onClick={() => handleLineChange(idx, "anyAdditionalCharges", true)}
+                                  disabled={isSubmitted}
+                                >
+                                  Add charges
+                                </button>
+                              </div>
+                            </div>
+
+                            {line.anyAdditionalCharges && (
+                              <div className="supplier-charge-fields-grid">
+                                <div className="supplier-input-block">
+                                  <label className="supplier-input-label">
+                                    <span>ADDITIONAL CHARGE (%) *</span>
+                                  </label>
+                                  <div className="supplier-input-affix-wrap">
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      min="0"
+                                      max="100"
+                                      className="supplier-form-control has-suffix"
+                                      placeholder="e.g. 5"
+                                      value={line.additionalChargePercentage === 0 ? "" : line.additionalChargePercentage}
+                                      onChange={(e) =>
+                                        handleLineChange(idx, "additionalChargePercentage", e.target.value)
+                                      }
+                                      disabled={isSubmitted}
+                                    />
+                                    <span className="supplier-input-suffix">%</span>
+                                  </div>
+                                </div>
+
+                                <div className="supplier-input-block">
+                                  <label className="supplier-input-label">
+                                    <span>CHARGES DETAILS &amp; DESCRIPTION *</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="supplier-form-control"
+                                    placeholder="e.g. Express shipping &amp; wooden crating"
+                                    value={line.additionalChargesDetails || ""}
+                                    onChange={(e) =>
+                                      handleLineChange(idx, "additionalChargesDetails", e.target.value)
+                                    }
+                                    disabled={isSubmitted}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Line Calculation Math Footer Strip */}
+                          <div className="supplier-line-summary-strip">
+                            <div className="supplier-line-summary-breakdown">
+                              <span>Gross {formatCurrency(calc.baseAmount)}</span>
+                              <span className="bullet">•</span>
+                              <span>Discount - {formatCurrency(calc.discountAmount)}</span>
+                              <span className="bullet">•</span>
+                              {line.anyAdditionalCharges && (
+                                <>
+                                  <span>Addl Chg + {formatCurrency(calc.additionalChargesAmount)}</span>
+                                  <span className="bullet">•</span>
+                                </>
+                              )}
+                              <span>Tax {formatCurrency(calc.taxAmount)}</span>
+                            </div>
+
+                            <div className="supplier-line-summary-total">
+                              <span>Total {formatCurrency(calc.totalPrice)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  );
+                })}
+              </div>
+
+              {/* Commercial Terms Card */}
+              <div className="supplier-terms-card">
+                <div className="supplier-terms-header">
+                  <div className="supplier-terms-icon-wrap">
+                    <FileText size={16} />
                   </div>
-                );
-              })}
+                  <div>
+                    <h3 className="supplier-terms-title">Commercial terms</h3>
+                    <p className="supplier-terms-subtitle">
+                      Confirm delivery, payment and warranty conditions.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="supplier-terms-grid-3">
+                  <div className="supplier-input-block">
+                    <label className="supplier-input-label">
+                      <span>
+                        PROMISED DELIVERY DATE <span className="supplier-req-star">*</span>
+                      </span>
+                    </label>
+                    <input
+                      type="date"
+                      className="supplier-form-control"
+                      value={deliveryDate}
+                      onChange={(e) => setDeliveryDate(e.target.value)}
+                      disabled={isSubmitted}
+                    />
+                  </div>
+
+                  <div className="supplier-input-block">
+                    <label className="supplier-input-label">
+                      <span>PAYMENT TERMS</span>
+                    </label>
+                    <select
+                      className="supplier-form-control select"
+                      value={paymentTerms}
+                      onChange={(e) => setPaymentTerms(e.target.value)}
+                      disabled={isSubmitted}
+                    >
+                      <option value="Net 30 days">Net 30 days</option>
+                      <option value="Net 15 days">Net 15 days</option>
+                      <option value="Net 45 days">Net 45 days</option>
+                      <option value="Net 60 days">Net 60 days</option>
+                      <option value="Immediate upon delivery">Immediate upon delivery</option>
+                      <option value="50% Advance, 50% on Delivery">50% Advance, 50% on Delivery</option>
+                    </select>
+                  </div>
+
+                  <div className="supplier-input-block">
+                    <label className="supplier-input-label">
+                      <span>WARRANTY &amp; SUPPORT TERMS</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="supplier-form-control"
+                      placeholder="1 year standard warranty"
+                      value={warranty}
+                      onChange={(e) => setWarranty(e.target.value)}
+                      disabled={isSubmitted}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Commercial Terms Form (Parent Response Level) */}
-            <div className="supplier-terms-grid">
-              <div className="supplier-term-box">
-                <label>Promised Delivery Date</label>
-                <input
-                  type="date"
-                  className="supplier-input-field"
-                  value={deliveryDate}
-                  onChange={(e) => setDeliveryDate(e.target.value)}
-                  disabled={isSubmitted}
-                />
-              </div>
-
-              <div className="supplier-term-box">
-                <label>Payment Terms</label>
-                <select
-                  className="supplier-input-field"
-                  value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
-                  disabled={isSubmitted}
-                >
-                  <option value="Net 30">Net 30 Days</option>
-                  <option value="Net 15">Net 15 Days</option>
-                  <option value="Net 45">Net 45 Days</option>
-                  <option value="Net 60">Net 60 Days</option>
-                  <option value="Immediate">Immediate / Upon Delivery</option>
-                  <option value="50% Advance, 50% on Delivery">50% Advance, 50% on Delivery</option>
-                </select>
-              </div>
-
-              <div className="supplier-term-box">
-                <label>Warranty &amp; Support Terms</label>
-                <input
-                  type="text"
-                  className="supplier-input-field"
-                  placeholder="e.g. 1 Year Comprehensive On-site + 24/7 Phone Support"
-                  value={warranty}
-                  onChange={(e) => setWarranty(e.target.value)}
-                  disabled={isSubmitted}
-                />
-              </div>
-            </div>
-
-            {/* Financial Summary & Actions Card */}
-            <div className="supplier-quote-summary-card">
-              <div className="supplier-quote-summary-breakdown">
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                  <DollarSign size={14} color="#2563eb" />
-                  Quotation Financial Breakdown
+            {/* Right Column: Sticky Quote Summary Card */}
+            <div className="supplier-quote-sidebar">
+              <div className="supplier-quote-summary-card">
+                {/* Header */}
+                <div className="supplier-summary-card-header">
+                  <div className="supplier-summary-icon-box">
+                    <Sparkles size={16} />
+                  </div>
+                  <div>
+                    <h3 className="supplier-summary-title">Quote summary</h3>
+                    <span className="supplier-summary-rfq-num">
+                      {rfq?.cr49f_rfqnumber || "RFQ-1005"}
+                    </span>
+                  </div>
                 </div>
-                <div className="supplier-summary-row">
-                  <span>Gross Subtotal ({lines.length} items)</span>
-                  <strong>${quotationFinancials.grossTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+
+                {/* Progress bar */}
+                <div className="supplier-summary-progress-box">
+                  <div className="supplier-summary-progress-label-row">
+                    <span className="supplier-progress-label">Response progress</span>
+                    <span className="supplier-progress-val">{progressPercent}%</span>
+                  </div>
+                  <div className="supplier-progress-track">
+                    <div
+                      className="supplier-progress-fill"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <div className="supplier-progress-hint">
+                    {progressPercent === 100
+                      ? "All details completed — ready to submit quotation!"
+                      : !deliveryDate
+                      ? "Almost there — add your delivery date."
+                      : `${completedLinesCount} of ${lines.length} items priced.`}
+                  </div>
                 </div>
-                {quotationFinancials.discountTotal > 0 && (
-                  <div className="supplier-summary-row" style={{ color: "#059669" }}>
-                    <span>Total Discounts Deducted</span>
-                    <strong>-${quotationFinancials.discountTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+
+                {/* Itemized Line Items List */}
+                <div className="supplier-summary-items-list">
+                  {lines.map((line, idx) => {
+                    const calc = calculateLineTotal(
+                      line.unitPrice,
+                      line.offeredQuantity,
+                      line.discount,
+                      line.tax,
+                      line.anyAdditionalCharges,
+                      line.additionalChargePercentage
+                    );
+                    const seqNum = String(idx + 1).padStart(2, "0");
+
+                    return (
+                      <div
+                        key={line.id || idx}
+                        className="supplier-summary-item-row"
+                        onClick={() => {
+                          setExpandedLineIndices((prev) => new Set(prev).add(idx));
+                        }}
+                        title="Click to view/edit this line item"
+                      >
+                        <div className="supplier-summary-item-left">
+                          <span className="supplier-summary-item-seq">{seqNum}</span>
+                          <span className="supplier-summary-item-name" title={line.itemName}>
+                            {line.itemName}
+                          </span>
+                        </div>
+                        <span className="supplier-summary-item-price">
+                          {formatCurrency(calc.totalPrice)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="supplier-summary-divider" />
+
+                {/* Grand Total */}
+                <div className="supplier-summary-total-box">
+                  <span className="supplier-summary-total-label">GRAND TOTAL QUOTATION</span>
+                  <div className="supplier-summary-total-val">
+                    {formatCurrency(quotationFinancials.grandTotal)}
                   </div>
-                )}
-                {quotationFinancials.addlChargesTotal > 0 && (
-                  <div className="supplier-summary-row" style={{ color: "#d97706" }}>
-                    <span>Total Additional Charges (Freight, Handling, etc.)</span>
-                    <strong>+${quotationFinancials.addlChargesTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
-                  </div>
-                )}
-                {quotationFinancials.taxTotal > 0 && (
-                  <div className="supplier-summary-row" style={{ color: "#d97706" }}>
-                    <span>Total Estimated Taxes</span>
-                    <strong>+${quotationFinancials.taxTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
-                  </div>
-                )}
-                <div className="supplier-summary-row total">
-                  <span>Grand Total Quotation Amount</span>
-                  <span className="supplier-grand-total">
-                    ${quotationFinancials.grandTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <span className="supplier-summary-total-caption">
+                    Taxes and charges included
                   </span>
                 </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 12 }}>
-                {!isSubmitted ? (
-                  <>
-                    <button
-                      type="button"
-                      className="supplier-btn-submit"
-                      onClick={handleSubmitResponse}
-                      disabled={savingDraft || submitting || quotationFinancials.grandTotal <= 0}
-                      style={{ padding: "12px 20px", fontSize: 13.5, justifyContent: "center" }}
-                    >
-                      {submitting ? (
-                        <>
-                          <RefreshCw size={15} className="rfq-spinner" />
-                          Submitting Quotation...
-                        </>
-                      ) : (
-                        <>
-                          <Send size={15} />
-                          Submit Response
-                        </>
-                      )}
-                    </button>
+                {/* Action Buttons */}
+                <div className="supplier-summary-actions">
+                  {!isSubmitted ? (
+                    <>
+                      <button
+                        type="button"
+                        className="supplier-btn-submit-action"
+                        onClick={handleSubmitResponse}
+                        disabled={savingDraft || submitting || quotationFinancials.grandTotal <= 0}
+                      >
+                        {submitting ? (
+                          <>
+                            <RefreshCw size={15} className="rfq-spinner" />
+                            <span>Submitting Response...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Submit response</span>
+                            <Send size={14} />
+                          </>
+                        )}
+                      </button>
 
-                    <button
-                      type="button"
-                      className="supplier-btn-draft"
-                      onClick={handleSaveDraft}
-                      disabled={savingDraft || submitting}
-                      style={{ padding: "10px 18px", justifyContent: "center" }}
-                    >
-                      {savingDraft ? (
-                        <>
-                          <RefreshCw size={14} className="rfq-spinner" />
-                          Saving Draft...
-                        </>
-                      ) : (
-                        <>
-                          <Save size={14} />
-                          Save as Draft
-                        </>
-                      )}
-                    </button>
-                  </>
-                ) : (
-                  <div style={{ textAlign: "center", padding: 12, background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: 8, color: "#065f46" }}>
-                    <CheckCircle2 size={20} style={{ margin: "0 auto 6px" }} />
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>Quotation Submitted</div>
-                    <div style={{ fontSize: 11.5, color: "#475569", marginTop: 2 }}>Locked in Dataverse</div>
-                  </div>
-                )}
+                      <button
+                        type="button"
+                        className="supplier-btn-draft-action"
+                        onClick={handleSaveDraft}
+                        disabled={savingDraft || submitting}
+                      >
+                        {savingDraft ? (
+                          <>
+                            <RefreshCw size={14} className="rfq-spinner" />
+                            <span>Saving Draft...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save size={14} />
+                            <span>Save as draft</span>
+                          </>
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="supplier-submitted-status-box">
+                      <CheckCircle2 size={18} color="#059669" />
+                      <div>
+                        <strong>Quotation Submitted</strong>
+                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#64748b" }}>
+                          Locked in Dataverse for evaluation
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Privacy note */}
+                <div className="supplier-summary-privacy-note">
+                  <Check size={12} color="#10b981" />
+                  <span>Your quote remains private until submission</span>
+                </div>
               </div>
             </div>
           </div>

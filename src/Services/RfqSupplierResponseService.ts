@@ -12,7 +12,7 @@ import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_reque
 import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
 
-export type SupplierResponseStatus = "Invited" | "Draft" | "Submitted";
+export type SupplierResponseStatus = "Invited" | "Draft" | "Submitted" | "Rewarded";
 
 export interface SupplierRfqInvitation {
   rfqId: string;
@@ -30,6 +30,7 @@ export interface SupplierRfqInvitation {
   paymentTerms?: string;
   warranty?: string;
   itemCount: number;
+  isRewarded?: boolean;
 }
 
 export interface SupplierResponseLineItem {
@@ -579,13 +580,23 @@ export async function getSupplierInvitations(
       r.cr49f_responseid?.includes(`RFQ:${rfqId}`)
     );
 
+    const isRewarded =
+      Number(rfq.cr49f_status) === 1 ||
+      Boolean(rfq.cr49f_awarddate) ||
+      rfq.cr49f_statusname?.toLowerCase() === "approved" ||
+      rfq.cr49f_statusname?.toLowerCase() === "rewarded";
+
     let status: SupplierResponseStatus = "Invited";
-    if (parentResp) {
+    if (isRewarded && parentResp && (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate)) {
+      status = "Rewarded";
+    } else if (parentResp) {
       if (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate) {
         status = "Submitted";
       } else if (parentResp.cr49f_totalamount && parentResp.cr49f_totalamount > 0) {
         status = "Draft";
       }
+    } else if (isRewarded) {
+      status = "Rewarded";
     }
 
     invitations.push({
@@ -604,6 +615,7 @@ export async function getSupplierInvitations(
       paymentTerms: parentResp?.cr49f_paymentterms,
       warranty: parentResp?.cr49f_warranty,
       itemCount: 0,
+      isRewarded,
     });
   }
 
