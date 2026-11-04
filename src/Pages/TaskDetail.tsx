@@ -2087,7 +2087,7 @@ function ModernDataverseTaskDetail({
                 rows={4}
                 value={changesFeedbackText}
                 onChange={(e) => setChangesFeedbackText(e.target.value)}
-                placeholder={`Describe what adjustments, price corrections, or updates are needed on this ${shortType}...`}
+                placeholder={`Describe what adjustments, quantity updates, or specification changes are needed on this ${shortType}...`}
                 autoFocus
               />
             </div>

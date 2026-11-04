@@ -8,7 +8,10 @@ import {
   ClipboardCheck,
   FileText,
   ReceiptText,
+  RotateCcw,
   ScrollText,
+  Search,
+  X,
 } from "lucide-react";
 import { taskInboxItems } from "../data/tasks";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
@@ -56,6 +59,12 @@ const TaskInbox: React.FC = () => {
   const [dataverseTasks, setDataverseTasks] = useState<WorkQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
+
+  // Filters State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
 
   const fetchTasks = useCallback(async () => {
     setIsLoading(true);
@@ -154,15 +163,45 @@ const TaskInbox: React.FC = () => {
           cleanGuid(raw.cr49f_po as string);
 
         const statusLabel = getTaskApprovalStatusLabel(t);
-        const isActive =
+        const taskId = cleanGuid(t.cr49f_approvaltasksid) || String(idx);
+
+        // Record status check: statecode 0 is Active, statuscode 2 is Inactive
+        const isRecordActive =
           (t.statecode === 0 || t.statecode === undefined || Number(t.statecode) === 0) &&
           Number(t.statuscode ?? 1) !== 2;
+
+        // Local storage override
+        const localActive = taskId && typeof window !== "undefined"
+          ? localStorage.getItem(`task_active_${taskId}`)
+          : null;
+        let isActive = localActive !== null ? localActive === "true" : isRecordActive;
+
+        // Approved or Rejected tasks are NOT active
+        if (statusLabel === "Approved" || statusLabel === "Rejected") {
+          isActive = false;
+        }
+        if (t.cr49f_approvedby && t.cr49f_approvedon) {
+          isActive = false;
+        }
+
+        // If parent PR or RFQ is in Changes Needed, all sequential tasks (sequence >= 1) are inactive
+        if (typeof window !== "undefined") {
+          const prStatus = prId ? localStorage.getItem(`pr_status_${prId}`) : null;
+          const rfqStatus = rfqId ? localStorage.getItem(`rfq_status_${rfqId}`) : null;
+          if ((prStatus === "Changes Needed" || rfqStatus === "Changes Needed") && (t.cr49f_sequence ?? 0) >= 1) {
+            isActive = false;
+          }
+        }
+
+        // If this is a Changes Needed task, it is active unless explicitly deactivated
+        if (statusLabel === "Changes Needed" && localActive !== "false") {
+          isActive = true;
+        }
 
         let taskType: WorkQueueItem["taskType"] = "Purchase Request";
         let title = t.cr49f_task || `Task #${t.cr49f_sequence || idx + 1}`;
         let priority: "Low" | "Normal" | "High" = "Normal";
 
-        const taskId = cleanGuid(t.cr49f_approvaltasksid) || String(idx);
         const targetUrl = `/tasks/${taskId}`;
 
         const isRfq =
@@ -250,9 +289,9 @@ const TaskInbox: React.FC = () => {
   }, [fetchTasks]);
 
   // STRICT FILTER:
-  // Show only approval tasks which are active (statecode === 0) AND pending.
-  // If a task gets approved or rejected, or is inactive, it will NOT be shown.
-  const activePendingTasks = useMemo(() => {
+  // Show ONLY approval tasks which are active AND pending or changes needed.
+  // Completed, approved, rejected, and future-inactive sequential tasks are excluded.
+  const activeTasks = useMemo(() => {
     const source =
       dataverseTasks.length > 0 || hasLoaded
         ? dataverseTasks
@@ -269,12 +308,80 @@ const TaskInbox: React.FC = () => {
             targetUrl: `/tasks/${task.id}`,
           }));
 
-    return source.filter((task) => task.isActive && (task.status === "Pending" || task.status === "Changes Needed"));
+    return source.filter(
+      (task) => task.isActive && (task.status === "Pending" || task.status === "Changes Needed")
+    );
   }, [dataverseTasks, hasLoaded]);
 
-  const pages = Math.max(1, Math.ceil(activePendingTasks.length / PAGE_SIZE));
-  const start = activePendingTasks.length ? (page - 1) * PAGE_SIZE : 0;
-  const shown = activePendingTasks.slice(start, start + PAGE_SIZE);
+  // Tab counts for active tasks
+  const typeCounts = useMemo(() => {
+    const counts = {
+      ALL: activeTasks.length,
+      PR: 0,
+      RFQ: 0,
+      PO: 0,
+    };
+    for (const t of activeTasks) {
+      if (t.taskType === "Purchase Request") counts.PR++;
+      else if (t.taskType === "Request for Quotation") counts.RFQ++;
+      else if (t.taskType === "Purchase Order") counts.PO++;
+    }
+    return counts;
+  }, [activeTasks]);
+
+  // Filtered active tasks based on user selections
+  const filteredTasks = useMemo(() => {
+    return activeTasks.filter((task) => {
+      // 1. Type filter
+      if (typeFilter === "PR" && task.taskType !== "Purchase Request") return false;
+      if (typeFilter === "RFQ" && task.taskType !== "Request for Quotation") return false;
+      if (typeFilter === "PO" && task.taskType !== "Purchase Order") return false;
+
+      // 2. Status filter
+      if (statusFilter === "CHANGES_NEEDED" && task.status !== "Changes Needed") return false;
+      if (statusFilter === "PENDING" && task.status !== "Pending") return false;
+
+      // 3. Priority filter
+      if (
+        priorityFilter !== "ALL" &&
+        (task.priority || "Normal").toLowerCase() !== priorityFilter.toLowerCase()
+      ) {
+        return false;
+      }
+
+      // 4. Search text filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchName = task.taskName.toLowerCase().includes(q);
+        const matchType = task.taskType.toLowerCase().includes(q);
+        const matchAssignee = task.assignedTo.toLowerCase().includes(q);
+        const matchDesc = task.description ? task.description.toLowerCase().includes(q) : false;
+        if (!matchName && !matchType && !matchAssignee && !matchDesc) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [activeTasks, typeFilter, statusFilter, priorityFilter, searchQuery]);
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    typeFilter !== "ALL" ||
+    statusFilter !== "ALL" ||
+    priorityFilter !== "ALL";
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setTypeFilter("ALL");
+    setStatusFilter("ALL");
+    setPriorityFilter("ALL");
+    setPage(1);
+  };
+
+  const pages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
+  const start = filteredTasks.length ? (page - 1) * PAGE_SIZE : 0;
+  const shown = filteredTasks.slice(start, start + PAGE_SIZE);
 
   // Automatically reset to last valid page if total count changes
   useEffect(() => {
@@ -309,22 +416,144 @@ const TaskInbox: React.FC = () => {
           <span className="cc-eyebrow">WORK QUEUE</span>
           <h2>My Procurement Tasks</h2>
         </div>
-        <span className="work-queue-total">
-          {activePendingTasks.length} {activePendingTasks.length === 1 ? "task" : "tasks"} pending
-        </span>
+        <div className="work-queue-header-right">
+          <span className="work-queue-total">
+            {hasActiveFilters
+              ? `Showing ${filteredTasks.length} of ${activeTasks.length} active tasks`
+              : `${activeTasks.length} ${activeTasks.length === 1 ? "task" : "tasks"} active`}
+          </span>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              className="work-queue-reset-btn"
+              onClick={handleResetFilters}
+              title="Reset all filters"
+            >
+              <RotateCcw size={11} />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
       </header>
 
+      {/* Tabs for quick filtering by task type */}
+      <div className="work-queue-tabs">
+        <button
+          type="button"
+          className={typeFilter === "ALL" ? "active" : ""}
+          onClick={() => {
+            setTypeFilter("ALL");
+            setPage(1);
+          }}
+        >
+          All <span>({typeCounts.ALL})</span>
+        </button>
+        <button
+          type="button"
+          className={typeFilter === "PR" ? "active" : ""}
+          onClick={() => {
+            setTypeFilter("PR");
+            setPage(1);
+          }}
+        >
+          Purchase Requests <span>({typeCounts.PR})</span>
+        </button>
+        <button
+          type="button"
+          className={typeFilter === "RFQ" ? "active" : ""}
+          onClick={() => {
+            setTypeFilter("RFQ");
+            setPage(1);
+          }}
+        >
+          RFQs <span>({typeCounts.RFQ})</span>
+        </button>
+        <button
+          type="button"
+          className={typeFilter === "PO" ? "active" : ""}
+          onClick={() => {
+            setTypeFilter("PO");
+            setPage(1);
+          }}
+        >
+          Purchase Orders <span>({typeCounts.PO})</span>
+        </button>
+      </div>
+
+      {/* Interactive Filter Bar */}
+      <div className="work-queue-filter-bar">
+        <div className="work-queue-search-box">
+          <Search size={13} className="work-queue-search-icon" />
+          <input
+            type="text"
+            className="work-queue-search-input"
+            placeholder="Search active tasks by title, number, or keyword..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="work-queue-search-clear"
+              onClick={() => {
+                setSearchQuery("");
+                setPage(1);
+              }}
+              title="Clear search"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        <div className="work-queue-filter-selects">
+          <select
+            className="work-queue-select"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by Status"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="PENDING">Pending Approval</option>
+            <option value="CHANGES_NEEDED">Changes Needed</option>
+          </select>
+
+          <select
+            className="work-queue-select"
+            value={priorityFilter}
+            onChange={(e) => {
+              setPriorityFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by Priority"
+          >
+            <option value="ALL">All Priorities</option>
+            <option value="high">High Priority</option>
+            <option value="normal">Normal Priority</option>
+            <option value="low">Low Priority</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Work Queue Task Rows */}
       <div className="work-queue-list">
         {isLoading && !hasLoaded ? (
           <div className="work-queue-empty">
-            <span>Loading pending approval tasks...</span>
+            <span>Loading active approval tasks...</span>
           </div>
         ) : shown.length ? (
           shown.map((task) => (
-            <article className="work-queue-row" key={task.id}>
-              <span
-                className={`work-queue-task-icon ${badge(task.taskType)}`}
-              >
+            <article
+              className={`work-queue-row ${task.status === "Changes Needed" ? "is-changes-needed" : ""}`}
+              key={task.id}
+            >
+              <span className={`work-queue-task-icon ${badge(task.taskType)}`}>
                 {taskIcon(task.taskType)}
               </span>
               <div className="work-queue-task-copy">
@@ -343,13 +572,24 @@ const TaskInbox: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <span
-                className={`work-queue-priority ${
-                  task.priority?.toLowerCase() ?? "normal"
-                }`}
-              >
-                {task.priority ?? "Normal"}
-              </span>
+
+              {task.status === "Changes Needed" ? (
+                <span
+                  className="work-queue-badge changes-needed"
+                  title="Action required: revisions requested by approver"
+                >
+                  Changes Needed
+                </span>
+              ) : (
+                <span
+                  className={`work-queue-priority ${
+                    task.priority?.toLowerCase() ?? "normal"
+                  }`}
+                >
+                  {task.priority ?? "Normal"}
+                </span>
+              )}
+
               <button
                 className="work-queue-review"
                 type="button"
@@ -361,13 +601,36 @@ const TaskInbox: React.FC = () => {
           ))
         ) : (
           <div className="work-queue-empty">
-            <span>No pending approval tasks. All tasks have been completed.</span>
+            {hasActiveFilters ? (
+              <div>
+                <p>No active tasks match your selected filters.</p>
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  style={{
+                    marginTop: 8,
+                    background: "none",
+                    border: "none",
+                    color: "var(--primary-hex, #2563eb)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  Reset filters
+                </button>
+              </div>
+            ) : (
+              <span>No pending approval tasks in queue. All active tasks have been completed.</span>
+            )}
           </div>
         )}
       </div>
 
+      {/* Pagination Footer */}
       <footer className="xt-foot work-queue-footer">
-        <span>Assigned date shown; due dates are not available.</span>
+        <span>Assigned date shown; displaying active tasks only.</span>
         <button
           type="button"
           aria-label="Previous page"
@@ -377,8 +640,8 @@ const TaskInbox: React.FC = () => {
           <ChevronLeft size={14} />
         </button>
         <span>
-          {activePendingTasks.length ? start + 1 : 0}–
-          {Math.min(start + PAGE_SIZE, activePendingTasks.length)} of {activePendingTasks.length}
+          {filteredTasks.length ? start + 1 : 0}–
+          {Math.min(start + PAGE_SIZE, filteredTasks.length)} of {filteredTasks.length}
         </span>
         <button
           type="button"
