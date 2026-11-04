@@ -665,8 +665,19 @@ function ModernDataverseTaskDetail({
       : "Medium"
     : "Medium";
 
-  // Stepper steps from siblingTasks
-  const displaySteps = siblingTasks.length > 0 ? siblingTasks : [task];
+  // Stepper milestones from siblingTasks: sequential approval milestones only (sequence >= 1, excluding changes needed tasks)
+  const displaySteps = (siblingTasks.length > 0 ? siblingTasks : [task])
+    .filter((s) => {
+      const sSeq = s.cr49f_sequence ?? 0;
+      const sStatus = getTaskApprovalStatusLabel(s);
+      const sTitle = String(s.cr49f_task || "").toLowerCase();
+      return (
+        sSeq >= 1 &&
+        sStatus !== "Changes Needed" &&
+        !sTitle.includes("changes needed")
+      );
+    })
+    .sort((a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0));
 
   return (
     <section className="task-page-container">
@@ -689,7 +700,7 @@ function ModernDataverseTaskDetail({
               <span>{reference}</span>
             )}
             <span className="separator">/</span>
-            <span>Task #{task.cr49f_sequence ?? 1}</span>
+            <span>{isChangesNeeded ? "Changes Needed Revision" : `Task #${task.cr49f_sequence ?? 1}`}</span>
           </div>
         </div>
 
@@ -700,9 +711,11 @@ function ModernDataverseTaskDetail({
                 <ShieldCheck size={11} />
                 {isPr ? "Purchase Request Approval" : isRfq ? "RFQ Approval" : "Approval Task"}
               </span>
-              <span className="task-seq-pill">
-                Step {task.cr49f_sequence ?? 1} of {displaySteps.length}
-              </span>
+              {!isChangesNeeded && displaySteps.length > 0 && (
+                <span className="task-seq-pill">
+                  Step {task.cr49f_sequence ?? 1} of {displaySteps.length}
+                </span>
+              )}
               <span className={`task-status-pill ${isApproved ? "approved" : isRejected ? "rejected" : isChangesNeeded ? "changes-needed" : isActive ? "active" : "pending"}`}>
                 <span className="dot" />
                 {isApproved
@@ -808,106 +821,102 @@ function ModernDataverseTaskDetail({
         </div>
       )}
 
-      {/* 3. Sequential Approval Cycle Stepper Card */}
-      <section className="task-workflow-card">
-        <div className="task-card-header">
-          <div className="task-card-header-left">
-            <div className="task-card-header-icon green">
-              <ShieldCheck size={16} />
+      {/* 3. Sequential Approval Cycle Stepper Card - Hidden on Changes Needed task */}
+      {!isChangesNeeded && displaySteps.length > 0 && (
+        <section className="task-workflow-card">
+          <div className="task-card-header">
+            <div className="task-card-header-left">
+              <div className="task-card-header-icon green">
+                <ShieldCheck size={16} />
+              </div>
+              <div className="task-card-header-titles">
+                <h2>Approval Workflow Sequence</h2>
+                <p>Step {task.cr49f_sequence ?? 1} of {displaySteps.length} configured in approval cycle</p>
+              </div>
             </div>
-            <div className="task-card-header-titles">
-              <h2>Approval Workflow Sequence</h2>
-              <p>Step {task.cr49f_sequence ?? 1} of {displaySteps.length} configured in approval cycle</p>
-            </div>
+            <span
+              className={`task-step-badge ${isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"}`}
+              style={{ fontSize: 11, padding: "3px 10px" }}
+            >
+              {isApproved ? "Approved" : isRejected ? "Rejected" : isActive ? "Current Action Step" : "Waiting in Sequence"}
+            </span>
           </div>
-          <span
-            className={`task-step-badge ${isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"}`}
-            style={{ fontSize: 11, padding: "3px 10px" }}
-          >
-            {isApproved ? "Approved" : isRejected ? "Rejected" : isActive ? "Current Action Step" : "Waiting in Sequence"}
-          </span>
-        </div>
 
-        <div className="task-workflow-stepper">
-          {displaySteps.map((stepItem, index) => {
-            const stepStatus = getTaskApprovalStatusLabel(stepItem);
-            const stepApproved = stepStatus === "Approved";
-            const stepRejected = stepStatus === "Rejected";
-            const stepActive = stepItem.statecode === 0 && stepStatus === "Pending";
-            const isCurrentViewed = cleanGuid(stepItem.cr49f_approvaltasksid) === cleanTaskId;
+          <div className="task-workflow-stepper">
+            {displaySteps.map((stepItem, index) => {
+              const stepStatus = getTaskApprovalStatusLabel(stepItem);
+              const stepApproved = stepStatus === "Approved";
+              const stepRejected = stepStatus === "Rejected";
+              const stepActive = stepItem.statecode === 0 && stepStatus === "Pending";
+              const isCurrentViewed = cleanGuid(stepItem.cr49f_approvaltasksid) === cleanTaskId;
 
-            const stepRole = stepItem.cr49f_role
-              ? (Cr49f_approvaltasksescr49f_role[stepItem.cr49f_role] || "Approver")
-              : "Approver";
-            const stepDept = stepItem.cr49f_department
-              ? (Cr49f_approvaltasksescr49f_department[stepItem.cr49f_department] || "IT")
-              : "IT";
+              const stepRole = stepItem.cr49f_role
+                ? (Cr49f_approvaltasksescr49f_role[stepItem.cr49f_role] || "Approver")
+                : "Approver";
+              const stepDept = stepItem.cr49f_department
+                ? (Cr49f_approvaltasksescr49f_department[stepItem.cr49f_department] || "IT")
+                : "IT";
 
-            return (
-              <button
-                type="button"
-                className={`task-step-item ${
-                  stepApproved
-                    ? "is-approved"
-                    : stepRejected
-                    ? "is-rejected"
-                    : stepActive
-                    ? "is-current-active"
-                    : ""
-                } ${isCurrentViewed ? "is-current" : ""}`}
-                key={stepItem.cr49f_approvaltasksid || index}
-                onClick={() => {
-                  if (stepItem.cr49f_approvaltasksid && !isCurrentViewed) {
-                    navigate(`/tasks/${stepItem.cr49f_approvaltasksid}`);
-                  }
-                }}
-                title={`Click to view Task #${stepItem.cr49f_sequence || index + 1}`}
-              >
-                <div className={`task-step-connector ${stepApproved ? "done" : ""}`} />
-                <div className="task-step-node">
-                  {(stepItem.cr49f_sequence ?? 0) === 0 || stepStatus === "Changes Needed" ? (
-                    <FileEdit size={14} />
-                  ) : stepApproved ? (
-                    <Check size={14} />
-                  ) : stepRejected ? (
-                    <XCircle size={14} />
-                  ) : (
-                    stepItem.cr49f_sequence || index + 1
-                  )}
-                </div>
-
-                <div className="task-step-details">
-                  <span className="task-step-title">{stepItem.cr49f_task || `Task #${index + 1}`}</span>
-                  <span className="task-step-meta">{stepRole} · {stepDept}</span>
-                  <span
-                    className={`task-step-badge ${
-                      stepApproved
-                        ? "approved"
-                        : stepRejected
-                        ? "rejected"
-                        : stepStatus === "Changes Needed"
-                        ? "changes-needed"
-                        : stepActive
-                        ? "active"
-                        : "pending"
-                    }`}
-                  >
-                    {stepApproved
-                      ? "Approved"
+              return (
+                <button
+                  type="button"
+                  className={`task-step-item ${
+                    stepApproved
+                      ? "is-approved"
                       : stepRejected
-                      ? "Rejected"
-                      : stepStatus === "Changes Needed"
-                      ? "Changes Needed"
+                      ? "is-rejected"
                       : stepActive
-                      ? "Action Needed"
-                      : "Pending"}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
+                      ? "is-current-active"
+                      : ""
+                  } ${isCurrentViewed ? "is-current" : ""}`}
+                  key={stepItem.cr49f_approvaltasksid || index}
+                  onClick={() => {
+                    if (stepItem.cr49f_approvaltasksid && !isCurrentViewed) {
+                      navigate(`/tasks/${stepItem.cr49f_approvaltasksid}`);
+                    }
+                  }}
+                  title={`Click to view Task #${stepItem.cr49f_sequence || index + 1}`}
+                >
+                  <div className={`task-step-connector ${stepApproved ? "done" : ""}`} />
+                  <div className="task-step-node">
+                    {stepApproved ? (
+                      <Check size={14} />
+                    ) : stepRejected ? (
+                      <XCircle size={14} />
+                    ) : (
+                      stepItem.cr49f_sequence || index + 1
+                    )}
+                  </div>
+
+                  <div className="task-step-details">
+                    <span className="task-step-title">{stepItem.cr49f_task || `Task #${index + 1}`}</span>
+                    <span className="task-step-meta">{stepRole} · {stepDept}</span>
+                    <span
+                      className={`task-step-badge ${
+                        stepApproved
+                          ? "approved"
+                          : stepRejected
+                          ? "rejected"
+                          : stepActive
+                          ? "active"
+                          : "pending"
+                      }`}
+                    >
+                      {stepApproved
+                        ? "Approved"
+                        : stepRejected
+                        ? "Rejected"
+                        : stepActive
+                        ? "Action Needed"
+                        : "Pending"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* 4. Two-Column Dashboard Layout */}
       <div className="task-grid-layout">
@@ -1468,7 +1477,9 @@ function ModernDataverseTaskDetail({
               <div className="task-info-list">
                 <div className="task-info-row">
                   <span className="label">Sequence Position</span>
-                  <strong className="value">Step #{task.cr49f_sequence ?? 1} in Workflow</strong>
+                  <strong className="value">
+                    {isChangesNeeded ? "Changes Required Revision" : `Step #${task.cr49f_sequence ?? 1} in Workflow`}
+                  </strong>
                 </div>
                 <div className="task-info-row">
                   <span className="label">Target SLA</span>

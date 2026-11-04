@@ -337,7 +337,13 @@ export default function PurchaseRequestDetail() {
     setLoadingTasks(true);
     try {
       const tasks = await getApprovalTasksForRecord(1, prId);
-      setApprovalTasks(tasks);
+      const filtered = tasks.filter(
+        (t) =>
+          (t.cr49f_sequence ?? 0) >= 1 &&
+          getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
+          !t.cr49f_task?.toLowerCase().includes("changes needed")
+      );
+      setApprovalTasks(filtered);
     } catch (err) {
       console.warn("Failed to load approval tasks:", err);
     } finally {

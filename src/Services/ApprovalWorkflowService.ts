@@ -892,7 +892,8 @@ export async function requestChangesOnTask(
   });
 
   // 2. Set approval status = Pending (1) and record status = Inactive on ALL existing sibling tasks
-  console.log(`[ApprovalWorkflow] Setting ${siblingTasks.length} existing tasks to Inactive Pending`);
+  // (All tasks get completely reset: any previously approved tasks also become pending and inactive)
+  console.log(`[ApprovalWorkflow] Resetting ${siblingTasks.length} existing tasks to Inactive Pending`);
   for (const sib of siblingTasks) {
     const sibId = cleanGuid(
       sib.cr49f_approvaltasksid ||
@@ -900,16 +901,33 @@ export async function requestChangesOnTask(
     );
     if (!sibId) continue;
 
+    const resetPayload: Record<string, unknown> = {
+      statecode: 1, // Inactive
+      statuscode: 2, // Inactive
+      cr49f_approvalstatus: 1 as any, // Pending
+      cr49f_approvedby: null,
+      cr49f_approvedon: null,
+    };
+
     try {
-      await Cr49f_approvaltasksesService.update(sibId, {
-        statecode: 1, // Inactive
-        statuscode: 2, // Inactive
-        cr49f_approvalstatus: 1 as any, // Pending
-        cr49f_approvedby: "",
-      } as any);
-    } catch (sibErr) {
-      console.warn(`[ApprovalWorkflow] Could not update sibling task ${sibId} to Inactive Pending:`, sibErr);
+      await Cr49f_approvaltasksesService.update(sibId, resetPayload as any);
+    } catch {
+      try {
+        await Cr49f_approvaltasksesService.update(sibId, {
+          statecode: 1,
+          statuscode: 2,
+          cr49f_approvalstatus: 1,
+          cr49f_approvedby: "",
+        } as any);
+      } catch (sibErr) {
+        console.warn(`[ApprovalWorkflow] Could not update sibling task ${sibId} to Inactive Pending:`, sibErr);
+      }
     }
+
+    void setTaskApprovalStatusInDataverse(sibId, "Pending", {
+      cr49f_approvedby: null,
+      cr49f_approvedon: null,
+    });
 
     if (typeof window !== "undefined") {
       localStorage.setItem(`task_active_${sibId}`, "false");
@@ -917,7 +935,15 @@ export async function requestChangesOnTask(
       localStorage.removeItem(`task_approved_by_${sibId}`);
       localStorage.removeItem(`task_approved_on_${sibId}`);
     }
-    void setTaskApprovalStatusInDataverse(sibId, "Pending");
+
+    // Reset in-memory task object completely
+    sib.cr49f_approvalstatus = 1 as any;
+    sib.statecode = 1 as any;
+    sib.statuscode = 2 as any;
+    sib.cr49f_approvedby = "";
+    sib.cr49f_approvedon = "";
+    delete (sib as any).cr49f_approvedby;
+    delete (sib as any).cr49f_approvedon;
   }
 
   // 3. Update parent record status to Changes Needed (cr49f_status: 2) in Dataverse
@@ -1399,33 +1425,44 @@ export async function getApprovalTasksForRecord(
         );
         if (tId) {
           const cached = localStorage.getItem(`task_approved_status_${tId}`);
-          const hasApprovedMetadata = Boolean(
-            t.cr49f_approvedby ||
-            t.cr49f_approvedon ||
-            raw.cr49f_approvedby ||
-            raw.cr49f_approvedon
-          );
+          const isParentChangesNeeded =
+            (objectType === 1 && localStorage.getItem(`pr_status_${cleanId}`) === "Changes Needed") ||
+            (objectType === 2 && localStorage.getItem(`rfq_status_${cleanId}`) === "Changes Needed");
 
-          const rawStatusVal = raw.cr49f_approvalstatus ?? raw.cr49f_ApprovalStatus ?? t.cr49f_approvalstatus;
-
-          if (cached === "Approved" || hasApprovedMetadata) {
+          if (cached === "Pending" || (isParentChangesNeeded && (t.cr49f_sequence ?? 0) >= 1)) {
+            // Task has been reset to Pending and Inactive
+            t.cr49f_approvalstatus = 1 as any;
+            t.statecode = 1 as any;
+            t.statuscode = 2 as any;
+            t.cr49f_approvedby = "";
+            t.cr49f_approvedon = "";
+            delete (raw as any).cr49f_approvedby;
+            delete (raw as any).cr49f_approvedon;
+            localStorage.setItem(`task_approved_status_${tId}`, "Pending");
+            localStorage.setItem(`task_active_${tId}`, "false");
+            localStorage.removeItem(`task_approved_by_${tId}`);
+            localStorage.removeItem(`task_approved_on_${tId}`);
+          } else if (cached === "Changes Needed" || (t.cr49f_sequence ?? 0) === 0) {
+            t.cr49f_approvalstatus = 4 as any;
+          } else if (cached === "Rejected") {
+            t.cr49f_approvalstatus = 3 as any;
+          } else if (cached === "Approved") {
             t.cr49f_approvalstatus = 2 as any;
-            localStorage.setItem(`task_approved_status_${tId}`, "Approved");
-
-            // Auto-heal: If Dataverse record has approved metadata but choice column is still Pending (1 or 0), sync 2 (Approved) in Dataverse!
-            if (rawStatusVal === 1 || rawStatusVal === 0 || rawStatusVal === 154890000 || rawStatusVal === 100000000 || rawStatusVal === "Pending") {
-              void setTaskApprovalStatusInDataverse(tId, "Approved");
-            }
-
-            // If task i is approved, the next sequential task (i+1) is active
             if (i + 1 < matched.length && matched[i + 1].statecode === 1) {
               matched[i + 1].statecode = 0;
               matched[i + 1].statuscode = 1;
             }
-          } else if (cached === "Rejected") {
-            t.cr49f_approvalstatus = 3 as any;
-          } else if (cached === "Changes Needed") {
-            t.cr49f_approvalstatus = 4 as any;
+          } else if (
+            !isParentChangesNeeded &&
+            (Number(t.cr49f_approvalstatus) === 2 || Boolean(t.cr49f_approvedby && t.cr49f_approvedon))
+          ) {
+            t.cr49f_approvalstatus = 2 as any;
+            if (i + 1 < matched.length && matched[i + 1].statecode === 1) {
+              matched[i + 1].statecode = 0;
+              matched[i + 1].statuscode = 1;
+            }
+          } else {
+            t.cr49f_approvalstatus = 1 as any;
           }
 
           const cachedApprovedBy = localStorage.getItem(`task_approved_by_${tId}`);
@@ -1475,6 +1512,17 @@ export function getTaskApprovalStatusLabel(
       cached === "Changes Needed"
     ) {
       return cached as "Pending" | "Approved" | "Rejected" | "Changes Needed";
+    }
+  }
+
+  // 0b. If parent PR or RFQ is in Changes Needed status, any sequential task (>= 1) is strictly Pending
+  const parentPRVal = cleanGuid(task._cr49f_pr_value || (raw._cr49f_PR_value as string) || (raw.cr49f_pr as string));
+  const parentRFQVal = cleanGuid(task._cr49f_rfq_value || (raw._cr49f_RFQ_value as string) || (raw.cr49f_rfq as string));
+  if (typeof window !== "undefined") {
+    const prStatus = parentPRVal ? localStorage.getItem(`pr_status_${parentPRVal}`) : null;
+    const rfqStatus = parentRFQVal ? localStorage.getItem(`rfq_status_${parentRFQVal}`) : null;
+    if ((prStatus === "Changes Needed" || rfqStatus === "Changes Needed") && (task.cr49f_sequence ?? 0) >= 1) {
+      return "Pending";
     }
   }
 
