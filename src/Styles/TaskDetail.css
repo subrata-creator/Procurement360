@@ -905,7 +905,7 @@
 .task-sticky-bar {
   position: fixed;
   bottom: 0;
-  left: var(--sidebar-width, 240px);
+  left: var(--sidebar-width, 142px);
   right: 0;
   z-index: 40;
   min-height: 60px;
@@ -913,7 +913,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 28px;
+  padding: 10px 20px;
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--border-hex, #e2e8f0);
@@ -1023,7 +1023,11 @@
   .task-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 700px) {
   .task-sticky-bar {
     left: 0;
+    padding: 10px 16px;
   }
 }

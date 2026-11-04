@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Building2,
@@ -14,12 +14,10 @@ import {
   Clock3,
   Download,
   FileText,
-  Filter,
   LayoutGrid,
   LayoutList,
   Mail,
   MapPin,
-  MoreHorizontal,
   Phone,
   Plus,
   Search,
@@ -85,12 +83,53 @@ function formatShortDate(value?: string | null): string {
 
 function toIsoDate(value?: string | null): string {
   if (!value) return "";
+
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    if (value.includes("T")) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+    }
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const slashMatch = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (slashMatch) {
+    const num1 = Number(slashMatch[1]);
+    const num2 = Number(slashMatch[2]);
+    const year = slashMatch[3];
+    if (num1 > 12) {
+      return `${year}-${String(num2).padStart(2, "0")}-${String(num1).padStart(2, "0")}`;
+    }
+    return `${year}-${String(num1).padStart(2, "0")}-${String(num2).padStart(2, "0")}`;
+  }
+
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  return "";
+}
+
+function matchesCreatedDate(rawDate?: string | null, targetIso?: string): boolean {
+  if (!targetIso) return true;
+  if (!rawDate) return false;
+
+  const localIso = toIsoDate(rawDate);
+  if (localIso && localIso === targetIso) return true;
+
+  if (rawDate.startsWith(targetIso)) return true;
+
+  return false;
 }
 
 function formatFilterDate(iso: string): string {
@@ -387,6 +426,17 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [createdOnQuery, setCreatedOnQuery] = useState("");
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenDatePicker = () => {
+    if (dateInputRef.current) {
+      try {
+        dateInputRef.current.showPicker();
+      } catch {
+        dateInputRef.current.focus();
+      }
+    }
+  };
   const [statusQuery, setStatusQuery] = useState<StatusFilter>("All Status");
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(openCreateModal);
@@ -395,14 +445,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [activeDrawerTab, setActiveDrawerTab] = useState<"suppliers" | "details" | "history" | "ai">("suppliers");
-  const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
-  // Close actions dropdown menu on outside click
-  useEffect(() => {
-    const handleClickOutside = () => setActiveActionMenu(null);
-    window.addEventListener("click", handleClickOutside);
-    return () => window.removeEventListener("click", handleClickOutside);
-  }, []);
 
   useEffect(() => {
     if (openCreateModal) {
@@ -467,9 +510,10 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
         .toLowerCase();
 
       const matchesSearch = haystack.includes(query);
-      const matchesCreatedOn =
-        !createdOnQuery ||
-        toIsoDate(row.createdon ?? row.cr49f_requestdate) === createdOnQuery;
+      const matchesCreatedOn = matchesCreatedDate(
+        row.createdon || row.cr49f_requestdate,
+        createdOnQuery
+      );
       const matchesStatus =
         statusQuery === "All Status" ||
         getStatusFilterValue(row) === statusQuery.replace(/\s+/g, "").toLowerCase();
@@ -752,22 +796,62 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
 
           <div className="pr-toolbar-filters">
             {/* Created On Date Filter */}
-            <div className="pr-filter-date-badge">
+            <div
+              className={`pr-filter-date-badge ${createdOnQuery ? "has-filter" : ""}`}
+              onClick={handleOpenDatePicker}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleOpenDatePicker();
+                }
+              }}
+              title={
+                createdOnQuery
+                  ? `Filtered by ${formatFilterDate(createdOnQuery)}. Click to change.`
+                  : "Filter by Created Date"
+              }
+            >
               <Calendar size={14} className="cal-icon" />
               <div className="date-meta">
                 <span className="date-label">Created On</span>
-                <input
-                  type="date"
-                  value={createdOnQuery}
-                  onChange={(e) => setCreatedOnQuery(e.target.value)}
-                  className="pr-hidden-date-input"
-                  id="rfq-created-date-input"
-                />
-                <label htmlFor="rfq-created-date-input" className="date-value">
+                <span className="date-value">
                   {createdOnQuery ? formatFilterDate(createdOnQuery) : "dd-mm-yyyy"}
-                </label>
+                </span>
               </div>
-              <ChevronDown size={12} className="chevron-icon" />
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={createdOnQuery}
+                onChange={(e) => setCreatedOnQuery(e.target.value)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    (e.target as HTMLInputElement).showPicker();
+                  } catch {}
+                }}
+                className="pr-hidden-date-input"
+                id="rfq-created-date-input"
+                aria-label="Filter by Created Date"
+                tabIndex={-1}
+              />
+              {createdOnQuery ? (
+                <button
+                  type="button"
+                  className="pr-date-clear-btn"
+                  title="Clear date filter"
+                  aria-label="Clear date filter"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCreatedOnQuery("");
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              ) : (
+                <ChevronDown size={12} className="chevron-icon" />
+              )}
             </div>
 
             {/* Status Dropdown */}
@@ -786,20 +870,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
               <ChevronDown size={12} className="dropdown-chevron" />
             </div>
 
-            {/* More Filters button / Reset */}
-            <button
-              type="button"
-              className="pr-btn-more-filters"
-              onClick={() => {
-                setStatusQuery("All Status");
-                setCreatedOnQuery("");
-                setSearch("");
-              }}
-              title="Reset filters"
-            >
-              <Filter size={13} />
-              <span>More Filters</span>
-            </button>
+
 
             {/* List / Grid View Toggle */}
             <div className="pr-view-toggle">
@@ -932,13 +1003,12 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                     STATUS <span className="sort-diamond">◊</span>
                   </th>
                   <th style={{ width: "9%" }}>PROGRESS</th>
-                  <th style={{ width: 32, textAlign: "center" }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={11}>
+                    <td className="purchase-empty-state" colSpan={10}>
                       Loading RFQs from Dataverse...
                     </td>
                   </tr>
@@ -1129,61 +1199,13 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                             />
                           </td>
 
-                          {/* 11. Actions */}
-                          <td className="pr-cell-actions">
-                            <div className="pr-actions-menu-wrap">
-                              <button
-                                type="button"
-                                className="pr-actions-trigger"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveActionMenu(activeActionMenu === row.cr49f_requestforqoutationid ? null : row.cr49f_requestforqoutationid);
-                                }}
-                                aria-label="Actions"
-                              >
-                                <MoreHorizontal size={15} />
-                              </button>
 
-                              {activeActionMenu === row.cr49f_requestforqoutationid && (
-                                <div className="pr-actions-dropdown">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveActionMenu(null);
-                                      navigate(`/rfqs/${rfqIdentifier}`);
-                                    }}
-                                  >
-                                    View Full Summary
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveActionMenu(null);
-                                      setExpandedRowId(row.cr49f_requestforqoutationid);
-                                      setActiveDrawerTab("history");
-                                    }}
-                                  >
-                                    View Approval Tasks
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveActionMenu(null);
-                                      void navigator.clipboard.writeText(rfqIdentifier);
-                                    }}
-                                  >
-                                    Copy RFQ ID
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </td>
                         </tr>
 
                         {/* EXPANDED ROW DETAIL DRAWER */}
                         {isExpanded && (
                           <tr className="pr-expanded-row">
-                            <td colSpan={11}>
+                            <td colSpan={10}>
                               <div className="pr-detail-drawer">
                                 {/* Drawer Header Tabs & Close */}
                                 <div className="pr-drawer-header">
@@ -1461,7 +1483,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                   })
                 ) : (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={11}>
+                    <td className="purchase-empty-state" colSpan={10}>
                       No RFQs match these filters.
                     </td>
                   </tr>

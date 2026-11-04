@@ -23,7 +23,6 @@ import UsersPage from "./Pages/Admin/UsersPage";
 import ApprovalCycleConfigPage from "./Pages/Admin/ApprovalCycleConfigPage";
 import SuppliersPage from "./Pages/SuppliersPage";
 import ProductsPage from "./Pages/ProductsPage";
-import TestCopilot from "./components/ProcurementCopilot";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 

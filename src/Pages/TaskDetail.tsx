@@ -453,27 +453,7 @@ function ModernDataverseTaskDetail({
               </div>
             </div>
 
-            {isActive && (
-              <div className="task-header-action-group">
-                <button
-                  type="button"
-                  className="task-btn-reject-header"
-                  onClick={() => void handleReject()}
-                  disabled={actionLoading}
-                >
-                  <ThumbsDown size={14} /> Reject
-                </button>
-                <button
-                  type="button"
-                  className="task-btn-approve-header"
-                  onClick={() => void handleApprove()}
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <ThumbsUp size={14} />}
-                  Approve Task
-                </button>
-              </div>
-            )}
+
           </div>
         </div>
       </header>

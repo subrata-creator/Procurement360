@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -15,7 +15,6 @@ import {
   Search,
   Check,
   X,
-  Filter,
   LayoutList,
   LayoutGrid,
   MoreHorizontal,
@@ -96,9 +95,65 @@ function parseRequestDate(value?: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function isoToUsDate(iso: string): string {
-  const [year, month, day] = iso.split("-").map(Number);
-  return `${month}/${day}/${year}`;
+function toIsoDate(value?: string | null): string {
+  if (!value) return "";
+
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    if (value.includes("T")) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+    }
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const slashMatch = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (slashMatch) {
+    const num1 = Number(slashMatch[1]);
+    const num2 = Number(slashMatch[2]);
+    const year = slashMatch[3];
+    if (num1 > 12) {
+      return `${year}-${String(num2).padStart(2, "0")}-${String(num1).padStart(2, "0")}`;
+    }
+    return `${year}-${String(num1).padStart(2, "0")}-${String(num2).padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  return "";
+}
+
+function matchesCreatedDate(rawDate?: string | null, targetIso?: string): boolean {
+  if (!targetIso) return true;
+  if (!rawDate) return false;
+
+  const localIso = toIsoDate(rawDate);
+  if (localIso && localIso === targetIso) return true;
+
+  if (rawDate.startsWith(targetIso)) return true;
+
+  return false;
+}
+
+function formatFilterDate(iso: string): string {
+  if (!iso) return "dd-mm-yyyy";
+  const parts = iso.split("-");
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${day}/${month}/${year}`;
+  }
+  return iso;
 }
 
 function getDatabaseStatus(record: Cr49f_purchaserequests): PRStatus {
@@ -326,6 +381,17 @@ export default function PurchaseRequest() {
   const [isCreatePROpen, setIsCreatePROpen] = useState(false);
   const [tableQuery, setTableQuery] = useState("");
   const [createdOnQuery, setCreatedOnQuery] = useState("");
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenDatePicker = () => {
+    if (dateInputRef.current) {
+      try {
+        dateInputRef.current.showPicker();
+      } catch {
+        dateInputRef.current.focus();
+      }
+    }
+  };
   const [statusQuery, setStatusQuery] = useState<"All Status" | PRStatus>(
     "All Status"
   );
@@ -615,8 +681,10 @@ export default function PurchaseRequest() {
     const matchesQuery = haystack.includes(
       tableQuery.trim().toLowerCase()
     );
-    const matchesCreatedOn =
-      !createdOnQuery || request.date === isoToUsDate(createdOnQuery);
+    const matchesCreatedOn = matchesCreatedDate(
+      request.rawCreatedDate || request.date,
+      createdOnQuery
+    );
     const matchesStatus =
       statusQuery === "All Status" || request.status === statusQuery;
     const matchesPriority =
@@ -648,7 +716,7 @@ export default function PurchaseRequest() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [tableQuery, createdOnQuery, statusQuery]);
+  }, [tableQuery, createdOnQuery, statusQuery, priorityQuery]);
 
   const requestCounts = {
     total: requests.length,
@@ -1158,22 +1226,62 @@ export default function PurchaseRequest() {
 
           <div className="pr-toolbar-filters">
             {/* Created On Date Filter */}
-            <div className="pr-filter-date-badge">
+            <div
+              className={`pr-filter-date-badge ${createdOnQuery ? "has-filter" : ""}`}
+              onClick={handleOpenDatePicker}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleOpenDatePicker();
+                }
+              }}
+              title={
+                createdOnQuery
+                  ? `Filtered by ${formatFilterDate(createdOnQuery)}. Click to change.`
+                  : "Filter by Created Date"
+              }
+            >
               <Calendar size={14} className="cal-icon" />
               <div className="date-meta">
                 <span className="date-label">Created On</span>
-                <input
-                  type="date"
-                  value={createdOnQuery}
-                  onChange={(e) => setCreatedOnQuery(e.target.value)}
-                  className="pr-hidden-date-input"
-                  id="pr-created-date-input"
-                />
-                <label htmlFor="pr-created-date-input" className="date-value">
-                  {createdOnQuery ? isoToUsDate(createdOnQuery) : "dd-mm-yyyy"}
-                </label>
+                <span className="date-value">
+                  {createdOnQuery ? formatFilterDate(createdOnQuery) : "dd-mm-yyyy"}
+                </span>
               </div>
-              <ChevronDown size={12} className="chevron-icon" />
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={createdOnQuery}
+                onChange={(e) => setCreatedOnQuery(e.target.value)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    (e.target as HTMLInputElement).showPicker();
+                  } catch {}
+                }}
+                className="pr-hidden-date-input"
+                id="pr-created-date-input"
+                aria-label="Filter by Created Date"
+                tabIndex={-1}
+              />
+              {createdOnQuery ? (
+                <button
+                  type="button"
+                  className="pr-date-clear-btn"
+                  title="Clear date filter"
+                  aria-label="Clear date filter"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCreatedOnQuery("");
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              ) : (
+                <ChevronDown size={12} className="chevron-icon" />
+              )}
             </div>
 
             {/* Status Dropdown */}
@@ -1207,21 +1315,7 @@ export default function PurchaseRequest() {
               <ChevronDown size={12} className="dropdown-chevron" />
             </div>
 
-            {/* More Filters button */}
-            <button
-              type="button"
-              className="pr-btn-more-filters"
-              onClick={() => {
-                setStatusQuery("All Status");
-                setPriorityQuery("All Priority");
-                setCreatedOnQuery("");
-                setTableQuery("");
-              }}
-              title="Reset filters"
-            >
-              <Filter size={13} />
-              <span>More Filters</span>
-            </button>
+
 
             {/* List / Grid View Toggle */}
             <div className="pr-view-toggle">

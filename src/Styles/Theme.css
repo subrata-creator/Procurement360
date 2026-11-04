@@ -1,6 +1,7 @@
 @import "./TailwindTheme.css";
 
 :root {
+  --sidebar-width: 142px;
   color-scheme: light;
   --primary-hex: oklch(54.6% 0.215 262.9);
   --primary-foreground-hex: oklch(99% 0 0);
