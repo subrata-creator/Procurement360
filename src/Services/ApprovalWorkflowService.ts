@@ -1634,7 +1634,11 @@ export async function syncAllPendingApprovalTasks(
 
       const hasTasks = existingTasks.some((t) => {
         const raw = t as unknown as Record<string, unknown>;
-        const tPR = cleanGuid(t._cr49f_pr_value) || cleanGuid(raw._cr49f_PR_value as string);
+        const tPR =
+          cleanGuid(t._cr49f_pr_value) ||
+          cleanGuid(raw._cr49f_PR_value as string) ||
+          cleanGuid(raw.cr49f_pr as string) ||
+          cleanGuid(raw.cr49f_PR as string);
         return tPR === prId;
       });
 
@@ -1661,7 +1665,11 @@ export async function syncAllPendingApprovalTasks(
 
       const hasTasks = existingTasks.some((t) => {
         const raw = t as unknown as Record<string, unknown>;
-        const tRFQ = cleanGuid(t._cr49f_rfq_value) || cleanGuid(raw._cr49f_RFQ_value as string);
+        const tRFQ =
+          cleanGuid(t._cr49f_rfq_value) ||
+          cleanGuid(raw._cr49f_RFQ_value as string) ||
+          cleanGuid(raw.cr49f_rfq as string) ||
+          cleanGuid(raw.cr49f_RFQ as string);
         return tRFQ === rfqId;
       });
 

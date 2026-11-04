@@ -17,6 +17,7 @@ import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_r
 import {
   getTaskApprovalStatusLabel,
   cleanGuid,
+  createApprovalTasksForObject,
 } from "../Services/ApprovalWorkflowService";
 
 const PAGE_SIZE = 4;
@@ -83,6 +84,59 @@ const TaskInbox: React.FC = () => {
         rfqsRes.value.data
           ? rfqsRes.value.data
           : [];
+
+      // Auto-heal: If any PR or RFQ does not have approval tasks generated, create them dynamically
+      for (const pr of prs) {
+        const prId = cleanGuid(pr.cr49f_purchaserequestid);
+        if (!prId) continue;
+        const hasTasks = rawTasks.some((t) => {
+          const raw = t as unknown as Record<string, unknown>;
+          const tPR =
+            cleanGuid(t._cr49f_pr_value) ||
+            cleanGuid(raw._cr49f_PR_value as string) ||
+            cleanGuid(raw.cr49f_pr as string) ||
+            cleanGuid(raw.cr49f_PR as string);
+          return tPR === prId;
+        });
+        if (!hasTasks) {
+          try {
+            const created = await createApprovalTasksForObject({
+              objectType: 1,
+              recordId: prId,
+              recordName: pr.cr49f_prtitle || "Purchase Request Approval",
+            });
+            rawTasks.push(...created);
+          } catch (prTaskErr) {
+            console.warn(`[TaskInbox] Could not auto-generate tasks for PR ${prId}:`, prTaskErr);
+          }
+        }
+      }
+
+      for (const rfq of rfqs) {
+        const rfqId = cleanGuid(rfq.cr49f_requestforqoutationid);
+        if (!rfqId) continue;
+        const hasTasks = rawTasks.some((t) => {
+          const raw = t as unknown as Record<string, unknown>;
+          const tRFQ =
+            cleanGuid(t._cr49f_rfq_value) ||
+            cleanGuid(raw._cr49f_RFQ_value as string) ||
+            cleanGuid(raw.cr49f_rfq as string) ||
+            cleanGuid(raw.cr49f_RFQ as string);
+          return tRFQ === rfqId;
+        });
+        if (!hasTasks) {
+          try {
+            const created = await createApprovalTasksForObject({
+              objectType: 2,
+              recordId: rfqId,
+              recordName: rfq.cr49f_rfqtitle || "RFQ Approval",
+            });
+            rawTasks.push(...created);
+          } catch (rfqTaskErr) {
+            console.warn(`[TaskInbox] Could not auto-generate tasks for RFQ ${rfqId}:`, rfqTaskErr);
+          }
+        }
+      }
 
       const mapped: WorkQueueItem[] = rawTasks.map((t, idx) => {
         const raw = t as unknown as Record<string, unknown>;

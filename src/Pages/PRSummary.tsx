@@ -336,7 +336,19 @@ export default function PurchaseRequestDetail() {
   const loadApprovalTasks = async (prId: string) => {
     setLoadingTasks(true);
     try {
-      const tasks = await getApprovalTasksForRecord(1, prId);
+      let tasks = await getApprovalTasksForRecord(1, prId);
+      if (tasks.length === 0 && liveRecord) {
+        try {
+          await createApprovalTasksForObject({
+            objectType: 1,
+            recordId: prId,
+            recordName: liveRecord.cr49f_prtitle || "Purchase Request Approval",
+          });
+          tasks = await getApprovalTasksForRecord(1, prId);
+        } catch (autoErr) {
+          console.warn("[PRSummary] Auto-create tasks for PR failed:", autoErr);
+        }
+      }
       const filtered = tasks.filter(
         (t) =>
           (t.cr49f_sequence ?? 0) >= 1 &&

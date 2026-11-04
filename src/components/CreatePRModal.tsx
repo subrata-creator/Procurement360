@@ -16,6 +16,7 @@ import {
 import { Cr49f_productsesService } from "../generated/services/Cr49f_productsesService";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import { createApprovalTasksForObject } from "../Services/ApprovalWorkflowService";
 
 import type { Cr49f_productses } from "../generated/models/Cr49f_productsesModel";
 
@@ -389,6 +390,20 @@ export default function CreatePRModal({
             `Could not save line item "${product.cr49f_productname}".`
           );
         }
+      }
+
+      // 4. Create associated approval tasks in cr49f_approvaltasks from cr49f_tasks
+      try {
+        await createApprovalTasksForObject({
+          objectType: 1, // Purchase Request
+          recordId: createdPRId,
+          recordName: form.title.trim(),
+        });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+        }
+      } catch (taskErr) {
+        console.warn("Could not create approval tasks for PR:", taskErr);
       }
 
       // All records have been created successfully. Keep the modal open
