@@ -111,7 +111,32 @@ const TaskInbox: React.FC = () => {
         const taskId = cleanGuid(t.cr49f_approvaltasksid) || String(idx);
         const targetUrl = `/tasks/${taskId}`;
 
-        if (prId || t.cr49f_object === 1) {
+        const isRfq =
+          Boolean(rfqId) ||
+          t.cr49f_object === 2 ||
+          Boolean(
+            t.cr49f_task &&
+              (t.cr49f_task.toLowerCase().includes("rfq") ||
+                t.cr49f_task.toLowerCase().includes("quotation"))
+          );
+
+        if (isRfq) {
+          taskType = "Request for Quotation";
+          const rfq = rfqs.find(
+            (r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId
+          );
+          const rfqNum =
+            rfq?.cr49f_rfqnumber ||
+            (rfqId ? rfqId.slice(0, 8) : `RFQ-${1000 + idx}`);
+          const rfqTitle = rfq?.cr49f_rfqtitle ? ` ${rfq.cr49f_rfqtitle}` : "";
+          const taskName = t.cr49f_task ? ` (${t.cr49f_task})` : "";
+          title = `RFQ Approval - ${rfqNum}${rfqTitle}${taskName}`;
+        } else if (poId || t.cr49f_object === 3) {
+          taskType = "Purchase Order";
+          const taskName = t.cr49f_task ? ` (${t.cr49f_task})` : "";
+          title = `Purchase Order Approval - ${taskName}`;
+          priority = "High";
+        } else if (prId || t.cr49f_object === 1) {
           taskType = "Purchase Request";
           const pr = prs.find(
             (p) => cleanGuid(p.cr49f_purchaserequestid) === prId
@@ -128,21 +153,6 @@ const TaskInbox: React.FC = () => {
           ) {
             priority = "High";
           }
-        } else if (rfqId || t.cr49f_object === 2) {
-          taskType = "Request for Quotation";
-          const rfq = rfqs.find(
-            (r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId
-          );
-          const rfqNum =
-            rfq?.cr49f_rfqnumber ||
-            (rfqId ? rfqId.slice(0, 8) : `RFQ-${1000 + idx}`);
-          const taskName = t.cr49f_task ? ` (${t.cr49f_task})` : "";
-          title = `RFQ Approval - ${rfqNum}${taskName}`;
-        } else if (poId || t.cr49f_object === 3) {
-          taskType = "Purchase Order";
-          const taskName = t.cr49f_task ? ` (${t.cr49f_task})` : "";
-          title = `Purchase Order Approval - ${taskName}`;
-          priority = "High";
         }
 
         const createdDate = t.createdon ? new Date(t.createdon) : new Date();

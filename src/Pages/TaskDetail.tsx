@@ -106,19 +106,38 @@ export default function TaskDetail() {
           cleanGuid(rawMatched._cr49f_RFQ_value as string) ||
           cleanGuid(rawMatched.cr49f_rfq as string);
 
-        const isObjectRfq = matched.cr49f_object === 2 || (Boolean(rfqId) && matched.cr49f_object !== 1);
-        const isObjectPr = matched.cr49f_object === 1 || (Boolean(prId) && !isObjectRfq);
+        const taskTitleLower = String(matched.cr49f_task || "").toLowerCase();
+        const isObjectRfq =
+          matched.cr49f_object === 2 ||
+          Boolean(rfqId) ||
+          taskTitleLower.includes("rfq") ||
+          taskTitleLower.includes("quotation");
+
+        const isObjectPr = !isObjectRfq && (matched.cr49f_object === 1 || Boolean(prId));
 
         if (isObjectRfq) {
-          const [rfqsRes, siblings, prsRes] = await Promise.all([
+          const [rfqsRes, prsRes] = await Promise.all([
             Cr49f_requestforqoutationsService.getAll(),
-            getApprovalTasksForRecord(2, rfqId || ""),
             prId ? Cr49f_purchaserequestsService.getAll() : Promise.resolve({ data: [] }),
           ]);
 
-          const foundRFQ = (rfqsRes.data ?? []).find(
+          const allRfqs = rfqsRes.data ?? [];
+          let foundRFQ = allRfqs.find(
             (r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId
           );
+
+          if (!foundRFQ) {
+            foundRFQ = allRfqs.find((r) => {
+              const rNum = r.cr49f_rfqnumber?.toLowerCase();
+              if (rNum && taskTitleLower.includes(rNum)) return true;
+              if (prId && cleanGuid(r._cr49f_prrfq_value) === prId) return true;
+              return false;
+            });
+          }
+
+          const effectiveRfqId = cleanGuid(foundRFQ?.cr49f_requestforqoutationid) || rfqId;
+          const siblings = await getApprovalTasksForRecord(2, effectiveRfqId || "");
+
           setParentRFQ(foundRFQ || null);
           setSiblingTasks(siblings);
 
@@ -284,9 +303,42 @@ function ModernDataverseTaskDetail({
     approvalStatus === "Changes Needed" ||
     task.cr49f_id === "Changes Needed" ||
     (task.cr49f_sequence ?? 0) === 0 ||
-    (task.cr49f_task && task.cr49f_task.toLowerCase().includes("changes needed"));
+    Boolean(task.cr49f_task && task.cr49f_task.toLowerCase().includes("changes needed"));
   const isPending = approvalStatus === "Pending" && !isChangesNeeded;
-  const isActive = task.statecode === 0 && isPending;
+  const isRecordActive =
+    (task.statecode === 0 || task.statecode === undefined || Number(task.statecode) === 0) &&
+    Number(task.statuscode ?? 1) !== 2;
+  const isActive = isRecordActive && (isPending || isChangesNeeded);
+
+  // Dynamic Object Type Detection (RFQ vs PR vs PO)
+  const taskTitleLower = String(task.cr49f_task || "").toLowerCase();
+  const isRfq =
+    task.cr49f_object === 2 ||
+    Boolean(parentRFQ) ||
+    Boolean(cleanGuid(task._cr49f_rfq_value)) ||
+    taskTitleLower.includes("rfq") ||
+    taskTitleLower.includes("quotation");
+
+  const isPr =
+    !isRfq &&
+    (task.cr49f_object === 1 || Boolean(parentPR) || Boolean(cleanGuid(task._cr49f_pr_value)));
+  const isPo = !isRfq && !isPr && task.cr49f_object === 3;
+
+  const objectTypeLabel = isRfq
+    ? "Request for Quotation"
+    : isPr
+    ? "Purchase Request"
+    : isPo
+    ? "Purchase Order"
+    : "Approval Task";
+
+  const shortType = isRfq ? "RFQ" : isPr ? "Purchase Request" : isPo ? "Purchase Order" : "Record";
+
+  const reference = isRfq
+    ? parentRFQ?.cr49f_rfqnumber || "RFQ-2026"
+    : isPr
+    ? parentPR?.cr49f_prnumber || "PR-2026"
+    : `TASK-${task.cr49f_sequence || 1}`;
 
   const prIdClean = cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(task._cr49f_pr_value);
   const cachedPrStatus = prIdClean && typeof window !== "undefined" ? localStorage.getItem(`pr_status_${prIdClean}`) : null;
@@ -312,7 +364,7 @@ function ModernDataverseTaskDetail({
   const [isChangesNeededModalOpen, setIsChangesNeededModalOpen] = useState(false);
   const [changesFeedbackText, setChangesFeedbackText] = useState("");
 
-  // Revision form states when viewing an active Changes Needed task
+  // Revision form states when viewing an active Changes Needed task for PR
   const [editTitle, setEditTitle] = useState(parentPR?.cr49f_prtitle || "");
   const [editPriority, setEditPriority] = useState<number>(parentPR?.cr49f_priority ?? 2);
   const [editLocation, setEditLocation] = useState(parentPR?.cr49f_deliverylocation || "");
@@ -321,6 +373,15 @@ function ModernDataverseTaskDetail({
   );
   const [editJustification, setEditJustification] = useState(parentPR?.cr49f_businessjustification || "");
   const [editableLines, setEditableLines] = useState<Cr49f_purchaserequestlines[]>(lineItems);
+
+  // Revision form states when viewing an active Changes Needed task for RFQ
+  const [editRfqTitle, setEditRfqTitle] = useState(parentRFQ?.cr49f_rfqtitle || "");
+  const [editRfqDeadline, setEditRfqDeadline] = useState(
+    parentRFQ?.cr49f_submissiondeadline ? parentRFQ.cr49f_submissiondeadline.slice(0, 10) : ""
+  );
+  const [editRfqLocation, setEditRfqLocation] = useState(parentRFQ?.cr49f_deliverylocation || "");
+  const [editRfqDescription, setEditRfqDescription] = useState(parentRFQ?.cr49f_description || "");
+
   const [requesterRemarks, setRequesterRemarks] = useState("");
   const [submittingChanges, setSubmittingChanges] = useState(false);
 
@@ -335,6 +396,17 @@ function ModernDataverseTaskDetail({
       setEditJustification(parentPR.cr49f_businessjustification || "");
     }
   }, [parentPR]);
+
+  useEffect(() => {
+    if (parentRFQ) {
+      setEditRfqTitle(parentRFQ.cr49f_rfqtitle || "");
+      setEditRfqDeadline(
+        parentRFQ.cr49f_submissiondeadline ? parentRFQ.cr49f_submissiondeadline.slice(0, 10) : ""
+      );
+      setEditRfqLocation(parentRFQ.cr49f_deliverylocation || "");
+      setEditRfqDescription(parentRFQ.cr49f_description || "");
+    }
+  }, [parentRFQ]);
 
   useEffect(() => {
     if (lineItems && lineItems.length > 0) {
@@ -444,13 +516,19 @@ function ModernDataverseTaskDetail({
         ? (localStorage.getItem("procurement_user_name") || "Subrata Dey")
         : "Subrata Dey";
 
-      await requestChangesOnTask(cleanTaskId, changesFeedbackText.trim(), currentUserName);
+      const result = await requestChangesOnTask(cleanTaskId, changesFeedbackText.trim(), currentUserName);
       setIsChangesNeededModalOpen(false);
-      setNotice(`${shortType} (${reference}) has been marked as Changes Needed successfully! Opening dashboard...`);
+      setNotice(`${shortType} (${reference}) has been marked as Changes Needed. A revision task has been created for the requester.`);
       await onRefresh();
-      setTimeout(() => {
-        navigate("/");
-      }, 700);
+      if (result.newTaskId) {
+        setTimeout(() => {
+          navigate(`/tasks/${result.newTaskId}`);
+        }, 700);
+      } else {
+        setTimeout(() => {
+          navigate("/");
+        }, 700);
+      }
     } catch (err: unknown) {
       console.error("Failed to request changes:", err);
       const msg = err instanceof Error ? err.message : "Failed to request changes";
@@ -513,25 +591,45 @@ function ModernDataverseTaskDetail({
     }
   };
 
-  const isRfq = task.cr49f_object === 2 || (!task.cr49f_object && !!parentRFQ);
-  const isPr = (task.cr49f_object === 1 || (!task.cr49f_object && !!parentPR)) && !isRfq;
-  const isPo = task.cr49f_object === 3;
+  const handleSubmitRfqChangesRevision = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (submittingChanges) return;
+    setSubmittingChanges(true);
+    setNotice(null);
+    try {
+      const rfqId = cleanGuid(parentRFQ?.cr49f_requestforqoutationid) || cleanGuid(task._cr49f_rfq_value);
+      if (!rfqId) throw new Error("Request for Quotation ID not found.");
 
-  const objectTypeLabel = isRfq
-    ? "Request for Quotation"
-    : isPr
-    ? "Purchase Request"
-    : isPo
-    ? "Purchase Order"
-    : "Approval Task";
+      const currentUserName = typeof window !== "undefined"
+        ? (localStorage.getItem("procurement_user_name") || "Subrata Dey")
+        : "Subrata Dey";
 
-  const shortType = isRfq ? "RFQ" : isPr ? "PR" : isPo ? "PO" : "Record";
+      await submitChangesNeededUpdate({
+        changesNeededTaskId: cleanTaskId,
+        rfqId,
+        requesterRemarks: requesterRemarks.trim(),
+        requesterName: currentUserName,
+        updatedRFQ: {
+          cr49f_rfqtitle: editRfqTitle,
+          cr49f_submissiondeadline: editRfqDeadline ? new Date(editRfqDeadline).toISOString() : undefined,
+          cr49f_deliverylocation: editRfqLocation,
+          cr49f_description: editRfqDescription,
+        },
+      });
 
-  const reference = isRfq
-    ? parentRFQ?.cr49f_rfqnumber || "RFQ-2026"
-    : isPr
-    ? parentPR?.cr49f_prnumber || "PR-2026"
-    : `TASK-${task.cr49f_sequence || 1}`;
+      setNotice("Revisions submitted successfully! RFQ updated and workflow restarted from Sequence #1. Opening dashboard...");
+      await onRefresh();
+      setTimeout(() => {
+        navigate("/");
+      }, 800);
+    } catch (err: unknown) {
+      console.error("Failed to submit RFQ revisions:", err);
+      const msg = err instanceof Error ? err.message : "Failed to submit revisions";
+      setNotice(`Failed to submit revisions: ${msg}`);
+    } finally {
+      setSubmittingChanges(false);
+    }
+  };
 
   const recordTitle = isRfq
     ? parentRFQ?.cr49f_rfqtitle || "Request for Quotation"
@@ -767,7 +865,9 @@ function ModernDataverseTaskDetail({
               >
                 <div className={`task-step-connector ${stepApproved ? "done" : ""}`} />
                 <div className="task-step-node">
-                  {stepApproved ? (
+                  {(stepItem.cr49f_sequence ?? 0) === 0 || stepStatus === "Changes Needed" ? (
+                    <FileEdit size={14} />
+                  ) : stepApproved ? (
                     <Check size={14} />
                   ) : stepRejected ? (
                     <XCircle size={14} />
@@ -785,6 +885,8 @@ function ModernDataverseTaskDetail({
                         ? "approved"
                         : stepRejected
                         ? "rejected"
+                        : stepStatus === "Changes Needed"
+                        ? "changes-needed"
                         : stepActive
                         ? "active"
                         : "pending"
@@ -794,6 +896,8 @@ function ModernDataverseTaskDetail({
                       ? "Approved"
                       : stepRejected
                       ? "Rejected"
+                      : stepStatus === "Changes Needed"
+                      ? "Changes Needed"
                       : stepActive
                       ? "Action Needed"
                       : "Pending"}
@@ -809,9 +913,142 @@ function ModernDataverseTaskDetail({
       <div className="task-grid-layout">
         {/* Left Column (Primary Request Details, Items, and Comments) */}
         <div className="task-main-col">
-          {isChangesNeeded && isActive ? (
-            /* Interactive PR Revision Form */
-            <form onSubmit={handleSubmitChangesRevision} className="task-card task-changes-form-card">
+          {isChangesNeeded && isRecordActive ? (
+            isRfq ? (
+              /* Interactive RFQ Revision Form */
+              <form onSubmit={handleSubmitRfqChangesRevision} className="task-card task-changes-form-card">
+                <div className="task-card-header">
+                  <div className="task-card-header-left">
+                    <div className="task-card-header-icon" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#d97706" }}>
+                      <FileEdit size={16} />
+                    </div>
+                    <div className="task-card-header-titles">
+                      <h2>Update Request for Quotation (RFQ) Information</h2>
+                      <p>Revise RFQ specifications, submission deadline, and requirements to resolve approver feedback</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="task-changes-form-body">
+                  <div className="task-changes-form-row">
+                    <div className="task-changes-field">
+                      <label>RFQ Title</label>
+                      <input
+                        type="text"
+                        value={editRfqTitle}
+                        onChange={(e) => setEditRfqTitle(e.target.value)}
+                        required
+                        className="task-input"
+                        placeholder="e.g. IT Equipment and Hardware RFQ"
+                      />
+                    </div>
+                    <div className="task-changes-field">
+                      <label>Submission Deadline</label>
+                      <input
+                        type="date"
+                        value={editRfqDeadline}
+                        onChange={(e) => setEditRfqDeadline(e.target.value)}
+                        required
+                        className="task-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="task-changes-form-row">
+                    <div className="task-changes-field">
+                      <label>Delivery / Site Location</label>
+                      <input
+                        type="text"
+                        value={editRfqLocation}
+                        onChange={(e) => setEditRfqLocation(e.target.value)}
+                        className="task-input"
+                        placeholder="e.g. Headquarters - Floor 3"
+                      />
+                    </div>
+                    <div className="task-changes-field">
+                      <label>Originating PR Reference</label>
+                      <input
+                        type="text"
+                        value={parentPR?.cr49f_prnumber || parentRFQ?.cr49f_prrfqname || "Direct RFQ"}
+                        readOnly
+                        disabled
+                        className="task-input"
+                        style={{ background: "#f8fafc", color: "#64748b" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="task-changes-field">
+                    <label>Scope of Work, Requirements &amp; Description</label>
+                    <textarea
+                      rows={4}
+                      value={editRfqDescription}
+                      onChange={(e) => setEditRfqDescription(e.target.value)}
+                      className="task-textarea"
+                      placeholder="Explain the revised scope of work, technical requirements, or bidding rules..."
+                    />
+                  </div>
+
+                  {lineItems && lineItems.length > 0 && (
+                    <div className="task-changes-lines-section">
+                      <div className="task-changes-lines-header">
+                        <div>
+                          <h3>Originating PR Line Items</h3>
+                          <p>Scope items referenced in this RFQ</p>
+                        </div>
+                        <span className="task-lines-total-badge">{lineItems.length} items</span>
+                      </div>
+                      <div className="task-table-scroll">
+                        <table className="task-modern-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: 44 }}>#</th>
+                              <th>Item Name</th>
+                              <th>Specification / Description</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lineItems.map((item, idx) => (
+                              <tr key={item.cr49f_purchaserequestlineid || idx}>
+                                <td><strong>{idx + 1}</strong></td>
+                                <td><strong>{item.cr49f_itemname || `Item #${idx + 1}`}</strong></td>
+                                <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
+                                  {item.cr49f_itemdescription || "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="task-changes-field" style={{ marginTop: 18 }}>
+                    <label>Requester Revision Notes (What changes did you apply?)</label>
+                    <textarea
+                      rows={2}
+                      value={requesterRemarks}
+                      onChange={(e) => setRequesterRemarks(e.target.value)}
+                      placeholder="e.g. Adjusted submission deadline and updated scope description per approver feedback."
+                      className="task-textarea"
+                    />
+                  </div>
+
+                  <div className="task-changes-form-actions">
+                    <button
+                      type="submit"
+                      className="task-btn-submit-changes"
+                      disabled={submittingChanges}
+                    >
+                      {submittingChanges ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                      Submit Updated RFQ &amp; Restart Approval Workflow
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              /* Interactive PR Revision Form */
+              <form onSubmit={handleSubmitChangesRevision} className="task-card task-changes-form-card">
               <div className="task-card-header">
                 <div className="task-card-header-left">
                   <div className="task-card-header-icon" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#d97706" }}>
@@ -1005,7 +1242,7 @@ function ModernDataverseTaskDetail({
                 </div>
               </div>
             </form>
-          ) : (
+          )) : (
             <>
               {/* Request Information Metrics Card */}
               <section className="task-card">
@@ -1256,8 +1493,53 @@ function ModernDataverseTaskDetail({
             </div>
           </section>
 
+          {/* Related RFQ Record Context */}
+          {parentRFQ && (
+            <section className="task-card">
+              <div className="task-card-header">
+                <div className="task-card-header-left">
+                  <div className="task-card-header-icon blue">
+                    <FileText size={16} />
+                  </div>
+                  <div className="task-card-header-titles">
+                    <h2>Record Context</h2>
+                    <p>Request for Quotation details</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="task-profile-body">
+                <div className="task-info-list">
+                  <div className="task-info-row">
+                    <span className="label">RFQ Number</span>
+                    <strong className="value">{reference}</strong>
+                  </div>
+                  <div className="task-info-row">
+                    <span className="label">Department</span>
+                    <strong className="value">{deptLabel}</strong>
+                  </div>
+                  <div className="task-info-row">
+                    <span className="label">Submission Deadline</span>
+                    <strong className="value">{toUsDate(parentRFQ.cr49f_submissiondeadline)}</strong>
+                  </div>
+                  <div className="task-info-row">
+                    <span className="label">Delivery Location</span>
+                    <strong className="value">{parentRFQ.cr49f_deliverylocation || "Main Site"}</strong>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <Link to="/rfq" className="task-link-button">
+                    <span>View Full RFQ Summary</span>
+                    <ExternalLink size={13} />
+                  </Link>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Related PR Record Context */}
-          {parentPR && (
+          {parentPR && !parentRFQ && (
             <section className="task-card">
               <div className="task-card-header">
                 <div className="task-card-header-left">
@@ -1331,15 +1613,19 @@ function ModernDataverseTaskDetail({
               </span>
             </div>
           ) : isChangesNeeded ? (
-            isActive ? (
+            isRecordActive ? (
               <button
                 type="button"
                 className="task-btn-submit-changes"
-                onClick={() => void handleSubmitChangesRevision()}
+                onClick={() =>
+                  void (isRfq
+                    ? handleSubmitRfqChangesRevision()
+                    : handleSubmitChangesRevision())
+                }
                 disabled={submittingChanges}
               >
                 {submittingChanges ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                Submit Updated PR &amp; Restart Approval
+                Submit Updated {shortType} &amp; Restart Approval
               </button>
             ) : (
               <span className="task-status-pill approved">
@@ -1404,7 +1690,7 @@ function ModernDataverseTaskDetail({
               <div className="task-modal-description">
                 <strong>Action Summary:</strong>
                 <p style={{ margin: "4px 0 0", color: "#475569" }}>
-                  This will update the {objectTypeLabel} ({reference}) status to <strong>Changes Needed</strong> in Dataverse and record your feedback in the task audit trail. Existing approval tasks will maintain their sequence and status.
+                  This will update the {objectTypeLabel} ({reference}) status to <strong>Changes Needed</strong> in Dataverse. All existing approval tasks will be marked Inactive with Pending approval status, and a new <strong>Changes Needed</strong> task will be created for the requester to make modifications.
                 </p>
               </div>
 
