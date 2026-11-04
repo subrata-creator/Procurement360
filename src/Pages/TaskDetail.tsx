@@ -776,11 +776,6 @@ function ModernDataverseTaskDetail({
       const prId = cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(task._cr49f_pr_value);
       if (!prId) throw new Error("Purchase Request ID not found.");
 
-      const totalAmt = editableLines.reduce(
-        (sum, l) => sum + (Number(l.cr49f_quantity) || 0) * (Number(l.cr49f_unitprice) || 0),
-        0
-      );
-
       const currentUserName = typeof window !== "undefined"
         ? (localStorage.getItem("procurement_user_name") || "Subrata Dey")
         : "Subrata Dey";
@@ -796,7 +791,6 @@ function ModernDataverseTaskDetail({
           cr49f_deliverylocation: editLocation,
           cr49f_businessjustification: editJustification,
           cr49f_requireddeliverydate: editDeliveryDate ? new Date(editDeliveryDate).toISOString() : undefined,
-          cr49f_totalamount: totalAmt,
         },
         updatedLines: editableLines.map((l) => ({
           lineId: l.cr49f_purchaserequestlineid,
@@ -804,7 +798,6 @@ function ModernDataverseTaskDetail({
           description: l.cr49f_itemdescription || l.cr49f_itemname || "",
           category: l.cr49f_category || "General",
           quantity: Number(l.cr49f_quantity) || 1,
-          unitPrice: Number(l.cr49f_unitprice) || 0,
         })),
         deletedLineIds,
       });
@@ -1509,14 +1502,11 @@ function ModernDataverseTaskDetail({
                   <div className="task-changes-lines-header">
                     <div>
                       <h3>Requested Products &amp; Line Items</h3>
-                      <p>Adjust item specifications, quantities, unit prices, or add more products</p>
+                      <p>Adjust item specifications, quantities, or add more products</p>
                     </div>
                     <div className="task-lines-actions">
                       <span className="task-lines-total-badge">
-                        Estimated Total: $
-                        {editableLines
-                          .reduce((sum, l) => sum + (Number(l.cr49f_quantity) || 0) * (Number(l.cr49f_unitprice) || 0), 0)
-                          .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {editableLines.length} {editableLines.length === 1 ? "Item" : "Items"}
                       </span>
                       <button
                         type="button"
@@ -1539,98 +1529,72 @@ function ModernDataverseTaskDetail({
                     <table className="task-modern-table editable-lines-table">
                       <thead>
                         <tr>
-                          <th style={{ width: 36 }}>#</th>
-                          <th style={{ width: 190 }}>Product Name</th>
+                          <th style={{ width: 44 }}>#</th>
+                          <th style={{ width: 220 }}>Product Name</th>
                           <th>Specification / Description</th>
-                          <th style={{ width: 90 }}>Quantity</th>
-                          <th style={{ width: 110 }}>Unit Price ($)</th>
-                          <th style={{ width: 110 }}>Line Total ($)</th>
-                          <th style={{ width: 44, textAlign: "center" }}>Action</th>
+                          <th style={{ width: 110 }}>Quantity</th>
+                          <th style={{ width: 50, textAlign: "center" }}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {editableLines.length > 0 ? (
-                          editableLines.map((line, idx) => {
-                            const qty = Number(line.cr49f_quantity) || 0;
-                            const price = Number(line.cr49f_unitprice) || 0;
-                            const lineTotal = qty * price;
-                            return (
-                              <tr key={line.cr49f_purchaserequestlineid || idx}>
-                                <td><strong>{idx + 1}</strong></td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    value={line.cr49f_itemname || ""}
-                                    onChange={(e) => {
-                                      const updated = [...editableLines];
-                                      updated[idx] = { ...updated[idx], cr49f_itemname: e.target.value };
-                                      setEditableLines(updated);
-                                    }}
-                                    className="task-input-sm"
-                                    placeholder="Product name"
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    value={line.cr49f_itemdescription || ""}
-                                    onChange={(e) => {
-                                      const updated = [...editableLines];
-                                      updated[idx] = { ...updated[idx], cr49f_itemdescription: e.target.value };
-                                      setEditableLines(updated);
-                                    }}
-                                    className="task-input-sm"
-                                    placeholder="Specification / description"
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={line.cr49f_quantity ?? 1}
-                                    onChange={(e) => {
-                                      const updated = [...editableLines];
-                                      updated[idx] = { ...updated[idx], cr49f_quantity: Number(e.target.value) };
-                                      setEditableLines(updated);
-                                    }}
-                                    className="task-input-sm"
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={line.cr49f_unitprice ?? 0}
-                                    onChange={(e) => {
-                                      const updated = [...editableLines];
-                                      updated[idx] = { ...updated[idx], cr49f_unitprice: Number(e.target.value) };
-                                      setEditableLines(updated);
-                                    }}
-                                    className="task-input-sm"
-                                  />
-                                </td>
-                                <td>
-                                  <strong style={{ color: "var(--foreground-hex, #0f172a)" }}>
-                                    ${lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </strong>
-                                </td>
-                                <td style={{ textAlign: "center" }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveLine(idx)}
-                                    className="task-line-delete-btn"
-                                    title="Remove this item"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })
+                          editableLines.map((line, idx) => (
+                            <tr key={line.cr49f_purchaserequestlineid || idx}>
+                              <td><strong>{idx + 1}</strong></td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={line.cr49f_itemname || ""}
+                                  onChange={(e) => {
+                                    const updated = [...editableLines];
+                                    updated[idx] = { ...updated[idx], cr49f_itemname: e.target.value };
+                                    setEditableLines(updated);
+                                  }}
+                                  className="task-input-sm"
+                                  placeholder="Product name"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={line.cr49f_itemdescription || ""}
+                                  onChange={(e) => {
+                                    const updated = [...editableLines];
+                                    updated[idx] = { ...updated[idx], cr49f_itemdescription: e.target.value };
+                                    setEditableLines(updated);
+                                  }}
+                                  className="task-input-sm"
+                                  placeholder="Specification / description"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={line.cr49f_quantity ?? 1}
+                                  onChange={(e) => {
+                                    const updated = [...editableLines];
+                                    updated[idx] = { ...updated[idx], cr49f_quantity: Number(e.target.value) };
+                                    setEditableLines(updated);
+                                  }}
+                                  className="task-input-sm"
+                                />
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLine(idx)}
+                                  className="task-line-delete-btn"
+                                  title="Remove this item"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
                         ) : (
                           <tr>
-                            <td colSpan={7} style={{ textAlign: "center", padding: "24px", color: "var(--muted-foreground-hex, #64748b)" }}>
+                            <td colSpan={5} style={{ textAlign: "center", padding: "24px", color: "var(--muted-foreground-hex, #64748b)" }}>
                               No products recorded on this PR. Click <strong>"Add Product from Catalog"</strong> or <strong>"Custom Item"</strong> above to add items.
                             </td>
                           </tr>
