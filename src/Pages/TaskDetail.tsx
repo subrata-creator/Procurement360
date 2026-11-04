@@ -171,7 +171,7 @@ export default function TaskDetail() {
                 return lPR === prId;
               });
               setLineItems(matchedLines);
-            } catch {}
+            } catch { }
           } else {
             setParentPR(null);
             setLineItems([]);
@@ -341,18 +341,18 @@ function ModernDataverseTaskDetail({
   const objectTypeLabel = isRfq
     ? "Request for Quotation"
     : isPr
-    ? "Purchase Request"
-    : isPo
-    ? "Purchase Order"
-    : "Approval Task";
+      ? "Purchase Request"
+      : isPo
+        ? "Purchase Order"
+        : "Approval Task";
 
   const shortType = isRfq ? "RFQ" : isPr ? "Purchase Request" : isPo ? "Purchase Order" : "Record";
 
   const reference = isRfq
     ? parentRFQ?.cr49f_rfqnumber || "RFQ-2026"
     : isPr
-    ? parentPR?.cr49f_prnumber || "PR-2026"
-    : `TASK-${task.cr49f_sequence || 1}`;
+      ? parentPR?.cr49f_prnumber || "PR-2026"
+      : `TASK-${task.cr49f_sequence || 1}`;
 
   const prIdClean = cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(task._cr49f_pr_value);
   const cachedPrStatus = prIdClean && typeof window !== "undefined" ? localStorage.getItem(`pr_status_${prIdClean}`) : null;
@@ -524,7 +524,7 @@ function ModernDataverseTaskDetail({
                 }
               }
             }
-          } catch {}
+          } catch { }
         }
 
         setSelectedSupplierIds(initialSelected);
@@ -745,19 +745,13 @@ function ModernDataverseTaskDetail({
         ? (localStorage.getItem("procurement_user_name") || "Subrata Dey")
         : "Subrata Dey";
 
-      const result = await requestChangesOnTask(cleanTaskId, changesFeedbackText.trim(), currentUserName);
+      await requestChangesOnTask(cleanTaskId, changesFeedbackText.trim(), currentUserName);
       setIsChangesNeededModalOpen(false);
-      setNotice(`${shortType} (${reference}) has been marked as Changes Needed. A revision task has been created for the requester.`);
+      setNotice(`${shortType} (${reference}) has been marked as Changes Needed. Redirecting to dashboard...`);
       await onRefresh();
-      if (result.newTaskId) {
-        setTimeout(() => {
-          navigate(`/tasks/${result.newTaskId}`);
-        }, 700);
-      } else {
-        setTimeout(() => {
-          navigate("/");
-        }, 700);
-      }
+      setTimeout(() => {
+        navigate("/");
+      }, 700);
     } catch (err: unknown) {
       console.error("Failed to request changes:", err);
       const msg = err instanceof Error ? err.message : "Failed to request changes";
@@ -861,14 +855,14 @@ function ModernDataverseTaskDetail({
   const recordTitle = isRfq
     ? parentRFQ?.cr49f_rfqtitle || "Request for Quotation"
     : isPr
-    ? parentPR?.cr49f_prtitle || "Purchase Request"
-    : task.cr49f_task || "Approval Task";
+      ? parentPR?.cr49f_prtitle || "Purchase Request"
+      : task.cr49f_task || "Approval Task";
 
   const requesterName = isRfq
     ? parentRFQ?.createdbyname || "Neha Sharma"
     : isPr
-    ? parentPR?.createdbyname || "Sakshi Paliwal"
-    : "Business User";
+      ? parentPR?.createdbyname || "Sakshi Paliwal"
+      : "Business User";
 
   const deptLabel = task.cr49f_department
     ? (Cr49f_approvaltasksescr49f_department[task.cr49f_department] || "IT")
@@ -888,8 +882,8 @@ function ModernDataverseTaskDetail({
     ? parentPR?.cr49f_priority === 2
       ? "High"
       : parentPR?.cr49f_priority === 0
-      ? "Low"
-      : "Medium"
+        ? "Low"
+        : "Medium"
     : "Medium";
 
   // Stepper milestones from siblingTasks: sequential approval milestones only (sequence >= 1, excluding changes needed tasks)
@@ -948,12 +942,12 @@ function ModernDataverseTaskDetail({
                 {isApproved
                   ? "Approved"
                   : isRejected
-                  ? "Rejected"
-                  : isChangesNeeded
-                  ? (isActive ? "Changes Needed (Action Required)" : "Changes Submitted")
-                  : isActive
-                  ? "Action Required"
-                  : "Inactive (Waiting in Sequence)"}
+                    ? "Rejected"
+                    : isChangesNeeded
+                      ? (isActive ? "Changes Needed (Action Required)" : "Changes Submitted")
+                      : isActive
+                        ? "Action Required"
+                        : "Inactive (Waiting in Sequence)"}
               </span>
             </div>
 
@@ -1087,15 +1081,14 @@ function ModernDataverseTaskDetail({
               return (
                 <button
                   type="button"
-                  className={`task-step-item ${
-                    stepApproved
+                  className={`task-step-item ${stepApproved
                       ? "is-approved"
                       : stepRejected
-                      ? "is-rejected"
-                      : stepActive
-                      ? "is-current-active"
-                      : ""
-                  } ${isCurrentViewed ? "is-current" : ""}`}
+                        ? "is-rejected"
+                        : stepActive
+                          ? "is-current-active"
+                          : ""
+                    } ${isCurrentViewed ? "is-current" : ""}`}
                   key={stepItem.cr49f_approvaltasksid || index}
                   onClick={() => {
                     if (stepItem.cr49f_approvaltasksid && !isCurrentViewed) {
@@ -1119,23 +1112,22 @@ function ModernDataverseTaskDetail({
                     <span className="task-step-title">{stepItem.cr49f_task || `Task #${index + 1}`}</span>
                     <span className="task-step-meta">{stepRole} · {stepDept}</span>
                     <span
-                      className={`task-step-badge ${
-                        stepApproved
+                      className={`task-step-badge ${stepApproved
                           ? "approved"
                           : stepRejected
-                          ? "rejected"
-                          : stepActive
-                          ? "active"
-                          : "pending"
-                      }`}
+                            ? "rejected"
+                            : stepActive
+                              ? "active"
+                              : "pending"
+                        }`}
                     >
                       {stepApproved
                         ? "Approved"
                         : stepRejected
-                        ? "Rejected"
-                        : stepActive
-                        ? "Action Needed"
-                        : "Pending"}
+                          ? "Rejected"
+                          : stepActive
+                            ? "Action Needed"
+                            : "Pending"}
                     </span>
                   </div>
                 </button>
@@ -1423,348 +1415,348 @@ function ModernDataverseTaskDetail({
             ) : (
               /* Interactive PR Revision Form */
               <form onSubmit={handleSubmitChangesRevision} className="task-card task-changes-form-card">
-              <div className="task-card-header">
-                <div className="task-card-header-left">
-                  <div className="task-card-header-icon" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#d97706" }}>
-                    <FileEdit size={16} />
-                  </div>
-                  <div className="task-card-header-titles">
-                    <h2>Update Purchase Request Information</h2>
-                    <p>Revise PR specifications and line item quantities/pricing to resolve approver feedback</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="task-changes-form-body">
-                <div className="task-changes-form-row">
-                  <div className="task-changes-field">
-                    <label>Purchase Request Title</label>
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      required
-                      className="task-input"
-                      placeholder="e.g. IT Equipment and Office Laptops"
-                    />
-                  </div>
-                  <div className="task-changes-field">
-                    <label>Priority</label>
-                    <select
-                      value={editPriority}
-                      onChange={(e) => setEditPriority(Number(e.target.value))}
-                      className="task-select"
-                    >
-                      <option value={0}>Low</option>
-                      <option value={1}>Medium</option>
-                      <option value={2}>Normal</option>
-                      <option value={3}>High</option>
-                      <option value={4}>Urgent</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="task-changes-form-row">
-                  <div className="task-changes-field">
-                    <label>Delivery Location</label>
-                    <input
-                      type="text"
-                      value={editLocation}
-                      onChange={(e) => setEditLocation(e.target.value)}
-                      className="task-input"
-                      placeholder="e.g. Headquarters - Floor 3"
-                    />
-                  </div>
-                  <div className="task-changes-field">
-                    <label>Required Delivery Date</label>
-                    <input
-                      type="date"
-                      value={editDeliveryDate}
-                      onChange={(e) => setEditDeliveryDate(e.target.value)}
-                      className="task-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="task-changes-field">
-                  <label>Business Need &amp; Justification</label>
-                  <textarea
-                    rows={3}
-                    value={editJustification}
-                    onChange={(e) => setEditJustification(e.target.value)}
-                    className="task-textarea"
-                    placeholder="Explain the business need or reason for the requested changes..."
-                  />
-                </div>
-
-                {/* Editable Line Items Section */}
-                <div className="task-changes-lines-section">
-                  <div className="task-changes-lines-header">
-                    <div>
-                      <h3>Requested Products &amp; Line Items</h3>
-                      <p>Adjust item specifications, quantities, or add more products</p>
+                <div className="task-card-header">
+                  <div className="task-card-header-left">
+                    <div className="task-card-header-icon" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#d97706" }}>
+                      <FileEdit size={16} />
                     </div>
-                    <div className="task-lines-actions">
-                      <span className="task-lines-total-badge">
-                        {editableLines.length} {editableLines.length === 1 ? "Item" : "Items"}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setIsCatalogModalOpen(true)}
-                        className="task-btn-action-primary"
+                    <div className="task-card-header-titles">
+                      <h2>Update Purchase Request Information</h2>
+                      <p>Revise PR specifications and line item quantities/pricing to resolve approver feedback</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="task-changes-form-body">
+                  <div className="task-changes-form-row">
+                    <div className="task-changes-field">
+                      <label>Purchase Request Title</label>
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        required
+                        className="task-input"
+                        placeholder="e.g. IT Equipment and Office Laptops"
+                      />
+                    </div>
+                    <div className="task-changes-field">
+                      <label>Priority</label>
+                      <select
+                        value={editPriority}
+                        onChange={(e) => setEditPriority(Number(e.target.value))}
+                        className="task-select"
                       >
-                        <Package size={14} /> Add Product from Catalog
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleAddCustomLine}
-                        className="task-btn-action-secondary"
-                      >
-                        <Plus size={14} /> Custom Item
-                      </button>
+                        <option value={0}>Low</option>
+                        <option value={1}>Medium</option>
+                        <option value={2}>Normal</option>
+                        <option value={3}>High</option>
+                        <option value={4}>Urgent</option>
+                      </select>
                     </div>
                   </div>
 
-                  <div className="task-table-scroll">
-                    <table className="task-modern-table editable-lines-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: 44 }}>#</th>
-                          <th style={{ width: 220 }}>Product Name</th>
-                          <th>Specification / Description</th>
-                          <th style={{ width: 110 }}>Quantity</th>
-                          <th style={{ width: 50, textAlign: "center" }}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {editableLines.length > 0 ? (
-                          editableLines.map((line, idx) => (
-                            <tr key={line.cr49f_purchaserequestlineid || idx}>
-                              <td><strong>{idx + 1}</strong></td>
-                              <td>
-                                <input
-                                  type="text"
-                                  value={line.cr49f_itemname || ""}
-                                  onChange={(e) => {
-                                    const updated = [...editableLines];
-                                    updated[idx] = { ...updated[idx], cr49f_itemname: e.target.value };
-                                    setEditableLines(updated);
-                                  }}
-                                  className="task-input-sm"
-                                  placeholder="Product name"
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="text"
-                                  value={line.cr49f_itemdescription || ""}
-                                  onChange={(e) => {
-                                    const updated = [...editableLines];
-                                    updated[idx] = { ...updated[idx], cr49f_itemdescription: e.target.value };
-                                    setEditableLines(updated);
-                                  }}
-                                  className="task-input-sm"
-                                  placeholder="Specification / description"
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={line.cr49f_quantity ?? 1}
-                                  onChange={(e) => {
-                                    const updated = [...editableLines];
-                                    updated[idx] = { ...updated[idx], cr49f_quantity: Number(e.target.value) };
-                                    setEditableLines(updated);
-                                  }}
-                                  className="task-input-sm"
-                                />
-                              </td>
-                              <td style={{ textAlign: "center" }}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveLine(idx)}
-                                  className="task-line-delete-btn"
-                                  title="Remove this item"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
+                  <div className="task-changes-form-row">
+                    <div className="task-changes-field">
+                      <label>Delivery Location</label>
+                      <input
+                        type="text"
+                        value={editLocation}
+                        onChange={(e) => setEditLocation(e.target.value)}
+                        className="task-input"
+                        placeholder="e.g. Headquarters - Floor 3"
+                      />
+                    </div>
+                    <div className="task-changes-field">
+                      <label>Required Delivery Date</label>
+                      <input
+                        type="date"
+                        value={editDeliveryDate}
+                        onChange={(e) => setEditDeliveryDate(e.target.value)}
+                        className="task-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="task-changes-field">
+                    <label>Business Need &amp; Justification</label>
+                    <textarea
+                      rows={3}
+                      value={editJustification}
+                      onChange={(e) => setEditJustification(e.target.value)}
+                      className="task-textarea"
+                      placeholder="Explain the business need or reason for the requested changes..."
+                    />
+                  </div>
+
+                  {/* Editable Line Items Section */}
+                  <div className="task-changes-lines-section">
+                    <div className="task-changes-lines-header">
+                      <div>
+                        <h3>Requested Products &amp; Line Items</h3>
+                        <p>Adjust item specifications, quantities, or add more products</p>
+                      </div>
+                      <div className="task-lines-actions">
+                        <span className="task-lines-total-badge">
+                          {editableLines.length} {editableLines.length === 1 ? "Item" : "Items"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsCatalogModalOpen(true)}
+                          className="task-btn-action-primary"
+                        >
+                          <Package size={14} /> Add Product from Catalog
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddCustomLine}
+                          className="task-btn-action-secondary"
+                        >
+                          <Plus size={14} /> Custom Item
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="task-table-scroll">
+                      <table className="task-modern-table editable-lines-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: 44 }}>#</th>
+                            <th style={{ width: 220 }}>Product Name</th>
+                            <th>Specification / Description</th>
+                            <th style={{ width: 110 }}>Quantity</th>
+                            <th style={{ width: 50, textAlign: "center" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {editableLines.length > 0 ? (
+                            editableLines.map((line, idx) => (
+                              <tr key={line.cr49f_purchaserequestlineid || idx}>
+                                <td><strong>{idx + 1}</strong></td>
+                                <td>
+                                  <input
+                                    type="text"
+                                    value={line.cr49f_itemname || ""}
+                                    onChange={(e) => {
+                                      const updated = [...editableLines];
+                                      updated[idx] = { ...updated[idx], cr49f_itemname: e.target.value };
+                                      setEditableLines(updated);
+                                    }}
+                                    className="task-input-sm"
+                                    placeholder="Product name"
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="text"
+                                    value={line.cr49f_itemdescription || ""}
+                                    onChange={(e) => {
+                                      const updated = [...editableLines];
+                                      updated[idx] = { ...updated[idx], cr49f_itemdescription: e.target.value };
+                                      setEditableLines(updated);
+                                    }}
+                                    className="task-input-sm"
+                                    placeholder="Specification / description"
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={line.cr49f_quantity ?? 1}
+                                    onChange={(e) => {
+                                      const updated = [...editableLines];
+                                      updated[idx] = { ...updated[idx], cr49f_quantity: Number(e.target.value) };
+                                      setEditableLines(updated);
+                                    }}
+                                    className="task-input-sm"
+                                  />
+                                </td>
+                                <td style={{ textAlign: "center" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLine(idx)}
+                                    className="task-line-delete-btn"
+                                    title="Remove this item"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5} style={{ textAlign: "center", padding: "24px", color: "var(--muted-foreground-hex, #64748b)" }}>
+                                No products recorded on this PR. Click <strong>"Add Product from Catalog"</strong> or <strong>"Custom Item"</strong> above to add items.
                               </td>
                             </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} style={{ textAlign: "center", padding: "24px", color: "var(--muted-foreground-hex, #64748b)" }}>
-                              No products recorded on this PR. Click <strong>"Add Product from Catalog"</strong> or <strong>"Custom Item"</strong> above to add items.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="task-changes-field" style={{ marginTop: 18 }}>
+                    <label>Requester Revision Notes (What changes did you apply?)</label>
+                    <textarea
+                      rows={2}
+                      value={requesterRemarks}
+                      onChange={(e) => setRequesterRemarks(e.target.value)}
+                      placeholder="e.g. Adjusted quantities and updated delivery schedule per approver feedback."
+                      className="task-textarea"
+                    />
+                  </div>
+
+                  <div className="task-changes-form-actions">
+                    <button
+                      type="submit"
+                      className="task-btn-submit-changes"
+                      disabled={submittingChanges}
+                    >
+                      {submittingChanges ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                      Submit Updated PR &amp; Restart Approval Workflow
+                    </button>
                   </div>
                 </div>
-
-                <div className="task-changes-field" style={{ marginTop: 18 }}>
-                  <label>Requester Revision Notes (What changes did you apply?)</label>
-                  <textarea
-                    rows={2}
-                    value={requesterRemarks}
-                    onChange={(e) => setRequesterRemarks(e.target.value)}
-                    placeholder="e.g. Adjusted quantities and updated delivery schedule per approver feedback."
-                    className="task-textarea"
-                  />
-                </div>
-
-                <div className="task-changes-form-actions">
-                  <button
-                    type="submit"
-                    className="task-btn-submit-changes"
-                    disabled={submittingChanges}
-                  >
-                    {submittingChanges ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                    Submit Updated PR &amp; Restart Approval Workflow
-                  </button>
-                </div>
-              </div>
-            </form>
-          )) : (
+              </form>
+            )) : (
             <>
               {/* Request Information Metrics Card */}
               <section className="task-card">
-            <div className="task-card-header">
-              <div className="task-card-header-left">
-                <div className="task-card-header-icon">
-                  <FileText size={16} />
+                <div className="task-card-header">
+                  <div className="task-card-header-left">
+                    <div className="task-card-header-icon">
+                      <FileText size={16} />
+                    </div>
+                    <div className="task-card-header-titles">
+                      <h2>Request Overview</h2>
+                      <p>Procurement request details and specifications</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="task-card-header-titles">
-                  <h2>Request Overview</h2>
-                  <p>Procurement request details and specifications</p>
-                </div>
-              </div>
-            </div>
 
-            <div className="task-metrics-grid">
-              <div className="task-metric-tile highlight">
-                <div className="task-metric-icon violet">
-                  <Flag size={17} />
-                </div>
-                <div className="task-metric-info">
-                  <span className="task-metric-label">Priority Tier</span>
-                  <strong className="task-metric-value large">{priorityLabel}</strong>
-                </div>
-              </div>
+                <div className="task-metrics-grid">
+                  <div className="task-metric-tile highlight">
+                    <div className="task-metric-icon violet">
+                      <Flag size={17} />
+                    </div>
+                    <div className="task-metric-info">
+                      <span className="task-metric-label">Priority Tier</span>
+                      <strong className="task-metric-value large">{priorityLabel}</strong>
+                    </div>
+                  </div>
 
-              <div className="task-metric-tile">
-                <div className="task-metric-icon blue">
-                  <UserRound size={17} />
-                </div>
-                <div className="task-metric-info">
-                  <span className="task-metric-label">Requester</span>
-                  <strong className="task-metric-value">{requesterName}</strong>
-                </div>
-              </div>
+                  <div className="task-metric-tile">
+                    <div className="task-metric-icon blue">
+                      <UserRound size={17} />
+                    </div>
+                    <div className="task-metric-info">
+                      <span className="task-metric-label">Requester</span>
+                      <strong className="task-metric-value">{requesterName}</strong>
+                    </div>
+                  </div>
 
-              <div className="task-metric-tile">
-                <div className="task-metric-icon purple">
-                  <List size={17} />
-                </div>
-                <div className="task-metric-info">
-                  <span className="task-metric-label">{shortType} Reference</span>
-                  <strong className="task-metric-value">{reference}</strong>
-                </div>
-              </div>
+                  <div className="task-metric-tile">
+                    <div className="task-metric-icon purple">
+                      <List size={17} />
+                    </div>
+                    <div className="task-metric-info">
+                      <span className="task-metric-label">{shortType} Reference</span>
+                      <strong className="task-metric-value">{reference}</strong>
+                    </div>
+                  </div>
 
-              <div className="task-metric-tile">
-                <div className="task-metric-icon green">
-                  <CalendarDays size={17} />
+                  <div className="task-metric-tile">
+                    <div className="task-metric-icon green">
+                      <CalendarDays size={17} />
+                    </div>
+                    <div className="task-metric-info">
+                      <span className="task-metric-label">
+                        {isRfq ? "Submission Deadline" : "Required Delivery"}
+                      </span>
+                      <strong className="task-metric-value">
+                        {isRfq
+                          ? toUsDate(parentRFQ?.cr49f_submissiondeadline)
+                          : toUsDate(parentPR?.cr49f_requireddeliverydate)}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
-                <div className="task-metric-info">
-                  <span className="task-metric-label">
-                    {isRfq ? "Submission Deadline" : "Required Delivery"}
+
+                {parentPR?.cr49f_businessjustification && (
+                  <div className="task-justification-box">
+                    <div className="task-justification-title">
+                      <Tag size={12} />
+                      Business Need &amp; Justification
+                    </div>
+                    <p>{parentPR.cr49f_businessjustification}</p>
+                  </div>
+                )}
+              </section>
+
+              {/* Line Items Card */}
+              <section className="task-card">
+                <div className="task-card-header">
+                  <div className="task-card-header-left">
+                    <div className="task-card-header-icon">
+                      <List size={16} />
+                    </div>
+                    <div className="task-card-header-titles">
+                      <h2>Requested Line Items</h2>
+                      <p>Itemized equipment and service specifications</p>
+                    </div>
+                  </div>
+                  <span className="task-seq-pill">
+                    {lineItems.length > 0 ? `${lineItems.length} line items` : "1 item recorded"}
                   </span>
-                  <strong className="task-metric-value">
-                    {isRfq
-                      ? toUsDate(parentRFQ?.cr49f_submissiondeadline)
-                      : toUsDate(parentPR?.cr49f_requireddeliverydate)}
-                  </strong>
                 </div>
-              </div>
-            </div>
 
-            {parentPR?.cr49f_businessjustification && (
-              <div className="task-justification-box">
-                <div className="task-justification-title">
-                  <Tag size={12} />
-                  Business Need &amp; Justification
-                </div>
-                <p>{parentPR.cr49f_businessjustification}</p>
-              </div>
-            )}
-          </section>
-
-          {/* Line Items Card */}
-          <section className="task-card">
-            <div className="task-card-header">
-              <div className="task-card-header-left">
-                <div className="task-card-header-icon">
-                  <List size={16} />
-                </div>
-                <div className="task-card-header-titles">
-                  <h2>Requested Line Items</h2>
-                  <p>Itemized equipment and service specifications</p>
-                </div>
-              </div>
-              <span className="task-seq-pill">
-                {lineItems.length > 0 ? `${lineItems.length} line items` : "1 item recorded"}
-              </span>
-            </div>
-
-            <div className="task-table-scroll">
-              <table className="task-modern-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 44 }}>#</th>
-                    <th>Item Name</th>
-                    <th>Specification / Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineItems.length > 0 ? (
-                    lineItems.map((item, index) => {
-                      return (
-                        <tr key={item.cr49f_purchaserequestlineid || index}>
-                          <td><strong>{index + 1}</strong></td>
-                          <td>
-                            <strong style={{ color: "var(--foreground-hex, #0f172a)" }}>
-                              {item.cr49f_itemname || `Item #${index + 1}`}
-                            </strong>
-                          </td>
-                          <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
-                            {item.cr49f_itemdescription || "—"}
-                          </td>
+                <div className="task-table-scroll">
+                  <table className="task-modern-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 44 }}>#</th>
+                        <th>Item Name</th>
+                        <th>Specification / Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineItems.length > 0 ? (
+                        lineItems.map((item, index) => {
+                          return (
+                            <tr key={item.cr49f_purchaserequestlineid || index}>
+                              <td><strong>{index + 1}</strong></td>
+                              <td>
+                                <strong style={{ color: "var(--foreground-hex, #0f172a)" }}>
+                                  {item.cr49f_itemname || `Item #${index + 1}`}
+                                </strong>
+                              </td>
+                              <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
+                                {item.cr49f_itemdescription || "—"}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td>1</td>
+                          <td><strong>{recordTitle}</strong></td>
+                          <td>Procurement equipment / services</td>
                         </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td>1</td>
-                      <td><strong>{recordTitle}</strong></td>
-                      <td>Procurement equipment / services</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-            <div className="task-table-footer">
-              <span>Showing all requested items</span>
-              <span>
-                Total Items: <strong>{lineItems.length > 0 ? lineItems.length : 1}</strong>
-              </span>
-            </div>
-          </section>
-        </>
-      )}
+                <div className="task-table-footer">
+                  <span>Showing all requested items</span>
+                  <span>
+                    Total Items: <strong>{lineItems.length > 0 ? lineItems.length : 1}</strong>
+                  </span>
+                </div>
+              </section>
+            </>
+          )}
 
           {/* Comments & Remarks Card */}
           <section className="task-card">
