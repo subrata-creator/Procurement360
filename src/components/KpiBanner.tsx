@@ -1,21 +1,28 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { KpiItem } from "../types/dashboard";
-import { ShoppingCart, ClipboardList, PackageCheck, FileText, BarChart3, FileCheck2, TrendingUp, TrendingDown, Sparkles, AlertCircle } from "lucide-react";
-import { PROCUREMENT_BUDGET_REMAINING_USD, PROCUREMENT_BUDGET_USD } from "../data/procurementBudget";
+import {
+  ShoppingCart,
+  ClipboardList,
+  PackageCheck,
+  FileText,
+  BarChart3,
+  FileCheck2,
+  TrendingUp,
+  TrendingDown,
+  Sparkles,
+  AlertCircle,
+} from "lucide-react";
+import {
+  PROCUREMENT_BUDGET_REMAINING_USD,
+  PROCUREMENT_BUDGET_USD,
+} from "../data/procurementBudget";
+import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
+import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
 
 const ALLOCATED = PROCUREMENT_BUDGET_USD / 1_000_000;
 const REMAINING = PROCUREMENT_BUDGET_REMAINING_USD / 1_000_000;
 const usedPct = Math.round(((ALLOCATED - REMAINING) / ALLOCATED) * 100);
-
-const kpis: KpiItem[] = [
-  { label: "Purchase Requests", value: "42", icon: "cart", caption: "Request volume", tone: "blue", trend: "12%", trendUp: true, spark: [3, 5, 4, 7, 6, 9, 8, 11], insight: "Approval time is 30% faster this month, down from 5 days to 3.5.", insightTrend: "positive" },
-  { label: "RFQs", value: "43", icon: "quote", caption: "Quotation volume", tone: "violet", trend: "8%", trendUp: true, spark: [4, 3, 6, 5, 8, 7, 9, 10], insight: "82% convert to orders, up 12% from last month.", insightTrend: "positive" },
-  { label: "Orders", value: "20", icon: "order", caption: "Order volume", tone: "green", trend: "5%", trendUp: false, spark: [9, 8, 9, 6, 7, 5, 6, 4] },
-  { label: "Invoice Submissions", value: "18", icon: "invoice", caption: "Submission volume", tone: "amber", trend: "20%", trendUp: true, spark: [2, 4, 3, 6, 5, 8, 7, 10] },
-  { label: "Allocated Budget", value: "USD 10.00M", icon: "budget", tone: "blue", progress: usedPct, progressLabel: `${usedPct}% utilized`, insight: "IT department is at 85% of its allocation. Review upcoming requests.", insightTrend: "attention" },
-  { label: "Remaining Budget", value: "USD 9.90M", icon: "money", tone: "violet", progress: 100 - usedPct, progressLabel: `${100 - usedPct}% available` },
-];
 
 const icons: Record<string, React.ReactNode> = {
   cart: <ShoppingCart size={18} />,
@@ -25,6 +32,82 @@ const icons: Record<string, React.ReactNode> = {
   budget: <BarChart3 size={18} />,
   money: <FileCheck2 size={18} />,
 };
+
+function computeMonthlyTrend(
+  records: Array<{ createdon?: string; cr49f_requestdate?: string }>,
+  defaultTrend: string,
+  defaultTrendUp: boolean
+): { trend: string; trendUp: boolean } {
+  if (!records || records.length === 0) {
+    return { trend: defaultTrend, trendUp: defaultTrendUp };
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
+  const prevYear = prevMonthDate.getFullYear();
+  const prevMonth = prevMonthDate.getMonth();
+
+  let currentMonthCount = 0;
+  let prevMonthCount = 0;
+
+  for (const r of records) {
+    const rawDate = r.createdon || r.cr49f_requestdate;
+    if (!rawDate) continue;
+    const d = new Date(rawDate);
+    if (isNaN(d.getTime())) continue;
+
+    if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+      currentMonthCount++;
+    } else if (d.getFullYear() === prevYear && d.getMonth() === prevMonth) {
+      prevMonthCount++;
+    }
+  }
+
+  if (prevMonthCount > 0) {
+    const diff = currentMonthCount - prevMonthCount;
+    const pct = Math.round((diff / prevMonthCount) * 100);
+    return {
+      trend: `${Math.abs(pct)}%`,
+      trendUp: pct >= 0,
+    };
+  }
+
+  return { trend: defaultTrend, trendUp: defaultTrendUp };
+}
+
+function computeSparkline(
+  records: Array<{ createdon?: string; cr49f_requestdate?: string }>,
+  defaultSpark: number[]
+): number[] {
+  if (!records || records.length < 2) return defaultSpark;
+
+  const pointsCount = 8;
+  const buckets = new Array(pointsCount).fill(0);
+  const now = Date.now();
+  const intervalMs = (14 * 24 * 60 * 60 * 1000) / pointsCount;
+  let validDatesFound = 0;
+
+  for (const r of records) {
+    const rawDate = r.createdon || r.cr49f_requestdate;
+    if (!rawDate) continue;
+    const t = new Date(rawDate).getTime();
+    if (isNaN(t)) continue;
+
+    validDatesFound++;
+    const age = now - t;
+    if (age >= 0 && age < 14 * 24 * 60 * 60 * 1000) {
+      const idx = pointsCount - 1 - Math.floor(age / intervalMs);
+      if (idx >= 0 && idx < pointsCount) {
+        buckets[idx]++;
+      }
+    }
+  }
+
+  return validDatesFound > 0 && buckets.some((val) => val > 0) ? buckets : defaultSpark;
+}
 
 const Spark: React.FC<{ data: number[] }> = ({ data }) => {
   const max = Math.max(...data);
@@ -206,45 +289,179 @@ const KpiInsight: React.FC<{ label: string; text: string; tone: string; trend?: 
   );
 };
 
-const KpiBanner: React.FC = () => (
-  <section className="xd-kpis">
-    {kpis.map((k) => (
-      <article className={`xd-kpi xd-${k.tone}${k.insight ? " xd-kpi-has-insight" : ""}`} key={k.label}>
-        <div className="xd-kpi-top">
-          <span className="xd-kpi-label">{k.label}</span>
-          <span className="xd-kpi-icon">{icons[k.icon]}</span>
-        </div>
-        <div className="xd-kpi-mid">
-          <KpiValue value={k.value} />
-          {k.trend && (
-            <span className="xd-kpi-trend-group">
-              <span className={`xd-trend ${k.trendUp ? "up" : "down"}`}>
-                {k.trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                {k.trendUp ? "+" : "−"}{k.trend}
+const KpiBanner: React.FC = () => {
+  const [prCount, setPrCount] = useState<number | null>(null);
+  const [rfqCount, setRfqCount] = useState<number | null>(null);
+  const [prTrend, setPrTrend] = useState<{ trend: string; trendUp: boolean }>({
+    trend: "12%",
+    trendUp: true,
+  });
+  const [rfqTrend, setRfqTrend] = useState<{ trend: string; trendUp: boolean }>({
+    trend: "8%",
+    trendUp: true,
+  });
+  const [prSpark, setPrSpark] = useState<number[]>([3, 5, 4, 7, 6, 9, 8, 11]);
+  const [rfqSpark, setRfqSpark] = useState<number[]>([4, 3, 6, 5, 8, 7, 9, 10]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadKpiCounts = async () => {
+      try {
+        const [prsRes, rfqsRes] = await Promise.allSettled([
+          Cr49f_purchaserequestsService.getAll(),
+          Cr49f_requestforqoutationsService.getAll(),
+        ]);
+
+        if (!isMounted) return;
+
+        if (prsRes.status === "fulfilled" && prsRes.value.success && prsRes.value.data) {
+          const prRecords = prsRes.value.data;
+          const activePrs = prRecords.filter((r) => r.statecode === 0 || r.statecode === undefined);
+          const count = activePrs.length > 0 ? activePrs.length : prRecords.length;
+          setPrCount(count);
+
+          const trendInfo = computeMonthlyTrend(prRecords, "12%", true);
+          setPrTrend(trendInfo);
+
+          const spark = computeSparkline(prRecords, [3, 5, 4, 7, 6, 9, 8, 11]);
+          setPrSpark(spark);
+        }
+
+        if (rfqsRes.status === "fulfilled" && rfqsRes.value.success && rfqsRes.value.data) {
+          const rfqRecords = rfqsRes.value.data;
+          const activeRfqs = rfqRecords.filter((r) => r.statecode === 0 || r.statecode === undefined);
+          const count = activeRfqs.length > 0 ? activeRfqs.length : rfqRecords.length;
+          setRfqCount(count);
+
+          const trendInfo = computeMonthlyTrend(rfqRecords, "8%", true);
+          setRfqTrend(trendInfo);
+
+          const spark = computeSparkline(rfqRecords, [4, 3, 6, 5, 8, 7, 9, 10]);
+          setRfqSpark(spark);
+        }
+      } catch (err) {
+        console.warn("Could not load dynamic PR/RFQ counts for KPI banner:", err);
+      }
+    };
+
+    void loadKpiCounts();
+
+    window.addEventListener("approvalTasksUpdated", loadKpiCounts);
+    window.addEventListener("focus", loadKpiCounts);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("approvalTasksUpdated", loadKpiCounts);
+      window.removeEventListener("focus", loadKpiCounts);
+    };
+  }, []);
+
+  const kpis: KpiItem[] = useMemo(() => [
+    {
+      label: "Purchase Requests",
+      value: prCount !== null ? String(prCount) : "42",
+      icon: "cart",
+      caption: "Request volume",
+      tone: "blue",
+      trend: prTrend.trend,
+      trendUp: prTrend.trendUp,
+      spark: prSpark,
+      insight: "Approval time is 30% faster this month, down from 5 days to 3.5.",
+      insightTrend: "positive",
+    },
+    {
+      label: "RFQs",
+      value: rfqCount !== null ? String(rfqCount) : "43",
+      icon: "quote",
+      caption: "Quotation volume",
+      tone: "violet",
+      trend: rfqTrend.trend,
+      trendUp: rfqTrend.trendUp,
+      spark: rfqSpark,
+      insight: "82% convert to orders, up 12% from last month.",
+      insightTrend: "positive",
+    },
+    {
+      label: "Orders",
+      value: "20",
+      icon: "order",
+      caption: "Order volume",
+      tone: "green",
+      trend: "5%",
+      trendUp: false,
+      spark: [9, 8, 9, 6, 7, 5, 6, 4],
+    },
+    {
+      label: "Invoice Submissions",
+      value: "18",
+      icon: "invoice",
+      caption: "Submission volume",
+      tone: "amber",
+      trend: "20%",
+      trendUp: true,
+      spark: [2, 4, 3, 6, 5, 8, 7, 10],
+    },
+    {
+      label: "Allocated Budget",
+      value: "USD 10.00M",
+      icon: "budget",
+      tone: "blue",
+      progress: usedPct,
+      progressLabel: `${usedPct}% utilized`,
+      insight: "IT department is at 85% of its allocation. Review upcoming requests.",
+      insightTrend: "attention",
+    },
+    {
+      label: "Remaining Budget",
+      value: "USD 9.90M",
+      icon: "money",
+      tone: "violet",
+      progress: 100 - usedPct,
+      progressLabel: `${100 - usedPct}% available`,
+    },
+  ], [prCount, rfqCount, prTrend, rfqTrend, prSpark, rfqSpark]);
+
+  return (
+    <section className="xd-kpis">
+      {kpis.map((k) => (
+        <article className={`xd-kpi xd-${k.tone}${k.insight ? " xd-kpi-has-insight" : ""}`} key={k.label}>
+          <div className="xd-kpi-top">
+            <span className="xd-kpi-label">{k.label}</span>
+            <span className="xd-kpi-icon">{icons[k.icon]}</span>
+          </div>
+          <div className="xd-kpi-mid">
+            <KpiValue value={k.value} />
+            {k.trend && (
+              <span className="xd-kpi-trend-group">
+                <span className={`xd-trend ${k.trendUp ? "up" : "down"}`}>
+                  {k.trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                  {k.trendUp ? "+" : "−"}{k.trend}
+                </span>
+                <small>vs last month</small>
               </span>
-              <small>vs last month</small>
-            </span>
-          )}
-        </div>
-        {k.spark ? (
-          <div className="xd-kpi-foot">
-            <span className="xd-kpi-cap">{k.caption}</span>
-            <Spark data={k.spark} />
+            )}
           </div>
-        ) : (
-          <div className="xd-kpi-progress-wrap">
-            <span className="xd-kpi-cap">{k.progressLabel}</span>
-            <div className="xd-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={k.progress}>
-              <span style={{ width: `${Math.max(k.progress ?? 0, 2)}%` }} />
+          {k.spark ? (
+            <div className="xd-kpi-foot">
+              <span className="xd-kpi-cap">{k.caption}</span>
+              <Spark data={k.spark} />
             </div>
-          </div>
-        )}
-        {k.insight && (
-          <KpiInsight label={k.label} text={k.insight} tone={k.tone ?? "blue"} trend={k.insightTrend} />
-        )}
-      </article>
-    ))}
-  </section>
-);
+          ) : (
+            <div className="xd-kpi-progress-wrap">
+              <span className="xd-kpi-cap">{k.progressLabel}</span>
+              <div className="xd-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={k.progress}>
+                <span style={{ width: `${Math.max(k.progress ?? 0, 2)}%` }} />
+              </div>
+            </div>
+          )}
+          {k.insight && (
+            <KpiInsight label={k.label} text={k.insight} tone={k.tone ?? "blue"} trend={k.insightTrend} />
+          )}
+        </article>
+      ))}
+    </section>
+  );
+};
 
 export default KpiBanner;
