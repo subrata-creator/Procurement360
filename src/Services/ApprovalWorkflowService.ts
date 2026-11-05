@@ -97,6 +97,219 @@ export function extractTaskParentIds(task: Cr49f_approvaltaskses | Record<string
   return { prId, rfqId, poId };
 }
 
+export interface TaskComment {
+  id: string;
+  text: string;
+  author: string;
+  timestamp: string;
+}
+
+/**
+ * Safely parses the cr49f_comments column from Dataverse into a list of TaskComment objects.
+ * Handles JSON string array, single/multiline text, and legacy text notes.
+ */
+export function parseTaskComments(rawComments?: unknown): TaskComment[] {
+  if (!rawComments) return [];
+
+  if (Array.isArray(rawComments)) {
+    return rawComments.map((item, idx) => {
+      if (typeof item === "object" && item !== null) {
+        return {
+          id: String((item as any).id || `c_${idx}`),
+          text: String((item as any).text || ""),
+          author: String((item as any).author || "Approver"),
+          timestamp: String((item as any).timestamp || new Date().toLocaleDateString()),
+        };
+      }
+      return {
+        id: `c_${idx}`,
+        text: String(item),
+        author: "Approver",
+        timestamp: new Date().toLocaleDateString(),
+      };
+    });
+  }
+
+  if (typeof rawComments === "string") {
+    const trimmed = rawComments.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item, idx) => ({
+            id: String((item as any).id || `c_${idx}`),
+            text: String((item as any).text || ""),
+            author: String((item as any).author || "Approver"),
+            timestamp: String((item as any).timestamp || new Date().toLocaleDateString()),
+          }));
+        } else if (typeof parsed === "object" && parsed !== null) {
+          return [{
+            id: String((parsed as any).id || "c_0"),
+            text: String((parsed as any).text || ""),
+            author: String((parsed as any).author || "Approver"),
+            timestamp: String((parsed as any).timestamp || new Date().toLocaleDateString()),
+          }];
+        }
+      } catch {
+        // Not valid JSON, fall through to text parsing
+      }
+    }
+
+    // Check if plain text with multiple lines formatted like "[Date] Author: message"
+    const lines = trimmed.split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length > 1) {
+      const lineComments: TaskComment[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const match = line.match(/^\[(.*?)\]\s*(.*?):\s*(.*)$/);
+        if (match) {
+          lineComments.push({
+            id: `c_line_${i}`,
+            timestamp: match[1],
+            author: match[2],
+            text: match[3],
+          });
+        } else {
+          lineComments.push({
+            id: `c_line_${i}`,
+            timestamp: "",
+            author: "Approver",
+            text: line,
+          });
+        }
+      }
+      return lineComments;
+    }
+
+    return [{
+      id: "c_db_0",
+      text: trimmed,
+      author: "Approver",
+      timestamp: "",
+    }];
+  }
+
+  return [];
+}
+
+/**
+ * Persists comments on the cr49f_approvaltasks table on the cr49f_comments field in Dataverse,
+ * while keeping localStorage updated for instant UI responsiveness.
+ */
+export async function updateTaskCommentsInDataverse(
+  taskId: string,
+  commentOrComments: TaskComment | TaskComment[],
+  _approverName?: string
+): Promise<TaskComment[]> {
+  const cleanId = cleanGuid(taskId);
+  if (!cleanId) return [];
+
+  // 1. Retrieve current comments from localStorage & Dataverse
+  let existingComments: TaskComment[] = [];
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem(`task_comments_${cleanId}`);
+      if (stored) {
+        existingComments = parseTaskComments(stored);
+      }
+    } catch {}
+  }
+
+  // If local storage is empty, attempt to fetch current record from Dataverse to avoid losing existing comments
+  if (existingComments.length === 0) {
+    try {
+      const dbTaskRes = await Cr49f_approvaltasksesService.get(cleanId);
+      if (dbTaskRes.data) {
+        const raw = dbTaskRes.data as unknown as Record<string, unknown>;
+        const dbCommentsVal = dbTaskRes.data.cr49f_comments ?? raw.cr49f_comments ?? raw.cr49f_Comments;
+        if (dbCommentsVal) {
+          existingComments = parseTaskComments(dbCommentsVal);
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(`[ApprovalWorkflow] Could not pre-fetch comments for task ${cleanId}:`, fetchErr);
+    }
+  }
+
+  // 2. Append new comment(s)
+  const toAdd: TaskComment[] = Array.isArray(commentOrComments) ? commentOrComments : [commentOrComments];
+  const merged: TaskComment[] = [...existingComments];
+
+  for (const c of toAdd) {
+    const alreadyExists = merged.some(
+      (m) => (m.id && m.id === c.id) || (m.text === c.text && m.timestamp === c.timestamp && m.author === c.author)
+    );
+    if (!alreadyExists) {
+      merged.push(c);
+    }
+  }
+
+  const serialized = JSON.stringify(merged);
+
+  // 3. Update localStorage
+  if (typeof window !== "undefined") {
+    localStorage.setItem(`task_comments_${cleanId}`, serialized);
+  }
+
+  // 4. Update Dataverse cr49f_approvaltasks on cr49f_comments field!
+  try {
+    await Cr49f_approvaltasksesService.update(cleanId, {
+      cr49f_comments: serialized,
+    } as any);
+    console.log(`[ApprovalWorkflow] Successfully updated cr49f_comments on task ${cleanId}`);
+  } catch (updateErr) {
+    console.warn(`[ApprovalWorkflow] Direct update of cr49f_comments failed, trying alternate case:`, updateErr);
+    try {
+      await Cr49f_approvaltasksesService.update(cleanId, {
+        cr49f_Comments: serialized,
+      } as any);
+    } catch (altErr) {
+      console.warn(`[ApprovalWorkflow] Failed to update cr49f_comments on ${cleanId}:`, altErr);
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+  }
+
+  return merged;
+}
+
+export async function addTaskComment(
+  taskId: string,
+  text: string,
+  authorName?: string
+): Promise<TaskComment[]> {
+  const cleanId = cleanGuid(taskId);
+  if (!cleanId || !text.trim()) return [];
+
+  let resolvedAuthor = authorName?.trim();
+  if (!resolvedAuthor && typeof window !== "undefined") {
+    resolvedAuthor =
+      localStorage.getItem("procurement_user_name") ||
+      localStorage.getItem("userName") ||
+      "Subrata Dey";
+  }
+  if (!resolvedAuthor) resolvedAuthor = "Subrata Dey";
+
+  const newComment: TaskComment = {
+    id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    text: text.trim(),
+    author: resolvedAuthor,
+    timestamp: new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+
+  return await updateTaskCommentsInDataverse(cleanId, newComment, resolvedAuthor);
+}
+
 export interface CreateApprovalTasksParams {
   objectType: 1 | 2 | 3; // 1: Purchase Request, 2: RFQ, 3: Orders (PO)
   recordId: string;
@@ -623,6 +836,20 @@ export async function approveTask(
     localStorage.setItem(`task_approved_by_${cleanTaskId}`, resolvedApprover);
     localStorage.setItem(`task_approved_on_${cleanTaskId}`, nowIso);
     localStorage.setItem(`task_assigned_on_${cleanTaskId}`, taskAssignedOn);
+
+    const approveComment: TaskComment = {
+      id: `c_${Date.now()}`,
+      text: "Approved task",
+      author: resolvedApprover,
+      timestamp: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+    void updateTaskCommentsInDataverse(cleanTaskId, approveComment, resolvedApprover);
   }
 
   const resolvedTask: Cr49f_approvaltaskses = updateResultRecord ||
@@ -799,6 +1026,20 @@ export async function rejectTask(
     localStorage.setItem(`task_active_${cleanTaskId}`, "false");
     localStorage.setItem(`task_approved_by_${cleanTaskId}`, resolvedRejector);
     localStorage.setItem(`task_approved_on_${cleanTaskId}`, nowIso);
+
+    const rejectComment: TaskComment = {
+      id: `c_${Date.now()}`,
+      text: "Rejected task",
+      author: resolvedRejector,
+      timestamp: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+    void updateTaskCommentsInDataverse(cleanTaskId, rejectComment, resolvedRejector);
   }
 
   if (parentPR) {
@@ -1009,6 +1250,19 @@ export async function requestChangesOnTask(
   const nowIso = new Date().toISOString();
   const truncatedTaskName = `Changes Needed: ${(approverRemarks || "Review and update required details").trim()}`.slice(0, 95);
 
+  const remarkComment: TaskComment = {
+    id: `c_${Date.now()}`,
+    text: `Changes Needed: ${(approverRemarks || "").trim()}`,
+    author: approverName?.trim() || "Approver",
+    timestamp: new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+
   const newChangesPayload: Record<string, unknown> = {
     cr49f_task: truncatedTaskName,
     cr49f_object: (isObjectRfq ? 2 : isObjectPo ? 3 : 1) as keyof typeof Cr49f_approvaltasksescr49f_object,
@@ -1019,6 +1273,7 @@ export async function requestChangesOnTask(
     cr49f_slaunit: 1 as keyof typeof Cr49f_approvaltasksescr49f_slaunit,
     cr49f_approvalstatus: 4, // 4 = Changes Needed in Dataverse
     cr49f_assignedon: nowIso,
+    cr49f_comments: JSON.stringify([remarkComment]),
   };
 
   if (isObjectRfq && parentRFQId) {
@@ -1086,14 +1341,7 @@ export async function requestChangesOnTask(
     };
 
     for (const tid of [cleanTaskId, newTaskId]) {
-      const key = `task_comments_${tid}`;
-      const existingStr = localStorage.getItem(key);
-      let existingComments = [];
-      try {
-        if (existingStr) existingComments = JSON.parse(existingStr);
-      } catch { }
-      existingComments.push(remarkComment);
-      localStorage.setItem(key, JSON.stringify(existingComments));
+      void updateTaskCommentsInDataverse(tid, remarkComment, approverName);
     }
 
     window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
@@ -1373,12 +1621,7 @@ export async function submitChangesNeededUpdate(params: {
       localStorage.setItem(`task_approved_on_${cleanTaskId}`, nowIso);
 
       if (params.requesterRemarks) {
-        const existingCommentsStr = localStorage.getItem(`task_comments_${cleanTaskId}`);
-        let existingComments = [];
-        try {
-          if (existingCommentsStr) existingComments = JSON.parse(existingCommentsStr);
-        } catch { }
-        existingComments.push({
+        const revComment: TaskComment = {
           id: `c_${Date.now()}`,
           text: `Revisions submitted: ${params.requesterRemarks}`,
           author: requester,
@@ -1389,8 +1632,8 @@ export async function submitChangesNeededUpdate(params: {
             hour: "numeric",
             minute: "2-digit",
           }),
-        });
-        localStorage.setItem(`task_comments_${cleanTaskId}`, JSON.stringify(existingComments));
+        };
+        void updateTaskCommentsInDataverse(cleanTaskId, revComment, requester);
       }
     }
   }
@@ -1447,6 +1690,22 @@ export async function submitChangesNeededUpdate(params: {
         localStorage.removeItem(`task_approved_on_${firstId}`);
       }
       void setTaskApprovalStatusInDataverse(firstId, "Pending");
+
+      if (params.requesterRemarks) {
+        const revComment: TaskComment = {
+          id: `c_${Date.now()}_seq1`,
+          text: `Workflow restarted: ${params.requesterRemarks}`,
+          author: requester,
+          timestamp: new Date().toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        };
+        void updateTaskCommentsInDataverse(firstId, revComment, requester);
+      }
     }
 
     // 6. Keep all subsequent tasks inactive with Approval Status = Pending
@@ -1586,6 +1845,15 @@ export async function getApprovalTasksForRecord(
           const cachedAssignedOn = localStorage.getItem(`task_assigned_on_${tId}`);
           if (cachedAssignedOn && !t.cr49f_assignedon) {
             t.cr49f_assignedon = cachedAssignedOn;
+          }
+
+          const dbComments = t.cr49f_comments ?? (raw as any).cr49f_comments ?? (raw as any).cr49f_Comments;
+          if (dbComments) {
+            t.cr49f_comments = dbComments;
+            const parsed = parseTaskComments(dbComments);
+            if (parsed.length > 0) {
+              localStorage.setItem(`task_comments_${tId}`, JSON.stringify(parsed));
+            }
           }
         }
       }
@@ -1817,6 +2085,9 @@ if (typeof window !== "undefined") {
       getApprovalTasksForRecord: typeof getApprovalTasksForRecord;
       getTaskApprovalStatusLabel: typeof getTaskApprovalStatusLabel;
       syncAllPendingApprovalTasks: typeof syncAllPendingApprovalTasks;
+      updateTaskCommentsInDataverse: typeof updateTaskCommentsInDataverse;
+      addTaskComment: typeof addTaskComment;
+      parseTaskComments: typeof parseTaskComments;
     };
   }).approvalWorkflow = {
     createApprovalTasksForObject,
@@ -1825,5 +2096,8 @@ if (typeof window !== "undefined") {
     getApprovalTasksForRecord,
     getTaskApprovalStatusLabel,
     syncAllPendingApprovalTasks,
+    updateTaskCommentsInDataverse,
+    addTaskComment,
+    parseTaskComments,
   };
 }

@@ -42,6 +42,7 @@ import {
   approveTask,
   rejectTask,
   cleanGuid,
+  parseTaskComments,
 } from "../Services/ApprovalWorkflowService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
@@ -708,13 +709,15 @@ export default function PurchaseRequestDetail() {
                         ? (Cr49f_approvaltasksescr49f_role[task.cr49f_role] || "Approver")
                         : "Approver";
                       const initials = getInitials(roleName);
-                      const remarks = isApproved
+                      const parsedComments = parseTaskComments(task.cr49f_comments ?? (task as unknown as Record<string, unknown>).cr49f_Comments);
+                      const latestComment = parsedComments.length > 0 ? parsedComments[parsedComments.length - 1].text : null;
+                      const remarks = latestComment || (isApproved
                         ? "Completed for this approval stage"
                         : isRejected
                         ? "Task rejected"
                         : isActive
                         ? "Awaiting approval decision"
-                        : "Pending previous task approval";
+                        : "Pending previous task approval");
 
                       const completedOn = isApproved
                         ? (task.modifiedon ? toUsDate(task.modifiedon) : (record.date || "—"))

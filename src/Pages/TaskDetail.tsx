@@ -68,6 +68,9 @@ import {
   requestChangesOnTask,
   submitChangesNeededUpdate,
   getApprovalTasksForRecord,
+  updateTaskCommentsInDataverse,
+  parseTaskComments,
+  type TaskComment,
 } from "../Services/ApprovalWorkflowService";
 import "../Styles/TaskDetail.css";
 
@@ -76,13 +79,6 @@ function toUsDate(value?: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-}
-
-interface TaskComment {
-  id: string;
-  text: string;
-  author: string;
-  timestamp: string;
 }
 
 export default function TaskDetail() {
@@ -844,30 +840,69 @@ function ModernDataverseTaskDetail({
     setSelectedSupplierIds([]);
   };
 
-  // Comments state persisted in localStorage
+  // Comments state initialized from Dataverse task.cr49f_comments & synchronized with localStorage
   const commentsKey = `task_comments_${cleanTaskId}`;
   const [comments, setComments] = useState<TaskComment[]>(() => {
-    try {
-      const stored = window.localStorage.getItem(commentsKey);
-      if (stored) return JSON.parse(stored) as TaskComment[];
-    } catch {
-      // Fallback
+    const raw = task as unknown as Record<string, unknown>;
+    const dbComments = task.cr49f_comments ?? raw.cr49f_comments ?? raw.cr49f_Comments;
+    const parsedDb = parseTaskComments(dbComments);
+
+    let parsedLocal: TaskComment[] = [];
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem(commentsKey);
+        if (stored) parsedLocal = parseTaskComments(stored);
+      } catch {}
     }
-    return [];
+
+    const merged = [...parsedDb];
+    for (const loc of parsedLocal) {
+      if (!merged.some((m) => (m.id && m.id === loc.id) || (m.text === loc.text && m.timestamp === loc.timestamp))) {
+        merged.push(loc);
+      }
+    }
+    return merged;
   });
+
+  // Re-sync if task from Dataverse updates with comments
+  useEffect(() => {
+    const raw = task as unknown as Record<string, unknown>;
+    const dbComments = task.cr49f_comments ?? raw.cr49f_comments ?? raw.cr49f_Comments;
+    if (dbComments) {
+      const parsedDb = parseTaskComments(dbComments);
+      setComments((prev) => {
+        const merged = [...parsedDb];
+        for (const p of prev) {
+          if (!merged.some((m) => (m.id && m.id === p.id) || (m.text === p.text && m.timestamp === p.timestamp))) {
+            merged.push(p);
+          }
+        }
+        return merged;
+      });
+    }
+  }, [task]);
+
   const [commentDraft, setCommentDraft] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const addComment = (e?: React.FormEvent) => {
+  const addComment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const text = commentDraft.trim();
-    if (!text) return;
+    if (!text || isSubmittingComment) return;
+
+    setIsSubmittingComment(true);
+    setNotice(null);
+
+    const currentUserName = typeof window !== "undefined"
+      ? (localStorage.getItem("procurement_user_name") || localStorage.getItem("userName") || "Subrata Dey")
+      : "Subrata Dey";
 
     const newComment: TaskComment = {
       id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       text,
-      author: "Procurement Approver",
+      author: currentUserName,
       timestamp: new Date().toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
@@ -879,13 +914,24 @@ function ModernDataverseTaskDetail({
 
     const updated = [...comments, newComment];
     setComments(updated);
-    try {
-      window.localStorage.setItem(commentsKey, JSON.stringify(updated));
-    } catch {
-      // Keep in local state
-    }
     setCommentDraft("");
-    setNotice("Comment added successfully.");
+
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(commentsKey, JSON.stringify(updated));
+      }
+
+      // Persist directly to Dataverse cr49f_approvaltasks table on cr49f_comments field!
+      if (cleanTaskId) {
+        await updateTaskCommentsInDataverse(cleanTaskId, newComment, currentUserName);
+      }
+      setNotice("Comment added to approval task and updated in Dataverse successfully.");
+    } catch (err) {
+      console.warn("Failed to persist comment to Dataverse:", err);
+      setNotice("Comment added locally.");
+    } finally {
+      setIsSubmittingComment(false);
+    }
   };
 
   const handleApprove = async () => {
@@ -2098,9 +2144,14 @@ function ModernDataverseTaskDetail({
                   placeholder="Type an approver note, comment, or remark..."
                   value={commentDraft}
                   onChange={(e) => setCommentDraft(e.target.value)}
+                  disabled={isSubmittingComment}
                 />
-                <button type="submit" className="task-comment-submit-btn">
-                  <Send size={14} /> Send
+                <button
+                  type="submit"
+                  className="task-comment-submit-btn"
+                  disabled={isSubmittingComment || !commentDraft.trim()}
+                >
+                  {isSubmittingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send
                 </button>
               </form>
             </div>
