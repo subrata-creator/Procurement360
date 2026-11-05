@@ -21,6 +21,7 @@ import {
   getTaskApprovalStatusLabel,
   cleanGuid,
   createApprovalTasksForObject,
+  extractTaskParentIds,
 } from "../Services/ApprovalWorkflowService";
 
 const PAGE_SIZE = 4;
@@ -98,15 +99,7 @@ const TaskInbox: React.FC = () => {
       for (const pr of prs) {
         const prId = cleanGuid(pr.cr49f_purchaserequestid);
         if (!prId) continue;
-        const hasTasks = rawTasks.some((t) => {
-          const raw = t as unknown as Record<string, unknown>;
-          const tPR =
-            cleanGuid(t._cr49f_pr_value) ||
-            cleanGuid(raw._cr49f_PR_value as string) ||
-            cleanGuid(raw.cr49f_pr as string) ||
-            cleanGuid(raw.cr49f_PR as string);
-          return tPR === prId;
-        });
+        const hasTasks = rawTasks.some((t) => extractTaskParentIds(t).prId === prId);
         if (!hasTasks) {
           try {
             const created = await createApprovalTasksForObject({
@@ -124,15 +117,7 @@ const TaskInbox: React.FC = () => {
       for (const rfq of rfqs) {
         const rfqId = cleanGuid(rfq.cr49f_requestforqoutationid);
         if (!rfqId) continue;
-        const hasTasks = rawTasks.some((t) => {
-          const raw = t as unknown as Record<string, unknown>;
-          const tRFQ =
-            cleanGuid(t._cr49f_rfq_value) ||
-            cleanGuid(raw._cr49f_RFQ_value as string) ||
-            cleanGuid(raw.cr49f_rfq as string) ||
-            cleanGuid(raw.cr49f_RFQ as string);
-          return tRFQ === rfqId;
-        });
+        const hasTasks = rawTasks.some((t) => extractTaskParentIds(t).rfqId === rfqId);
         if (!hasTasks) {
           try {
             const created = await createApprovalTasksForObject({
@@ -147,55 +132,119 @@ const TaskInbox: React.FC = () => {
         }
       }
 
+      // Pre-group rawTasks by parent PR, RFQ, PO so we can accurately evaluate sequential approval progression
+      const tasksByPr = new Map<string, typeof rawTasks>();
+      const tasksByRfq = new Map<string, typeof rawTasks>();
+      const tasksByPo = new Map<string, typeof rawTasks>();
+
+      for (const t of rawTasks) {
+        const { prId, rfqId, poId } = extractTaskParentIds(t);
+        if (prId) {
+          if (!tasksByPr.has(prId)) tasksByPr.set(prId, []);
+          tasksByPr.get(prId)!.push(t);
+        }
+        if (rfqId) {
+          if (!tasksByRfq.has(rfqId)) tasksByRfq.set(rfqId, []);
+          tasksByRfq.get(rfqId)!.push(t);
+        }
+        if (poId) {
+          if (!tasksByPo.has(poId)) tasksByPo.set(poId, []);
+          tasksByPo.get(poId)!.push(t);
+        }
+      }
+
       const mapped: WorkQueueItem[] = rawTasks.map((t, idx) => {
         const raw = t as unknown as Record<string, unknown>;
-        const prId =
-          cleanGuid(t._cr49f_pr_value) ||
-          cleanGuid(raw._cr49f_PR_value as string) ||
-          cleanGuid(raw.cr49f_pr as string);
-        const rfqId =
-          cleanGuid(t._cr49f_rfq_value) ||
-          cleanGuid(raw._cr49f_RFQ_value as string) ||
-          cleanGuid(raw.cr49f_rfq as string);
-        const poId =
-          cleanGuid(t._cr49f_po_value) ||
-          cleanGuid(raw._cr49f_PO_value as string) ||
-          cleanGuid(raw.cr49f_po as string);
+        const { prId, rfqId, poId } = extractTaskParentIds(t);
 
         const statusLabel = getTaskApprovalStatusLabel(t);
         const taskId = cleanGuid(t.cr49f_approvaltasksid) || String(idx);
 
         // Record status check: statecode 0 is Active, statuscode 2 is Inactive
+        const sc = t.statecode ?? (raw.statecode as number) ?? (raw.StateCode as number);
+        const stc = t.statuscode ?? (raw.statuscode as number) ?? (raw.StatusCode as number);
         const isRecordActive =
-          (t.statecode === 0 || t.statecode === undefined || Number(t.statecode) === 0) &&
-          Number(t.statuscode ?? 1) !== 2;
+          (sc === 0 || sc === undefined || Number(sc) === 0) &&
+          Number(stc ?? 1) !== 2;
 
-        // Local storage override
         const localActive = taskId && typeof window !== "undefined"
           ? localStorage.getItem(`task_active_${taskId}`)
           : null;
-        let isActive = localActive !== null ? localActive === "true" : isRecordActive;
 
-        // Approved or Rejected tasks are NOT active
-        if (statusLabel === "Approved" || statusLabel === "Rejected") {
-          isActive = false;
-        }
-        if (t.cr49f_approvedby && t.cr49f_approvedon) {
-          isActive = false;
-        }
+        // Check if parent PR or RFQ is in Changes Needed status
+        const prStatus = prId && typeof window !== "undefined" ? localStorage.getItem(`pr_status_${prId}`) : null;
+        const rfqStatus = rfqId && typeof window !== "undefined" ? localStorage.getItem(`rfq_status_${rfqId}`) : null;
+        const isParentChangesNeeded = prStatus === "Changes Needed" || rfqStatus === "Changes Needed";
 
-        // If parent PR or RFQ is in Changes Needed, all sequential tasks (sequence >= 1) are inactive
-        if (typeof window !== "undefined") {
-          const prStatus = prId ? localStorage.getItem(`pr_status_${prId}`) : null;
-          const rfqStatus = rfqId ? localStorage.getItem(`rfq_status_${rfqId}`) : null;
-          if ((prStatus === "Changes Needed" || rfqStatus === "Changes Needed") && (t.cr49f_sequence ?? 0) >= 1) {
+        // Check if parent PR is completed/approved
+        const parentPR = prId ? prs.find((p) => cleanGuid(p.cr49f_purchaserequestid) === prId) : null;
+        const isParentPrApproved = parentPR?.cr49f_status === 1 || (prId && typeof window !== "undefined" && localStorage.getItem(`pr_status_${prId}`) === "Approved");
+
+        let isActive = false;
+
+        // 1. Approved or Rejected tasks are NEVER active in the work queue
+        if (statusLabel === "Approved" || statusLabel === "Rejected" || Boolean(t.cr49f_approvedby && t.cr49f_approvedon)) {
+          isActive = false;
+          if (taskId && typeof window !== "undefined") {
+            localStorage.setItem(`task_active_${taskId}`, "false");
+          }
+        }
+        // 2. If parent PR or RFQ is in Changes Needed, all sequential tasks (sequence >= 1) are inactive
+        else if (isParentChangesNeeded) {
+          if (statusLabel === "Changes Needed" || (t.cr49f_sequence ?? 0) === 0) {
+            isActive = true;
+          } else {
             isActive = false;
           }
         }
+        // 3. Changes Needed task
+        else if (statusLabel === "Changes Needed" || (t.cr49f_sequence ?? 0) === 0) {
+          isActive = localActive !== "false";
+        }
+        // 4. If parent PR is fully approved, no tasks should be active
+        else if (isParentPrApproved) {
+          isActive = false;
+        }
+        // 5. Normal Pending sequential task (statusLabel === "Pending")
+        else {
+          // Check sibling tasks for the same parent record
+          const siblings = prId
+            ? (tasksByPr.get(prId) ?? [])
+            : rfqId
+            ? (tasksByRfq.get(rfqId) ?? [])
+            : poId
+            ? (tasksByPo.get(poId) ?? [])
+            : [];
 
-        // If this is a Changes Needed task, it is active unless explicitly deactivated
-        if (statusLabel === "Changes Needed" && localActive !== "false") {
-          isActive = true;
+          const sequentialSiblings = siblings
+            .filter((s) => (s.cr49f_sequence ?? 0) >= 1)
+            .sort((a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0));
+
+          const currentSeq = t.cr49f_sequence ?? 1;
+          const priorSiblings = sequentialSiblings.filter((s) => (s.cr49f_sequence ?? 0) < currentSeq);
+          const allPriorApproved = priorSiblings.every((s) => {
+            const sStatus = getTaskApprovalStatusLabel(s);
+            return sStatus === "Approved" || Boolean(s.cr49f_approvedby && s.cr49f_approvedon);
+          });
+
+          if (!allPriorApproved) {
+            // A prior sequential task has not been approved yet, so this task must wait
+            isActive = false;
+            if (taskId && typeof window !== "undefined") {
+              localStorage.setItem(`task_active_${taskId}`, "false");
+            }
+          } else {
+            // All prior sequential tasks are approved (or this is Sequence 1)
+            // Task is ACTIVE if backend record is active OR prior tasks are approved
+            if (isRecordActive || allPriorApproved || localActive === "true") {
+              isActive = true;
+              if (taskId && typeof window !== "undefined") {
+                localStorage.setItem(`task_active_${taskId}`, "true");
+              }
+            } else {
+              isActive = false;
+            }
+          }
         }
 
         let taskType: WorkQueueItem["taskType"] = "Purchase Request";
