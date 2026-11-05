@@ -1,5 +1,5 @@
 /* =========================================================
-   MODERN TASK DETAIL PAGE — ENTERPRISE UI
+   MODERN TASK DETAIL PAGE â€” ENTERPRISE UI
    Light & Dark Theme Adaptive
 ========================================================= */
 
@@ -1969,4 +1969,277 @@
 .task-btn-run-flow:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+
+/* ==========================================================================
+   RFQ Details & Invited Suppliers in TaskDetail
+   ========================================================================== */
+
+.task-rfq-full-details-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background: var(--muted-hex, #f8fafc);
+  border-top: 1px solid var(--border-hex, #e2e8f0);
+}
+
+@media (max-width: 900px) {
+  .task-rfq-full-details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .task-rfq-full-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.task-rfq-detail-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.task-rfq-detail-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-foreground-hex, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.task-rfq-detail-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground-hex, #0f172a);
+}
+
+.task-rfq-pr-link {
+  color: var(--primary-hex, #2563eb);
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-rfq-pr-link:hover {
+  text-decoration: underline;
+}
+
+/* Invited Suppliers Roster */
+.task-rfq-invited-suppliers-card {
+  margin-top: 16px;
+}
+
+.task-rfq-suppliers-body {
+  padding: 16px;
+}
+
+.task-rfq-suppliers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.task-rfq-supplier-card {
+  background: var(--card-hex, #ffffff);
+  border: 1px solid var(--border-hex, #e2e8f0);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.task-rfq-supplier-card:hover {
+  border-color: var(--primary-hex, #2563eb);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.task-rfq-supplier-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-rfq-supplier-avatar-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.task-rfq-supplier-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(99, 102, 241, 0.1));
+  color: var(--primary-hex, #2563eb);
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.task-rfq-supplier-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.task-rfq-supplier-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-rfq-supplier-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--foreground-hex, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.task-supplier-verified-icon {
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.task-rfq-supplier-pills-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.task-rfq-supplier-code-badge {
+  font-family: ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.task-rfq-supplier-category-badge {
+  font-size: 10.5px;
+  font-weight: 500;
+  background: var(--muted-hex, #f1f5f9);
+  color: var(--muted-foreground-hex, #64748b);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.task-rfq-supplier-status-pill {
+  font-size: 11px;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.task-rfq-supplier-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-hex, #e2e8f0);
+}
+
+.task-rfq-supplier-info-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--muted-foreground-hex, #64748b);
+}
+
+.task-rfq-info-icon {
+  color: var(--muted-foreground-hex, #94a3b8);
+  flex-shrink: 0;
+}
+
+.task-rfq-supplier-info-row span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-rfq-empty-suppliers {
+  text-align: center;
+  padding: 36px 20px;
+  color: var(--muted-foreground-hex, #64748b);
+}
+
+.task-rfq-empty-suppliers .task-empty-icon {
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+
+.task-rfq-empty-suppliers h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground-hex, #0f172a);
+}
+
+.task-rfq-empty-suppliers p {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Dark mode overrides */
+.dark .task-rfq-full-details-grid {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.dark .task-rfq-supplier-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.dark .task-rfq-supplier-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.15);
+}
+
+.dark .task-rfq-supplier-avatar {
+  background: rgba(37, 99, 235, 0.2);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+.dark .task-rfq-supplier-code-badge {
+  background: rgba(37, 99, 235, 0.2);
+  color: #93c5fd;
+}
+
+.dark .task-rfq-supplier-category-badge {
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+.dark .task-rfq-supplier-details {
+  border-color: #334155;
 }

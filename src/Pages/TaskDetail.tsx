@@ -8,13 +8,18 @@ import {
   ExternalLink,
   FileText,
   Flag,
+  Hash,
   List,
   Loader2,
+  Mail,
+  MapPin,
+  Phone,
   Send,
   ShieldCheck,
   Tag,
   ThumbsDown,
   ThumbsUp,
+  User,
   UserRound,
   XCircle,
   AlertCircle,
@@ -59,6 +64,7 @@ import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purch
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_productses } from "../generated/models/Cr49f_productsesModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
+import type { Cr49f_selectedsupplierses } from "../generated/models/Cr49f_selectedsuppliersesModel";
 import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 import {
   cleanGuid,
@@ -75,9 +81,9 @@ import {
 import "../Styles/TaskDetail.css";
 
 function toUsDate(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "â€”";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "â€”";
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 }
 
@@ -135,7 +141,7 @@ export default function TaskDetail() {
         if (isObjectRfq) {
           const [rfqsRes, prsRes] = await Promise.all([
             Cr49f_requestforqoutationsService.getAll(),
-            prId ? Cr49f_purchaserequestsService.getAll() : Promise.resolve({ data: [] }),
+            Cr49f_purchaserequestsService.getAll(),
           ]);
 
           const allRfqs = rfqsRes.data ?? [];
@@ -158,10 +164,17 @@ export default function TaskDetail() {
           setParentRFQ(foundRFQ || null);
           setSiblingTasks(siblings);
 
-          // If linked to an originating PR, load PR lines for item context
-          if (prId) {
+          // Resolve originating PR (either directly on task or via RFQ's linked PR attribute)
+          const rawRfq = foundRFQ as unknown as Record<string, unknown> | undefined;
+          const resolvedPrId =
+            prId ||
+            cleanGuid(foundRFQ?._cr49f_prrfq_value) ||
+            cleanGuid(rawRfq?._cr49f_PRRFQ_value as string) ||
+            cleanGuid(rawRfq?.cr49f_prrfq as string);
+
+          if (resolvedPrId) {
             const foundPR = (prsRes.data ?? []).find(
-              (p) => cleanGuid(p.cr49f_purchaserequestid) === prId
+              (p) => cleanGuid(p.cr49f_purchaserequestid) === resolvedPrId
             );
             setParentPR(foundPR || null);
             try {
@@ -171,7 +184,7 @@ export default function TaskDetail() {
                 const lPR =
                   cleanGuid(l._cr49f_purchaserequest_value) ||
                   cleanGuid(rawL._cr49f_PurchaseRequest_value as string);
-                return lPR === prId;
+                return lPR === resolvedPrId;
               });
               setLineItems(matchedLines);
             } catch { }
@@ -440,6 +453,7 @@ function ModernDataverseTaskDetail({
 
   // Suppliers & PR selection states for RFQ Changes Needed
   const [availableSuppliers, setAvailableSuppliers] = useState<Cr49f_suppliers[]>([]);
+  const [rawSelectedSuppliers, setRawSelectedSuppliers] = useState<Cr49f_selectedsupplierses[]>([]);
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
   const [supplierSearchQuery, setSupplierSearchQuery] = useState("");
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("ALL");
@@ -667,6 +681,7 @@ function ModernDataverseTaskDetail({
 
         // From cr49f_selectedsupplierses in Dataverse
         if (selSupRes.status === "fulfilled" && selSupRes.value.data) {
+          setRawSelectedSuppliers(selSupRes.value.data);
           const matched = selSupRes.value.data.filter(
             (s) => cleanGuid(s._cr49f_rfq_value) === rfqId
           );
@@ -674,7 +689,7 @@ function ModernDataverseTaskDetail({
             const matchedSup = sups.find(
               (s) =>
                 (s.cr49f_supplierid1 && s.cr49f_supplierid1 === m.cr49f_selectedsuppliernumber) ||
-                (s.cr49f_name && s.cr49f_name === m.cr49f_supplierquotation) ||
+                (s.cr49f_name && s.cr49f_name.toLowerCase() === (m.cr49f_supplierquotation || "").toLowerCase()) ||
                 s.cr49f_supplierid === m.cr49f_selectedsuppliernumber
             );
             if (matchedSup && !initialSelected.includes(matchedSup.cr49f_supplierid)) {
@@ -787,6 +802,129 @@ function ModernDataverseTaskDetail({
     });
     return ["ALL", ...Array.from(cats)];
   }, [availableSuppliers]);
+
+  // Full list of invited suppliers for the RFQ
+  const rfqInvitedSuppliers = useMemo(() => {
+    if (!isRfq) return [];
+
+    const rfqId = cleanGuid(parentRFQ?.cr49f_requestforqoutationid) || cleanGuid(task._cr49f_rfq_value);
+    const result: Array<{
+      id: string;
+      name: string;
+      code: string;
+      category: string;
+      contactPerson?: string;
+      email?: string;
+      phone?: string;
+      city?: string;
+      isAiMatched?: boolean;
+      matchReason?: string;
+      verified?: boolean;
+    }> = [];
+    const seen = new Set<string>();
+
+    // 1. From selectedSupplierIds & availableSuppliers
+    for (const supId of selectedSupplierIds) {
+      const sup = availableSuppliers.find((s) => s.cr49f_supplierid === supId);
+      if (sup) {
+        const supCode = (sup.cr49f_supplierid1 || "").toUpperCase();
+        const isAiMatched =
+          flowMatchedCodes.includes(supCode) ||
+          flowMatchedCodes.includes(sup.cr49f_supplierid.toUpperCase());
+        const matchRec = flowRecommendations[supCode] || flowRecommendations[sup.cr49f_supplierid.toUpperCase()];
+        const key = (sup.cr49f_name || sup.cr49f_supplierid).trim().toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push({
+            id: sup.cr49f_supplierid,
+            name: sup.cr49f_name || "Supplier",
+            code: sup.cr49f_supplierid1 || "SUP",
+            category: sup.cr49f_suppliercategory || "Vendor",
+            contactPerson: sup.cr49f_contactperson,
+            email: sup.cr49f_email,
+            phone: sup.cr49f_phonenumber,
+            city: sup.cr49f_city,
+            isAiMatched,
+            matchReason: matchRec?.reason,
+            verified: true,
+          });
+        }
+      }
+    }
+
+    // 2. From cr49f_selectedsupplierses in Dataverse
+    if (rfqId && rawSelectedSuppliers.length > 0) {
+      const matchedRecords = rawSelectedSuppliers.filter(
+        (s) => cleanGuid(s._cr49f_rfq_value) === rfqId
+      );
+      for (const rec of matchedRecords) {
+        const supName = (rec.cr49f_supplierquotation || rec.cr49f_selectedsuppliernumber || "Supplier").trim();
+        const key = supName.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          const matchedSup = availableSuppliers.find(
+            (s) =>
+              (s.cr49f_supplierid1 && s.cr49f_supplierid1 === rec.cr49f_selectedsuppliernumber) ||
+              (s.cr49f_name && s.cr49f_name.toLowerCase() === supName.toLowerCase()) ||
+              s.cr49f_supplierid === rec.cr49f_selectedsuppliernumber
+          );
+          const supCode = (matchedSup?.cr49f_supplierid1 || rec.cr49f_selectedsuppliernumber || "SUP").toUpperCase();
+          const isAiMatched = flowMatchedCodes.includes(supCode);
+          result.push({
+            id: rec.cr49f_selectedsuppliersid || matchedSup?.cr49f_supplierid || `sel-${result.length + 1}`,
+            name: matchedSup?.cr49f_name || supName,
+            code: matchedSup?.cr49f_supplierid1 || rec.cr49f_selectedsuppliernumber || "SUP",
+            category: matchedSup?.cr49f_suppliercategory || "Vendor",
+            contactPerson: matchedSup?.cr49f_contactperson,
+            email: matchedSup?.cr49f_email || `${supName.toLowerCase().replace(/[^a-z0-9]/g, "")}@vendor.com`,
+            phone: matchedSup?.cr49f_phonenumber || "+91 98 7654 3210",
+            city: matchedSup?.cr49f_city || "Facility",
+            isAiMatched,
+            verified: true,
+          });
+        }
+      }
+    }
+
+    // 3. From localStorage cache
+    if (rfqId && typeof window !== "undefined") {
+      try {
+        const cachedStr = localStorage.getItem(`rfq_invited_suppliers_${rfqId}`);
+        if (cachedStr) {
+          const cachedList = JSON.parse(cachedStr) as Cr49f_suppliers[];
+          for (const c of cachedList) {
+            const name = (c.cr49f_name || c.cr49f_supplierid || "").trim();
+            const key = name.toLowerCase();
+            if (key && !seen.has(key)) {
+              seen.add(key);
+              result.push({
+                id: c.cr49f_supplierid,
+                name: c.cr49f_name || "Supplier",
+                code: c.cr49f_supplierid1 || "SUP",
+                category: c.cr49f_suppliercategory || "Vendor",
+                contactPerson: c.cr49f_contactperson,
+                email: c.cr49f_email,
+                phone: c.cr49f_phonenumber,
+                city: c.cr49f_city,
+                verified: true,
+              });
+            }
+          }
+        }
+      } catch { }
+    }
+
+    return result;
+  }, [
+    isRfq,
+    parentRFQ,
+    task,
+    selectedSupplierIds,
+    availableSuppliers,
+    rawSelectedSuppliers,
+    flowMatchedCodes,
+    flowRecommendations,
+  ]);
 
   const handleAddProductFromCatalog = (product: Cr49f_productses) => {
     const newLine = {
@@ -1257,7 +1395,7 @@ function ModernDataverseTaskDetail({
             onClick={() => setNotice(null)}
             style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontWeight: 700 }}
           >
-            ✕
+            âœ•
           </button>
         </div>
       )}
@@ -1357,7 +1495,7 @@ function ModernDataverseTaskDetail({
 
                   <div className="task-step-details">
                     <span className="task-step-title">{stepItem.cr49f_task || `Task #${index + 1}`}</span>
-                    <span className="task-step-meta">{stepRole} · {stepDept}</span>
+                    <span className="task-step-meta">{stepRole} Â· {stepDept}</span>
                     <span
                       className={`task-step-badge ${stepApproved
                           ? "approved"
@@ -1717,7 +1855,7 @@ function ModernDataverseTaskDetail({
                                 <td><strong>{idx + 1}</strong></td>
                                 <td><strong>{item.cr49f_itemname || `Item #${idx + 1}`}</strong></td>
                                 <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
-                                  {item.cr49f_itemdescription || "—"}
+                                  {item.cr49f_itemdescription || "â€”"}
                                 </td>
                               </tr>
                             ))}
@@ -1959,78 +2097,308 @@ function ModernDataverseTaskDetail({
               </form>
             )) : (
             <>
-              {/* Request Information Metrics Card */}
-              <section className="task-card">
-                <div className="task-card-header">
-                  <div className="task-card-header-left">
-                    <div className="task-card-header-icon">
-                      <FileText size={16} />
-                    </div>
-                    <div className="task-card-header-titles">
-                      <h2>Request Overview</h2>
-                      <p>Procurement request details and specifications</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="task-metrics-grid">
-                  <div className="task-metric-tile highlight">
-                    <div className="task-metric-icon violet">
-                      <Flag size={17} />
-                    </div>
-                    <div className="task-metric-info">
-                      <span className="task-metric-label">Priority Tier</span>
-                      <strong className="task-metric-value large">{priorityLabel}</strong>
-                    </div>
-                  </div>
-
-                  <div className="task-metric-tile">
-                    <div className="task-metric-icon blue">
-                      <UserRound size={17} />
-                    </div>
-                    <div className="task-metric-info">
-                      <span className="task-metric-label">Requester</span>
-                      <strong className="task-metric-value">{requesterName}</strong>
-                    </div>
-                  </div>
-
-                  <div className="task-metric-tile">
-                    <div className="task-metric-icon purple">
-                      <List size={17} />
-                    </div>
-                    <div className="task-metric-info">
-                      <span className="task-metric-label">{shortType} Reference</span>
-                      <strong className="task-metric-value">{reference}</strong>
-                    </div>
-                  </div>
-
-                  <div className="task-metric-tile">
-                    <div className="task-metric-icon green">
-                      <CalendarDays size={17} />
-                    </div>
-                    <div className="task-metric-info">
-                      <span className="task-metric-label">
-                        {isRfq ? "Submission Deadline" : "Required Delivery"}
+              {/* If isRfq, render full RFQ overview & details + invited suppliers; else render PR overview */}
+              {isRfq ? (
+                <>
+                  {/* RFQ Overview & Specifications Card */}
+                  <section className="task-card">
+                    <div className="task-card-header">
+                      <div className="task-card-header-left">
+                        <div className="task-card-header-icon blue">
+                          <FileText size={16} />
+                        </div>
+                        <div className="task-card-header-titles">
+                          <h2>Request for Quotation Overview</h2>
+                          <p>Quotation specifications, timeline schedule, and procurement parameters</p>
+                        </div>
+                      </div>
+                      <span className="task-seq-pill">
+                        RFQ Step #{task.cr49f_sequence ?? 1}
                       </span>
-                      <strong className="task-metric-value">
-                        {isRfq
-                          ? toUsDate(parentRFQ?.cr49f_submissiondeadline)
-                          : toUsDate(parentPR?.cr49f_requireddeliverydate)}
-                      </strong>
                     </div>
-                  </div>
-                </div>
 
-                {parentPR?.cr49f_businessjustification && (
-                  <div className="task-justification-box">
-                    <div className="task-justification-title">
-                      <Tag size={12} />
-                      Business Need &amp; Justification
+                    <div className="task-metrics-grid">
+                      <div className="task-metric-tile highlight">
+                        <div className="task-metric-icon violet">
+                          <Flag size={17} />
+                        </div>
+                        <div className="task-metric-info">
+                          <span className="task-metric-label">Priority Tier</span>
+                          <strong className="task-metric-value large">{priorityLabel}</strong>
+                        </div>
+                      </div>
+
+                      <div className="task-metric-tile">
+                        <div className="task-metric-icon blue">
+                          <UserRound size={17} />
+                        </div>
+                        <div className="task-metric-info">
+                          <span className="task-metric-label">Requester</span>
+                          <strong className="task-metric-value">{requesterName}</strong>
+                        </div>
+                      </div>
+
+                      <div className="task-metric-tile">
+                        <div className="task-metric-icon purple">
+                          <Hash size={17} />
+                        </div>
+                        <div className="task-metric-info">
+                          <span className="task-metric-label">RFQ Reference</span>
+                          <strong className="task-metric-value">{reference}</strong>
+                        </div>
+                      </div>
+
+                      <div className="task-metric-tile">
+                        <div className="task-metric-icon green">
+                          <CalendarDays size={17} />
+                        </div>
+                        <div className="task-metric-info">
+                          <span className="task-metric-label">Submission Deadline</span>
+                          <strong className="task-metric-value">
+                            {toUsDate(parentRFQ?.cr49f_submissiondeadline)}
+                          </strong>
+                        </div>
+                      </div>
                     </div>
-                    <p>{parentPR.cr49f_businessjustification}</p>
+
+                    {/* RFQ Scope & Requirements Box */}
+                    {parentRFQ?.cr49f_description && (
+                      <div className="task-justification-box">
+                        <div className="task-justification-title">
+                          <ClipboardList size={12} />
+                          Quotation Scope &amp; Special Conditions
+                        </div>
+                        <p>{parentRFQ.cr49f_description}</p>
+                      </div>
+                    )}
+
+                    {/* Full RFQ Parameters Grid */}
+                    <div className="task-rfq-full-details-grid">
+                      <div className="task-rfq-detail-cell">
+                        <span className="task-rfq-detail-label">RFQ Title</span>
+                        <strong className="task-rfq-detail-val">{parentRFQ?.cr49f_rfqtitle || recordTitle}</strong>
+                      </div>
+                      <div className="task-rfq-detail-cell">
+                        <span className="task-rfq-detail-label">Request / Created Date</span>
+                        <strong className="task-rfq-detail-val">
+                          {toUsDate(parentRFQ?.cr49f_requestdate || (parentRFQ as any)?.createdon)}
+                        </strong>
+                      </div>
+                      <div className="task-rfq-detail-cell">
+                        <span className="task-rfq-detail-label">Submission Deadline</span>
+                        <strong className="task-rfq-detail-val">
+                          {parentRFQ?.cr49f_submissiondeadline
+                            ? new Date(parentRFQ.cr49f_submissiondeadline).toLocaleString(undefined, {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Not specified"}
+                        </strong>
+                      </div>
+                      <div className="task-rfq-detail-cell">
+                        <span className="task-rfq-detail-label">Delivery Location</span>
+                        <strong className="task-rfq-detail-val">{parentRFQ?.cr49f_deliverylocation || "Main Site"}</strong>
+                      </div>
+                      <div className="task-rfq-detail-cell">
+                        <span className="task-rfq-detail-label">Originating PR</span>
+                        <strong className="task-rfq-detail-val">
+                          {parentPR?.cr49f_prnumber ? (
+                            <Link to={`/purchase-requests/${parentPR.cr49f_prnumber}`} className="task-rfq-pr-link">
+                              {parentPR.cr49f_prnumber} {parentPR.cr49f_prtitle ? `(${parentPR.cr49f_prtitle})` : ""}
+                            </Link>
+                          ) : (
+                            parentRFQ?.cr49f_prrfqname || "Standalone RFQ"
+                          )}
+                        </strong>
+                      </div>
+                      <div className="task-rfq-detail-cell">
+                        <span className="task-rfq-detail-label">Department</span>
+                        <strong className="task-rfq-detail-val">{deptLabel}</strong>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Invited Suppliers Roster Card */}
+                  <section className="task-card task-rfq-invited-suppliers-card">
+                    <div className="task-card-header">
+                      <div className="task-card-header-left">
+                        <div className="task-card-header-icon green">
+                          <Building2 size={16} />
+                        </div>
+                        <div className="task-card-header-titles">
+                          <h2>Invited Suppliers &amp; Vendors</h2>
+                          <p>Suppliers invited to participate and submit quotation bids for this RFQ</p>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {flowMatchedCodes.length > 0 && (
+                          <span className="task-supplier-ai-badge">
+                            <Sparkles size={11} /> AI Assisted
+                          </span>
+                        )}
+                        <span className="task-seq-pill">
+                          {rfqInvitedSuppliers.length} {rfqInvitedSuppliers.length === 1 ? "supplier invited" : "suppliers invited"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="task-rfq-suppliers-body">
+                      {rfqInvitedSuppliers.length > 0 ? (
+                        <div className="task-rfq-suppliers-grid">
+                          {rfqInvitedSuppliers.map((sup, idx) => {
+                            const initials =
+                              sup.name
+                                .split(" ")
+                                .map((w) => w[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase() || "SU";
+                            return (
+                              <div key={sup.id || idx} className="task-rfq-supplier-card">
+                                <div className="task-rfq-supplier-top">
+                                  <div className="task-rfq-supplier-avatar-wrap">
+                                    <div className="task-rfq-supplier-avatar">
+                                      {initials}
+                                    </div>
+                                    <div className="task-rfq-supplier-title-wrap">
+                                      <div className="task-rfq-supplier-name-row">
+                                        <strong className="task-rfq-supplier-name" title={sup.name}>
+                                          {sup.name}
+                                        </strong>
+                                        <span title="Verified Vendor">
+                                          <ShieldCheck size={14} className="task-supplier-verified-icon" />
+                                        </span>
+                                      </div>
+                                      <div className="task-rfq-supplier-pills-row">
+                                        <span className="task-rfq-supplier-code-badge">{sup.code}</span>
+                                        <span className="task-rfq-supplier-category-badge">{sup.category}</span>
+                                        {sup.isAiMatched && (
+                                          <span className="task-supplier-ai-badge" title="Recommended by SearchSupplier Flow">
+                                            <Sparkles size={10} /> AI Match
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <span className="task-rfq-supplier-status-pill">
+                                    Invited
+                                  </span>
+                                </div>
+
+                                <div className="task-rfq-supplier-details">
+                                  {sup.email && (
+                                    <div className="task-rfq-supplier-info-row" title={sup.email}>
+                                      <Mail size={12} className="task-rfq-info-icon" />
+                                      <span>{sup.email}</span>
+                                    </div>
+                                  )}
+                                  {sup.phone && (
+                                    <div className="task-rfq-supplier-info-row" title={sup.phone}>
+                                      <Phone size={12} className="task-rfq-info-icon" />
+                                      <span>{sup.phone}</span>
+                                    </div>
+                                  )}
+                                  {sup.city && (
+                                    <div className="task-rfq-supplier-info-row" title={sup.city}>
+                                      <MapPin size={12} className="task-rfq-info-icon" />
+                                      <span>{sup.city}</span>
+                                    </div>
+                                  )}
+                                  {sup.contactPerson && (
+                                    <div className="task-rfq-supplier-info-row" title={sup.contactPerson}>
+                                      <User size={12} className="task-rfq-info-icon" />
+                                      <span>Contact: {sup.contactPerson}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="task-rfq-empty-suppliers">
+                          <Building2 size={32} className="task-empty-icon" />
+                          <h4>No Invited Suppliers Recorded</h4>
+                          <p>No supplier invitations have been registered for this Request for Quotation yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                /* PR Overview Metrics Card */
+                <section className="task-card">
+                  <div className="task-card-header">
+                    <div className="task-card-header-left">
+                      <div className="task-card-header-icon">
+                        <FileText size={16} />
+                      </div>
+                      <div className="task-card-header-titles">
+                        <h2>Request Overview</h2>
+                        <p>Procurement request details and specifications</p>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </section>
+
+                  <div className="task-metrics-grid">
+                    <div className="task-metric-tile highlight">
+                      <div className="task-metric-icon violet">
+                        <Flag size={17} />
+                      </div>
+                      <div className="task-metric-info">
+                        <span className="task-metric-label">Priority Tier</span>
+                        <strong className="task-metric-value large">{priorityLabel}</strong>
+                      </div>
+                    </div>
+
+                    <div className="task-metric-tile">
+                      <div className="task-metric-icon blue">
+                        <UserRound size={17} />
+                      </div>
+                      <div className="task-metric-info">
+                        <span className="task-metric-label">Requester</span>
+                        <strong className="task-metric-value">{requesterName}</strong>
+                      </div>
+                    </div>
+
+                    <div className="task-metric-tile">
+                      <div className="task-metric-icon purple">
+                        <List size={17} />
+                      </div>
+                      <div className="task-metric-info">
+                        <span className="task-metric-label">{shortType} Reference</span>
+                        <strong className="task-metric-value">{reference}</strong>
+                      </div>
+                    </div>
+
+                    <div className="task-metric-tile">
+                      <div className="task-metric-icon green">
+                        <CalendarDays size={17} />
+                      </div>
+                      <div className="task-metric-info">
+                        <span className="task-metric-label">Required Delivery</span>
+                        <strong className="task-metric-value">
+                          {toUsDate(parentPR?.cr49f_requireddeliverydate)}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {parentPR?.cr49f_businessjustification && (
+                    <div className="task-justification-box">
+                      <div className="task-justification-title">
+                        <Tag size={12} />
+                        Business Need &amp; Justification
+                      </div>
+                      <p>{parentPR.cr49f_businessjustification}</p>
+                    </div>
+                  )}
+                </section>
+              )}
 
               {/* Line Items Card */}
               <section className="task-card">
@@ -2040,8 +2408,12 @@ function ModernDataverseTaskDetail({
                       <List size={16} />
                     </div>
                     <div className="task-card-header-titles">
-                      <h2>Requested Line Items</h2>
-                      <p>Itemized equipment and service specifications</p>
+                      <h2>{isRfq ? "Quotation Line Items & Scope" : "Requested Line Items"}</h2>
+                      <p>
+                        {isRfq
+                          ? "Scope items and specifications for invited vendor bids"
+                          : "Itemized equipment and service specifications"}
+                      </p>
                     </div>
                   </div>
                   <span className="task-seq-pill">
@@ -2070,7 +2442,7 @@ function ModernDataverseTaskDetail({
                                 </strong>
                               </td>
                               <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
-                                {item.cr49f_itemdescription || "—"}
+                                {item.cr49f_itemdescription || "â€”"}
                               </td>
                             </tr>
                           );
@@ -2237,6 +2609,10 @@ function ModernDataverseTaskDetail({
                     <strong className="value">{reference}</strong>
                   </div>
                   <div className="task-info-row">
+                    <span className="label">Title</span>
+                    <strong className="value">{parentRFQ.cr49f_rfqtitle || "Untitled"}</strong>
+                  </div>
+                  <div className="task-info-row">
                     <span className="label">Department</span>
                     <strong className="value">{deptLabel}</strong>
                   </div>
@@ -2248,11 +2624,27 @@ function ModernDataverseTaskDetail({
                     <span className="label">Delivery Location</span>
                     <strong className="value">{parentRFQ.cr49f_deliverylocation || "Main Site"}</strong>
                   </div>
+                  <div className="task-info-row">
+                    <span className="label">Invited Suppliers</span>
+                    <strong className="value" style={{ color: "var(--primary-hex, #2563eb)" }}>
+                      {rfqInvitedSuppliers.length} {rfqInvitedSuppliers.length === 1 ? "Vendor" : "Vendors"}
+                    </strong>
+                  </div>
+                  {parentPR && (
+                    <div className="task-info-row">
+                      <span className="label">Originating PR</span>
+                      <strong className="value">
+                        <Link to={`/purchase-requests/${parentPR.cr49f_prnumber}`} style={{ color: "var(--primary-hex, #2563eb)", textDecoration: "underline" }}>
+                          {parentPR.cr49f_prnumber}
+                        </Link>
+                      </strong>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginTop: 14 }}>
                   <Link to="/rfq" className="task-link-button">
-                    <span>View Full RFQ Summary</span>
+                    <span>View in RFQ Portal</span>
                     <ExternalLink size={13} />
                   </Link>
                 </div>
@@ -2314,7 +2706,7 @@ function ModernDataverseTaskDetail({
       <footer className="task-sticky-bar">
         <div className="task-sticky-left">
           <button type="button" className="task-btn-close" onClick={onBack}>
-            ← Back
+            â† Back
           </button>
           <span style={{ fontSize: 13, color: "var(--foreground-hex, #0f172a)", fontWeight: 600 }}>
             {task.cr49f_task} ({reference})
@@ -2351,13 +2743,13 @@ function ModernDataverseTaskDetail({
               </button>
             ) : (
               <span className="task-status-pill approved">
-                <CheckCircle2 size={13} /> Revisions Submitted · Sequence #1 Restarted
+                <CheckCircle2 size={13} /> Revisions Submitted Â· Sequence #1 Restarted
               </span>
             )
           ) : !isActive ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="task-status-pill pending">
-                ⏳ Inactive · Waiting for prior sequential task approval
+                â³ Inactive Â· Waiting for prior sequential task approval
               </span>
             </div>
           ) : (
@@ -2569,6 +2961,39 @@ function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
   const isTestingRfq = reference.endsWith("019");
   const rfqTitle = isTestingRfq ? "testing" : "Office supplies quotation";
 
+  const sampleSuppliers = useMemo(
+    () => [
+      {
+        name: "Lenovo India Private Limited",
+        code: "SUP-101",
+        category: "IT Hardware",
+        email: "corporate@lenovo.in",
+        phone: "+91 80 4123 4567",
+        city: "Bengaluru, India",
+        contactPerson: "Rajesh Kumar",
+      },
+      {
+        name: "Dell Technologies",
+        code: "SUP-102",
+        category: "Enterprise Computers",
+        email: "enterprise-sales@dell.com",
+        phone: "+91 80 2222 3333",
+        city: "Bengaluru, India",
+        contactPerson: "Anita Sharma",
+      },
+      {
+        name: "HP Enterprise Solutions",
+        code: "SUP-103",
+        category: "Hardware & Peripherals",
+        email: "b2b@hp.com",
+        phone: "+91 11 4455 6677",
+        city: "Gurugram, India",
+        contactPerson: "Vikram Malhotra",
+      },
+    ],
+    []
+  );
+
   const updateStatus = (nextStatus: string) => {
     setStatus(nextStatus);
     setNotice(`RFQ ${reference} marked ${nextStatus.toLowerCase()}.`);
@@ -2580,7 +3005,7 @@ function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
   };
 
   const reassign = () => {
-    setAssignee((current) => current === "Rushi Pardeshi" ? "Aman Jain" : "Rushi Pardeshi");
+    setAssignee((current) => (current === "Rushi Pardeshi" ? "Aman Jain" : "Rushi Pardeshi"));
     setNotice("Task reassigned.");
   };
 
@@ -2592,17 +3017,144 @@ function RfqApprovalTask({ task, onBack }: { task: Task; onBack: () => void }) {
         </button>
         <div style={{ marginTop: 12 }}>
           <h1>REQUEST FOR QUOTATION APPROVAL FOR {reference} | {rfqTitle.toUpperCase()}</h1>
-          <span className={`task-status-pill ${status === "Approved" ? "approved" : "active"}`}>{status}</span>
+          <span className={`task-status-pill ${status === "Approved" ? "approved" : "active"}`}>
+            {status}
+          </span>
         </div>
       </header>
 
+      {/* RFQ Overview Card */}
+      <div className="task-card" style={{ marginBottom: 16 }}>
+        <div className="task-card-header">
+          <div className="task-card-header-left">
+            <div className="task-card-header-icon blue">
+              <FileText size={16} />
+            </div>
+            <div className="task-card-header-titles">
+              <h2>Request for Quotation Details</h2>
+              <p>Quotation specifications and bidding schedule</p>
+            </div>
+          </div>
+          <span className="task-seq-pill">RFQ Reference: {reference}</span>
+        </div>
+
+        <div className="task-rfq-full-details-grid">
+          <div className="task-rfq-detail-cell">
+            <span className="task-rfq-detail-label">RFQ Number</span>
+            <strong className="task-rfq-detail-val">{reference}</strong>
+          </div>
+          <div className="task-rfq-detail-cell">
+            <span className="task-rfq-detail-label">Title</span>
+            <strong className="task-rfq-detail-val">{rfqTitle}</strong>
+          </div>
+          <div className="task-rfq-detail-cell">
+            <span className="task-rfq-detail-label">Submission Deadline</span>
+            <strong className="task-rfq-detail-val">Dec 15, 2026, 5:00 PM</strong>
+          </div>
+          <div className="task-rfq-detail-cell">
+            <span className="task-rfq-detail-label">Delivery Destination</span>
+            <strong className="task-rfq-detail-val">Main Facility, Kolkata</strong>
+          </div>
+          <div className="task-rfq-detail-cell">
+            <span className="task-rfq-detail-label">Department</span>
+            <strong className="task-rfq-detail-val">IT Procurement</strong>
+          </div>
+          <div className="task-rfq-detail-cell">
+            <span className="task-rfq-detail-label">Invited Vendors</span>
+            <strong className="task-rfq-detail-val" style={{ color: "var(--primary-hex, #2563eb)" }}>
+              {sampleSuppliers.length} Invited
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Invited Suppliers Roster Card */}
+      <div className="task-card task-rfq-invited-suppliers-card" style={{ marginBottom: 16 }}>
+        <div className="task-card-header">
+          <div className="task-card-header-left">
+            <div className="task-card-header-icon green">
+              <Building2 size={16} />
+            </div>
+            <div className="task-card-header-titles">
+              <h2>Invited Suppliers &amp; Vendors</h2>
+              <p>Vendors selected to participate and submit quotation bids for this RFQ</p>
+            </div>
+          </div>
+          <span className="task-seq-pill">{sampleSuppliers.length} suppliers invited</span>
+        </div>
+
+        <div className="task-rfq-suppliers-body">
+          <div className="task-rfq-suppliers-grid">
+            {sampleSuppliers.map((sup, idx) => {
+              const initials = sup.name
+                .split(" ")
+                .map((w) => w[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
+              return (
+                <div key={idx} className="task-rfq-supplier-card">
+                  <div className="task-rfq-supplier-top">
+                    <div className="task-rfq-supplier-avatar-wrap">
+                      <div className="task-rfq-supplier-avatar">{initials}</div>
+                      <div className="task-rfq-supplier-title-wrap">
+                        <div className="task-rfq-supplier-name-row">
+                          <strong className="task-rfq-supplier-name" title={sup.name}>
+                            {sup.name}
+                          </strong>
+                          <span title="Verified Vendor">
+                            <ShieldCheck size={14} className="task-supplier-verified-icon" />
+                          </span>
+                        </div>
+                        <div className="task-rfq-supplier-pills-row">
+                          <span className="task-rfq-supplier-code-badge">{sup.code}</span>
+                          <span className="task-rfq-supplier-category-badge">{sup.category}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="task-rfq-supplier-status-pill">Invited</span>
+                  </div>
+
+                  <div className="task-rfq-supplier-details">
+                    <div className="task-rfq-supplier-info-row">
+                      <Mail size={12} className="task-rfq-info-icon" />
+                      <span>{sup.email}</span>
+                    </div>
+                    <div className="task-rfq-supplier-info-row">
+                      <Phone size={12} className="task-rfq-info-icon" />
+                      <span>{sup.phone}</span>
+                    </div>
+                    <div className="task-rfq-supplier-info-row">
+                      <MapPin size={12} className="task-rfq-info-icon" />
+                      <span>{sup.city}</span>
+                    </div>
+                    <div className="task-rfq-supplier-info-row">
+                      <User size={12} className="task-rfq-info-icon" />
+                      <span>Contact: {sup.contactPerson}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       <div className="task-card" style={{ padding: 20 }}>
-        <p style={{ margin: 0, color: "var(--muted-foreground-hex, #64748b)" }}>Sample RFQ Approval for demonstration.</p>
+        <p style={{ margin: 0, color: "var(--muted-foreground-hex, #64748b)" }}>
+          Workflow decision required for {reference}. Review details above and submit approval.
+        </p>
         {notice && <p style={{ color: "var(--primary-hex, #2563eb)", marginTop: 8 }}>{notice}</p>}
         <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-          <button type="button" className="task-btn-reject" onClick={() => updateStatus("Rejected")}>Reject</button>
-          <button type="button" className="task-btn-approve" onClick={() => updateStatus("Approved")}>Approve</button>
-          <button type="button" className="task-btn-close" onClick={reassign}>Reassign ({assignee})</button>
+          <button type="button" className="task-btn-reject" onClick={() => updateStatus("Rejected")}>
+            Reject
+          </button>
+          <button type="button" className="task-btn-approve" onClick={() => updateStatus("Approved")}>
+            Approve
+          </button>
+          <button type="button" className="task-btn-close" onClick={reassign}>
+            Reassign ({assignee})
+          </button>
         </div>
       </div>
     </section>
