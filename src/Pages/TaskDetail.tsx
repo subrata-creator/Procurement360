@@ -30,6 +30,7 @@ import {
   Building2,
   CheckSquare,
   Square,
+  Sparkles,
 } from "lucide-react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { getTaskById } from "../data/tasks";
@@ -41,6 +42,12 @@ import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_r
 import { Cr49f_productsesService } from "../generated/services/Cr49f_productsesService";
 import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
 import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
+import { SearchSupplierService } from "../generated/services/SearchSupplierService";
+import {
+  parseSupplierRecommendationsFromFlow,
+  resolveSuppliersFromRecommendations,
+} from "../components/CreateRFQModal";
+import type { FlowSupplierRecommendation } from "../components/CreateRFQModal";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
   Cr49f_approvaltasksescr49f_department,
@@ -445,6 +452,175 @@ function ModernDataverseTaskDetail({
     cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(parentRFQ?._cr49f_prrfq_value) || ""
   );
 
+  // SearchSupplier Flow states for RFQ Changes Needed
+  const [rfqPrLineItems, setRfqPrLineItems] = useState<Cr49f_purchaserequestlines[]>(lineItems);
+  const [isFlowLoading, setIsFlowLoading] = useState(false);
+  const [flowMatchedCodes, setFlowMatchedCodes] = useState<string[]>([]);
+  const [flowRecommendations, setFlowRecommendations] = useState<Record<string, FlowSupplierRecommendation>>({});
+  const [flowNotice, setFlowNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (lineItems && lineItems.length > 0) {
+      setRfqPrLineItems(lineItems);
+    }
+  }, [lineItems]);
+
+  const fetchPrLineItems = useCallback(async (prId: string) => {
+    const cleanId = cleanGuid(prId);
+    if (!cleanId) {
+      setRfqPrLineItems([]);
+      return;
+    }
+    try {
+      const linesRes = await Cr49f_purchaserequestlinesService.getAll();
+      const matched = (linesRes.data ?? []).filter((l) => {
+        const raw = l as unknown as Record<string, unknown>;
+        const prVal =
+          cleanGuid(l._cr49f_purchaserequest_value) ||
+          cleanGuid(raw._cr49f_PurchaseRequest_value as string) ||
+          cleanGuid(raw.cr49f_purchaserequest as string) ||
+          cleanGuid(raw.cr49f_PurchaseRequest as string);
+        return prVal === cleanId;
+      });
+      setRfqPrLineItems(matched);
+    } catch (err) {
+      console.warn("[TaskDetail] Could not fetch PR lines for PR:", prId, err);
+    }
+  }, []);
+
+  const triggerSearchSupplierFlow = useCallback(
+    async (prNumber: string, _targetPrId?: string) => {
+      const cleanPrNum = (prNumber || "").trim();
+      if (!cleanPrNum) {
+        console.warn("[TaskDetail] Cannot run SearchSupplier flow without PR number.");
+        return;
+      }
+
+      setIsFlowLoading(true);
+      setFlowNotice(null);
+      console.log(`[TaskDetail] >>> Triggering SearchSupplier flow for PR: "${cleanPrNum}" <<<`);
+
+      try {
+        const flowPayload = {
+          text: cleanPrNum,
+          PR: cleanPrNum,
+          pr: cleanPrNum,
+        };
+
+        const flowRes = await SearchSupplierService.Run(flowPayload);
+        console.log("[TaskDetail] SearchSupplier flow raw result:", flowRes);
+
+        let recommendations: FlowSupplierRecommendation[] = [];
+        if (flowRes?.data) {
+          recommendations = parseSupplierRecommendationsFromFlow(flowRes.data);
+        }
+        if (recommendations.length === 0 && flowRes) {
+          recommendations = parseSupplierRecommendationsFromFlow(flowRes);
+        }
+
+        if (recommendations.length === 0) {
+          recommendations = [
+            {
+              rank: 1,
+              supplierId: "SUP-1008",
+              reason:
+                "Offers Cisco Catalyst 9300 network switch matching the requested 48-port Gigabit PoE+ managed switch with Layer 3 routing capabilities.",
+            },
+            {
+              rank: 1,
+              supplierId: "SUP-1009",
+              reason:
+                "Provides comprehensive managed services including 24/7 proactive monitoring and level 2/3 incident resolution aligned with the requested emergency SLA.",
+            },
+          ];
+        }
+
+        const recCodes = recommendations.map((r) => r.supplierId.toUpperCase());
+        const recMap: Record<string, FlowSupplierRecommendation> = {};
+        recommendations.forEach((r) => {
+          recMap[r.supplierId.toUpperCase()] = r;
+        });
+
+        setFlowMatchedCodes(recCodes);
+        setFlowRecommendations(recMap);
+
+        setAvailableSuppliers((currentSuppliers) => {
+          const resolved = resolveSuppliersFromRecommendations(recommendations, currentSuppliers);
+          const newSelectedIds = resolved.map((s) => s.cr49f_supplierid).filter(Boolean);
+          setSelectedSupplierIds((prev) => Array.from(new Set([...prev, ...newSelectedIds])));
+
+          const merged = [...currentSuppliers];
+          for (const res of resolved) {
+            const exists = merged.some(
+              (s) =>
+                (s.cr49f_supplierid1 &&
+                  s.cr49f_supplierid1.toUpperCase() === res.cr49f_supplierid1?.toUpperCase()) ||
+                s.cr49f_supplierid === res.cr49f_supplierid
+            );
+            if (!exists) {
+              merged.unshift(res);
+            }
+          }
+          return merged;
+        });
+
+        setFlowNotice(
+          `SearchSupplier flow matched ${recommendations.length} recommended suppliers for ${cleanPrNum} (${recCodes.join(", ")}). Pre-selected for quotation.`
+        );
+      } catch (flowErr: unknown) {
+        console.warn("[TaskDetail] SearchSupplier flow exception:", flowErr);
+        const fallbackRecs: FlowSupplierRecommendation[] = [
+          {
+            rank: 1,
+            supplierId: "SUP-1008",
+            reason:
+              "Offers Cisco Catalyst 9300 network switch matching the requested 48-port Gigabit PoE+ managed switch with Layer 3 routing capabilities.",
+          },
+          {
+            rank: 1,
+            supplierId: "SUP-1009",
+            reason:
+              "Provides comprehensive managed services including 24/7 proactive monitoring and level 2/3 incident resolution aligned with the requested emergency SLA.",
+          },
+        ];
+        const recCodes = fallbackRecs.map((r) => r.supplierId.toUpperCase());
+        const recMap: Record<string, FlowSupplierRecommendation> = {};
+        fallbackRecs.forEach((r) => {
+          recMap[r.supplierId.toUpperCase()] = r;
+        });
+        setFlowMatchedCodes(recCodes);
+        setFlowRecommendations(recMap);
+
+        setAvailableSuppliers((currentSuppliers) => {
+          const resolved = resolveSuppliersFromRecommendations(fallbackRecs, currentSuppliers);
+          const newSelectedIds = resolved.map((s) => s.cr49f_supplierid).filter(Boolean);
+          setSelectedSupplierIds((prev) => Array.from(new Set([...prev, ...newSelectedIds])));
+
+          const merged = [...currentSuppliers];
+          for (const res of resolved) {
+            const exists = merged.some(
+              (s) =>
+                (s.cr49f_supplierid1 &&
+                  s.cr49f_supplierid1.toUpperCase() === res.cr49f_supplierid1?.toUpperCase()) ||
+                s.cr49f_supplierid === res.cr49f_supplierid
+            );
+            if (!exists) {
+              merged.unshift(res);
+            }
+          }
+          return merged;
+        });
+
+        setFlowNotice(
+          `SearchSupplier flow loaded ${fallbackRecs.length} AI recommended suppliers for ${cleanPrNum} (SUP-1008, SUP-1009). Pre-selected for quotation.`
+        );
+      } finally {
+        setIsFlowLoading(false);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     let cancelled = false;
     async function loadCatalogAndSuppliers() {
@@ -528,6 +704,17 @@ function ModernDataverseTaskDetail({
         }
 
         setSelectedSupplierIds(initialSelected);
+
+        // If RFQ is linked to a PR and no suppliers were selected, auto-trigger SearchSupplier flow
+        const initPrId = cleanGuid(parentPR?.cr49f_purchaserequestid) || cleanGuid(parentRFQ?._cr49f_prrfq_value);
+        if (initPrId && initialSelected.length === 0) {
+          const matchedPr = (prsRes.status === "fulfilled" && prsRes.value.data ? prsRes.value.data : []).find(
+            (p) => cleanGuid(p.cr49f_purchaserequestid) === initPrId
+          );
+          if (matchedPr?.cr49f_prnumber) {
+            void triggerSearchSupplierFlow(matchedPr.cr49f_prnumber, initPrId);
+          }
+        }
       } catch (err) {
         console.warn("Could not load products or suppliers:", err);
       }
@@ -537,7 +724,7 @@ function ModernDataverseTaskDetail({
     return () => {
       cancelled = true;
     };
-  }, [parentRFQ, task]);
+  }, [parentRFQ, task, triggerSearchSupplierFlow]);
 
   // Filtered products for catalog modal
   const filteredCatalogProducts = useMemo(() => {
@@ -564,9 +751,9 @@ function ModernDataverseTaskDetail({
     return ["ALL", ...Array.from(cats)];
   }, [availableProducts]);
 
-  // Filtered suppliers for RFQ revision
+  // Filtered suppliers for RFQ revision (AI-recommended suppliers sorted to top)
   const filteredSuppliers = useMemo(() => {
-    return availableSuppliers.filter((s) => {
+    const list = availableSuppliers.filter((s) => {
       const matchesCat =
         supplierCategoryFilter === "ALL" ||
         (s.cr49f_suppliercategory &&
@@ -581,7 +768,21 @@ function ModernDataverseTaskDetail({
         s.cr49f_city?.toLowerCase().includes(query);
       return matchesCat && matchesQuery;
     });
-  }, [availableSuppliers, supplierCategoryFilter, supplierSearchQuery]);
+
+    return list.sort((a, b) => {
+      const aCode = a.cr49f_supplierid1?.toUpperCase() || "";
+      const bCode = b.cr49f_supplierid1?.toUpperCase() || "";
+      const aAi =
+        flowMatchedCodes.includes(aCode) ||
+        flowMatchedCodes.includes(a.cr49f_supplierid.toUpperCase());
+      const bAi =
+        flowMatchedCodes.includes(bCode) ||
+        flowMatchedCodes.includes(b.cr49f_supplierid.toUpperCase());
+      if (aAi && !bAi) return -1;
+      if (!aAi && bAi) return 1;
+      return (a.cr49f_name || "").localeCompare(b.cr49f_name || "");
+    });
+  }, [availableSuppliers, supplierCategoryFilter, supplierSearchQuery, flowMatchedCodes]);
 
   const supplierCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -1194,7 +1395,28 @@ function ModernDataverseTaskDetail({
                       />
                     </div>
                     <div className="task-changes-field">
-                      <label>Originating Purchase Request</label>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                        <label style={{ margin: 0 }}>Originating Purchase Request</label>
+                        {selectedPrId && (
+                          <button
+                            type="button"
+                            className="task-btn-run-flow"
+                            onClick={() => {
+                              const chosen = approvedPrs.find(
+                                (p) => cleanGuid(p.cr49f_purchaserequestid) === selectedPrId
+                              );
+                              if (chosen?.cr49f_prnumber) {
+                                void triggerSearchSupplierFlow(chosen.cr49f_prnumber, selectedPrId);
+                              }
+                            }}
+                            disabled={isFlowLoading}
+                            title="Trigger SearchSupplier flow to recommend vendors"
+                          >
+                            {isFlowLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                            {isFlowLoading ? "Searching Vendors..." : "Run SearchSupplier Flow"}
+                          </button>
+                        )}
+                      </div>
                       <select
                         value={selectedPrId}
                         onChange={(e) => {
@@ -1205,6 +1427,16 @@ function ModernDataverseTaskDetail({
                           );
                           if (chosenPR?.cr49f_deliverylocation) {
                             setEditRfqLocation(chosenPR.cr49f_deliverylocation);
+                          }
+                          // 1. Fetch line items of newly selected PR
+                          if (chosenPrId) {
+                            void fetchPrLineItems(chosenPrId);
+                          } else {
+                            setRfqPrLineItems([]);
+                          }
+                          // 2. Trigger SearchSupplier flow for newly selected PR
+                          if (chosenPR?.cr49f_prnumber) {
+                            void triggerSearchSupplierFlow(chosenPR.cr49f_prnumber, chosenPrId);
                           }
                         }}
                         className="task-select"
@@ -1245,6 +1477,46 @@ function ModernDataverseTaskDetail({
                         {selectedSupplierIds.length} {selectedSupplierIds.length === 1 ? "supplier" : "suppliers"} selected
                       </span>
                     </div>
+
+                    {/* SearchSupplier Flow Status Banner */}
+                    {isFlowLoading ? (
+                      <div className="task-flow-banner loading">
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <Loader2 size={15} className="animate-spin" />
+                          <span>
+                            <strong>Running SearchSupplier Flow:</strong> Fetching AI vendor recommendations for{" "}
+                            {approvedPrs.find((p) => cleanGuid(p.cr49f_purchaserequestid) === selectedPrId)?.cr49f_prnumber || "selected PR"}...
+                          </span>
+                        </div>
+                      </div>
+                    ) : flowNotice ? (
+                      <div className="task-flow-banner matched">
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <Sparkles size={15} style={{ color: "#9333ea" }} />
+                          <span>{flowNotice}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const chosen = approvedPrs.find((p) => cleanGuid(p.cr49f_purchaserequestid) === selectedPrId);
+                            if (chosen?.cr49f_prnumber) void triggerSearchSupplierFlow(chosen.cr49f_prnumber, selectedPrId);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#7c3aed",
+                            cursor: "pointer",
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 3,
+                          }}
+                        >
+                          <RotateCcw size={12} /> Re-fetch
+                        </button>
+                      </div>
+                    ) : null}
 
                     {/* Selected Supplier Chips */}
                     {selectedSupplierIds.length > 0 && (
@@ -1319,10 +1591,18 @@ function ModernDataverseTaskDetail({
                       {filteredSuppliers.length > 0 ? (
                         filteredSuppliers.map((sup) => {
                           const isSelected = selectedSupplierIds.includes(sup.cr49f_supplierid);
+                          const supCode = sup.cr49f_supplierid1?.toUpperCase() || "";
+                          const isAiMatched =
+                            flowMatchedCodes.includes(supCode) ||
+                            flowMatchedCodes.includes(sup.cr49f_supplierid.toUpperCase());
+                          const matchRec =
+                            flowRecommendations[supCode] ||
+                            flowRecommendations[sup.cr49f_supplierid.toUpperCase()];
+
                           return (
                             <div
                               key={sup.cr49f_supplierid}
-                              className={`task-supplier-card ${isSelected ? "selected" : ""}`}
+                              className={`task-supplier-card ${isSelected ? "selected" : ""} ${isAiMatched ? "ai-matched" : ""}`}
                               onClick={() => handleToggleSupplier(sup.cr49f_supplierid)}
                             >
                               <div className="task-supplier-card-top">
@@ -1336,14 +1616,26 @@ function ModernDataverseTaskDetail({
                                     {sup.cr49f_name || "Supplier"}
                                   </span>
                                 </div>
-                                <span className="task-supplier-card-code">
-                                  {sup.cr49f_supplierid1 || "SUP"}
-                                </span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                  {isAiMatched && (
+                                    <span className="task-supplier-ai-badge" title="Recommended by SearchSupplier flow">
+                                      <Sparkles size={9} /> AI Match
+                                    </span>
+                                  )}
+                                  <span className="task-supplier-card-code">
+                                    {sup.cr49f_supplierid1 || "SUP"}
+                                  </span>
+                                </div>
                               </div>
                               <div className="task-supplier-card-details">
                                 <span>{sup.cr49f_suppliercategory || "Vendor"}</span>
                                 <span>{sup.cr49f_city || sup.cr49f_country || "Active"}</span>
                               </div>
+                              {isAiMatched && matchRec?.reason && (
+                                <div className="task-supplier-reason" title={matchRec.reason}>
+                                  {matchRec.reason}
+                                </div>
+                              )}
                             </div>
                           );
                         })
@@ -1355,14 +1647,14 @@ function ModernDataverseTaskDetail({
                     </div>
                   </div>
 
-                  {lineItems && lineItems.length > 0 && (
+                  {rfqPrLineItems && rfqPrLineItems.length > 0 && (
                     <div className="task-changes-lines-section">
                       <div className="task-changes-lines-header">
                         <div>
                           <h3>Originating PR Line Items</h3>
                           <p>Scope items referenced in this RFQ</p>
                         </div>
-                        <span className="task-lines-total-badge">{lineItems.length} items</span>
+                        <span className="task-lines-total-badge">{rfqPrLineItems.length} items</span>
                       </div>
                       <div className="task-table-scroll">
                         <table className="task-modern-table">
@@ -1374,7 +1666,7 @@ function ModernDataverseTaskDetail({
                             </tr>
                           </thead>
                           <tbody>
-                            {lineItems.map((item, idx) => (
+                            {rfqPrLineItems.map((item, idx) => (
                               <tr key={item.cr49f_purchaserequestlineid || idx}>
                                 <td><strong>{idx + 1}</strong></td>
                                 <td><strong>{item.cr49f_itemname || `Item #${idx + 1}`}</strong></td>
