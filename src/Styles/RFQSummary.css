@@ -9,7 +9,7 @@
 
 .rfq-detail-page {
   min-height: calc(100vh - 32px);
-  padding: 16px 18px 28px;
+  padding: 0 0 28px 0;
   background: transparent;
   color: var(--foreground-hex);
   font-family: "Segoe UI", Arial, sans-serif;
@@ -936,7 +936,7 @@
 
 @media (max-width: 600px) {
   .rfq-detail-page {
-    padding: 12px 9px 24px;
+    padding: 0 0 24px 0;
   }
 
   .rfq-detail-heading {

@@ -15,7 +15,7 @@
   width: 100%;
   min-height: 100vh;
 
-  padding: 28px 30px 50px;
+  padding: 0 0 36px 0;
 
   display: flex;
   flex-direction: column;
@@ -1380,7 +1380,7 @@
 @media (max-width: 900px) {
 
   .dashboard-page {
-    padding: 22px 20px 40px;
+    padding: 0 0 32px 0;
   }
 
   .dashboard-heading {
@@ -1410,7 +1410,7 @@
 @media (max-width: 700px) {
 
   .dashboard-page {
-    padding: 18px 14px 35px;
+    padding: 0 0 24px 0;
   }
 
   .dashboard-heading h1 {
