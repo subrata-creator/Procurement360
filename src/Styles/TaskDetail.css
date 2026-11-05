@@ -933,13 +933,16 @@
 }
 
 .task-btn-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   height: 38px;
   padding: 0 16px;
   border-radius: 8px;
   border: 1px solid var(--border-hex, #cbd5e1);
   background: var(--card-hex, #ffffff);
   color: var(--foreground-hex, #0f172a);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -947,6 +950,7 @@
 
 .task-btn-close:hover {
   background: var(--muted-hex, #f1f5f9);
+  border-color: var(--border-hex, #94a3b8);
 }
 
 .task-btn-reject {

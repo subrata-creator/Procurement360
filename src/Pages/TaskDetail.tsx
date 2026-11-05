@@ -81,9 +81,9 @@ import {
 import "../Styles/TaskDetail.css";
 
 function toUsDate(value?: string | null): string {
-  if (!value) return "â€”";
+  if (!value) return "-";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "â€”";
+  if (Number.isNaN(date.getTime())) return "-";
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 }
 
@@ -254,7 +254,13 @@ export default function TaskDetail() {
         lineItems={lineItems}
         siblingTasks={siblingTasks}
         onRefresh={loadDataverseTaskData}
-        onBack={() => navigate(-1)}
+        onBack={() => {
+          if (window.history.length > 1) {
+            navigate(-1);
+          } else {
+            navigate("/");
+          }
+        }}
       />
     );
   }
@@ -1395,7 +1401,7 @@ function ModernDataverseTaskDetail({
             onClick={() => setNotice(null)}
             style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontWeight: 700 }}
           >
-            âœ•
+            <X size={14} />
           </button>
         </div>
       )}
@@ -1917,7 +1923,7 @@ function ModernDataverseTaskDetail({
                                 <td><strong>{idx + 1}</strong></td>
                                 <td><strong>{item.cr49f_itemname || `Item #${idx + 1}`}</strong></td>
                                 <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
-                                  {item.cr49f_itemdescription || "—"}
+                                  {item.cr49f_itemdescription || "-"}
                                 </td>
                               </tr>
                             ))}
@@ -1939,17 +1945,6 @@ function ModernDataverseTaskDetail({
                       placeholder="e.g. Adjusted submission deadline, refined delivery site, and updated vendor roster per approver comments."
                       className="task-textarea"
                     />
-                  </div>
-
-                  <div className="task-changes-form-actions">
-                    <button
-                      type="submit"
-                      className="task-btn-submit-changes"
-                      disabled={submittingChanges}
-                    >
-                      {submittingChanges ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                      Submit Updated RFQ &amp; Restart Approval Workflow
-                    </button>
                   </div>
                 </div>
               </form>
@@ -2146,17 +2141,6 @@ function ModernDataverseTaskDetail({
                       placeholder="e.g. Adjusted quantities and updated delivery schedule per approver feedback."
                       className="task-textarea"
                     />
-                  </div>
-
-                  <div className="task-changes-form-actions">
-                    <button
-                      type="submit"
-                      className="task-btn-submit-changes"
-                      disabled={submittingChanges}
-                    >
-                      {submittingChanges ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                      Submit Updated PR &amp; Restart Approval Workflow
-                    </button>
                   </div>
                 </div>
               </form>
@@ -2507,7 +2491,7 @@ function ModernDataverseTaskDetail({
                                 </strong>
                               </td>
                               <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
-                                {item.cr49f_itemdescription || "â€”"}
+                                {item.cr49f_itemdescription || "-"}
                               </td>
                             </tr>
                           );
@@ -2770,8 +2754,9 @@ function ModernDataverseTaskDetail({
       {/* 5. Sticky Action Footer Bar */}
       <footer className="task-sticky-bar">
         <div className="task-sticky-left">
-          <button type="button" className="task-btn-close" onClick={onBack}>
-            â† Back
+          <button type="button" className="task-btn-close" onClick={onBack} title="Back to previous page">
+            <ArrowLeft size={15} />
+            <span>Back</span>
           </button>
           <span style={{ fontSize: 13, color: "var(--foreground-hex, #0f172a)", fontWeight: 600 }}>
             {task.cr49f_task} ({reference})
@@ -2803,18 +2788,18 @@ function ModernDataverseTaskDetail({
                 }
                 disabled={submittingChanges}
               >
-                {submittingChanges ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                Submit Updated {shortType} &amp; Restart Approval
+                {submittingChanges ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                Submit
               </button>
             ) : (
               <span className="task-status-pill approved">
-                <CheckCircle2 size={13} /> Revisions Submitted Â· Sequence #1 Restarted
+                <CheckCircle2 size={13} /> Revisions Submitted · Sequence #1 Restarted
               </span>
             )
           ) : !isActive ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="task-status-pill pending">
-                â³ Inactive Â· Waiting for prior sequential task approval
+                <Clock size={13} /> Inactive · Waiting for prior sequential task approval
               </span>
             </div>
           ) : (
