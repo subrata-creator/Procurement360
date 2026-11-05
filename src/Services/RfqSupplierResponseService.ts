@@ -50,6 +50,8 @@ export interface SupplierResponseLineItem {
   totalPrice: number; // cr49f_totalprice ($)
   leadTime?: string;
   comments?: string;
+  catalogPrice?: number;
+  matchedCatalogName?: string;
 }
 
 /**

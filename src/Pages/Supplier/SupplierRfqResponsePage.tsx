@@ -34,8 +34,11 @@ import {
   type SupplierResponseLineItem,
 } from "../../Services/RfqSupplierResponseService";
 import { Cr49f_suppliersService } from "../../generated/services/Cr49f_suppliersService";
+import { Cr49f_supplierproductsService } from "../../generated/services/Cr49f_supplierproductsService";
 import type { Cr49f_requestforqoutations } from "../../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_suppliers } from "../../generated/models/Cr49f_suppliersModel";
+import type { Cr49f_supplierproducts } from "../../generated/models/Cr49f_supplierproductsModel";
+import { INITIAL_SAMPLE_SUPPLIERS, type SampleSupplierItem, type SampleSupplierProduct } from "../../data/SampleSuppliersData";
 
 import "../../Styles/SupplierPortal.css";
 
@@ -117,11 +120,140 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
       setAccessDenied(false);
 
       const supId = activeSupplier.cr49f_supplierid1 || activeSupplier.cr49f_supplierid;
-      const res = await getSupplierRfqDetails(rfqId, supId, activeSupplier.cr49f_email);
+      const [res, prodRes] = await Promise.all([
+        getSupplierRfqDetails(rfqId, supId, activeSupplier.cr49f_email),
+        Cr49f_supplierproductsService.getAll().catch(() => ({ success: false, data: [] as Cr49f_supplierproducts[] })),
+      ]);
 
       setRfq(res.rfq);
       setResponse(res.response);
-      setLines(res.response.lines);
+
+      // Resolve supplier products catalog
+      const allDataverseProducts: Cr49f_supplierproducts[] =
+        prodRes.success && prodRes.data ? prodRes.data : [];
+
+      const activeSupGuid = (activeSupplier.cr49f_supplierid || "").toLowerCase().replace(/[{}]/g, "").trim();
+      const activeSupCode = (activeSupplier.cr49f_supplierid1 || "").toLowerCase().trim();
+      const activeSupName = (activeSupplier.cr49f_name || "").toLowerCase().trim();
+
+      let supplierCatalog = allDataverseProducts.filter((p) => {
+        const raw = p as unknown as Record<string, unknown>;
+        const pSupGuid = (
+          p._cr49f_supplier_value ||
+          (raw._cr49f_Supplier_value as string) ||
+          (raw.cr49f_Supplier as string) ||
+          (raw.cr49f_supplier as string) ||
+          ""
+        ).toLowerCase().replace(/[{}]/g, "").trim();
+        return pSupGuid && pSupGuid === activeSupGuid;
+      });
+
+      // Fallback to sample data catalog if Dataverse has no products for this supplier
+      if (supplierCatalog.length === 0) {
+        const sampleMatch = INITIAL_SAMPLE_SUPPLIERS.find(
+          (s: SampleSupplierItem) =>
+            (s.supplier.cr49f_supplierid1 && s.supplier.cr49f_supplierid1.toLowerCase().trim() === activeSupCode) ||
+            (s.supplier.cr49f_name && s.supplier.cr49f_name.toLowerCase().trim() === activeSupName)
+        );
+        if (sampleMatch && sampleMatch.products) {
+          supplierCatalog = sampleMatch.products.map((sp: SampleSupplierProduct, pIdx: number) => ({
+            cr49f_supplierproductid: sp.cr49f_supplierproductnumber || `sample_prod_${pIdx}`,
+            cr49f_productname: sp.cr49f_productname,
+            cr49f_unitprice: String(sp.cr49f_unitprice),
+            cr49f_category: sp.cr49f_category,
+            statecode: 0 as const,
+          })) as unknown as Cr49f_supplierproducts[];
+        }
+      }
+
+      // Helper to match catalog product price
+      const getCatalogPriceForLine = (itemName: string, category?: string) => {
+        if (!supplierCatalog.length) return null;
+        const cleanName = (itemName || "").toLowerCase().trim();
+        const cleanCat = (category || "").toLowerCase().trim();
+
+        // 1. Exact name match
+        let match = supplierCatalog.find(
+          (p) => (p.cr49f_productname || "").toLowerCase().trim() === cleanName
+        );
+
+        // 2. Contains match
+        if (!match) {
+          match = supplierCatalog.find((p) => {
+            const pName = (p.cr49f_productname || "").toLowerCase().trim();
+            return pName && (cleanName.includes(pName) || pName.includes(cleanName));
+          });
+        }
+
+        // 3. Keyword / word intersection match
+        if (!match) {
+          const words = cleanName.split(/\s+/).filter((w) => w.length > 2);
+          match = supplierCatalog.find((p) => {
+            const pName = (p.cr49f_productname || "").toLowerCase().trim();
+            return words.some((w) => pName.includes(w));
+          });
+        }
+
+        // 4. Category match
+        if (!match && cleanCat) {
+          match = supplierCatalog.find(
+            (p) => (p.cr49f_category || "").toLowerCase().trim() === cleanCat
+          );
+        }
+
+        // 5. Default to first catalog item if available
+        if (!match && supplierCatalog.length > 0) {
+          match = supplierCatalog[0];
+        }
+
+        if (match && match.cr49f_unitprice) {
+          const parsed = parseFloat(String(match.cr49f_unitprice).replace(/[^0-9.]/g, ""));
+          if (!isNaN(parsed) && parsed > 0) {
+            return { price: parsed, productName: match.cr49f_productname || itemName };
+          }
+        }
+        return null;
+      };
+
+      // Process lines:
+      // 1. Quantity is READ-ONLY matching the requested quantity
+      // 2. Unit price is fetched from supplier's product price (if unitPrice is 0 or unquoted), but editable!
+      const processedLines = res.response.lines.map((line) => {
+        const reqQty = Number(line.requestedQuantity) || 1;
+        let unitPrice = Number(line.unitPrice) || 0;
+        let catalogPrice: number | undefined;
+        let matchedCatalogName: string | undefined;
+
+        const catMatch = getCatalogPriceForLine(line.itemName, line.category);
+        if (catMatch) {
+          catalogPrice = catMatch.price;
+          matchedCatalogName = catMatch.productName;
+          // Auto-fetch if unitPrice hasn't been set yet
+          if (unitPrice === 0) {
+            unitPrice = catMatch.price;
+          }
+        }
+
+        const calc = calculateLineTotal(
+          unitPrice,
+          reqQty, // quantity is read-only = reqQty
+          line.discount,
+          line.tax,
+          line.anyAdditionalCharges,
+          line.additionalChargePercentage
+        );
+
+        return {
+          ...line,
+          offeredQuantity: reqQty, // quantity will be read-only matching requested quantity
+          unitPrice, // fetched from supplier's product price, but editable!
+          totalPrice: calc.totalPrice,
+          catalogPrice,
+          matchedCatalogName,
+        };
+      });
+
+      setLines(processedLines);
 
       if (res.response.deliveryDate) {
         const d = new Date(res.response.deliveryDate);
@@ -159,13 +291,15 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
   ) => {
     if (isSubmitted) return;
 
+    // Quantity is read-only as per RFQ specifications
+    if (field === "offeredQuantity") return;
+
     setLines((prev) => {
       const updated = [...prev];
       const target = { ...updated[index] };
 
       if (
         field === "unitPrice" ||
-        field === "offeredQuantity" ||
         field === "discount" ||
         field === "tax" ||
         field === "additionalChargePercentage"
@@ -181,10 +315,14 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
         (target as Record<string, unknown>)[field] = value;
       }
 
+      // Quantity remains strictly locked to requestedQuantity
+      const fixedQty = target.requestedQuantity || target.offeredQuantity || 1;
+      target.offeredQuantity = fixedQty;
+
       // Re-calculate financial components using central calculateLineTotal helper
       const calc = calculateLineTotal(
         target.unitPrice,
-        target.offeredQuantity,
+        fixedQty,
         target.discount,
         target.tax,
         target.anyAdditionalCharges,
@@ -749,13 +887,24 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                         <div className="supplier-line-accordion-body">
                           {/* 4-Column Pricing & Quantities */}
                           <div className="supplier-pricing-grid-4">
-                            {/* Quoted Unit Price */}
+                            {/* Quoted Unit Price (Fetched from catalog, editable) */}
                             <div className="supplier-input-block">
-                              <label className="supplier-input-label">
-                                <span>
-                                  QUOTED UNIT PRICE <span className="supplier-req-star">*</span>
-                                </span>
-                              </label>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                                <label className="supplier-input-label" style={{ margin: 0 }}>
+                                  <span>
+                                    QUOTED UNIT PRICE <span className="supplier-req-star">*</span>
+                                  </span>
+                                </label>
+                                {line.catalogPrice ? (
+                                  <span
+                                    className="supplier-catalog-price-badge"
+                                    title={`Standard catalog rate for ${line.matchedCatalogName || line.itemName}: ₹${line.catalogPrice.toLocaleString("en-IN")}`}
+                                  >
+                                    <Sparkles size={11} />
+                                    Catalog: ₹{line.catalogPrice.toLocaleString("en-IN")}
+                                  </span>
+                                ) : null}
+                              </div>
                               <div className="supplier-input-affix-wrap">
                                 <span className="supplier-input-prefix">₹</span>
                                 <input
@@ -767,28 +916,44 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                                   value={line.unitPrice === 0 ? "" : line.unitPrice}
                                   onChange={(e) => handleLineChange(idx, "unitPrice", e.target.value)}
                                   disabled={isSubmitted}
+                                  title="Quoted unit price (pre-filled from supplier product catalog, editable)"
                                 />
                               </div>
+                              {line.catalogPrice && line.unitPrice !== line.catalogPrice && !isSubmitted && (
+                                <button
+                                  type="button"
+                                  className="supplier-btn-revert-catalog"
+                                  onClick={() => handleLineChange(idx, "unitPrice", line.catalogPrice!)}
+                                  title="Reset price back to product catalog rate"
+                                >
+                                  <RefreshCw size={10} /> Reset to Catalog (₹{line.catalogPrice.toLocaleString("en-IN")})
+                                </button>
+                              )}
                             </div>
 
-                            {/* Offered Quantity */}
+                            {/* Offered Quantity (Read-only as per RFQ) */}
                             <div className="supplier-input-block">
-                              <label className="supplier-input-label">
-                                <span>
-                                  OFFERED QUANTITY <span className="supplier-req-star">*</span>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                                <label className="supplier-input-label" style={{ margin: 0 }}>
+                                  <span>OFFERED QUANTITY</span>
+                                </label>
+                                <span className="supplier-readonly-pill" title="Requested quantity is fixed by the RFQ and cannot be modified">
+                                  <Lock size={10} /> Read-only
                                 </span>
-                                <span className="supplier-req-helper">
-                                  Requested: {line.requestedQuantity}
+                              </div>
+                              <div className="supplier-input-affix-wrap">
+                                <input
+                                  type="number"
+                                  className="supplier-form-control is-readonly"
+                                  value={line.requestedQuantity || line.offeredQuantity || 1}
+                                  readOnly
+                                  tabIndex={-1}
+                                  title="Quantity is set by the Request for Quotation and is read-only"
+                                />
+                                <span className="supplier-input-suffix">
+                                  {(line.requestedQuantity || line.offeredQuantity || 1) === 1 ? "Unit" : "Units"}
                                 </span>
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                className="supplier-form-control"
-                                value={line.offeredQuantity}
-                                onChange={(e) => handleLineChange(idx, "offeredQuantity", e.target.value)}
-                                disabled={isSubmitted}
-                              />
+                              </div>
                             </div>
 
                             {/* Discount */}
