@@ -450,6 +450,16 @@ export default function CreatePRModal({
       >
         {isSuccess ? (
           <div className="create-pr-success">
+            <button
+              type="button"
+              className="create-pr-close create-pr-success-close"
+              aria-label="Close"
+              onClick={onClose}
+              title="Close modal"
+            >
+              <X size={17} />
+            </button>
+
             <div className="create-pr-success-icon">
               <Check size={25} strokeWidth={2.5} />
             </div>
@@ -461,6 +471,14 @@ export default function CreatePRModal({
               {createdItemCount === 1 ? "item" : "items"}.
             </p>
             <div className="create-pr-success-actions">
+              <button
+                type="button"
+                className="create-pr-discard"
+                onClick={onClose}
+              >
+                Close
+              </button>
+
               <button
                 type="button"
                 className="create-pr-discard"
