@@ -5,13 +5,9 @@ import {
   Award,
   Building2,
   Calendar,
-  Check,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   Clock,
-  ExternalLink,
-  FileCheck2,
   FileText,
   Mail,
   MapPin,
@@ -21,9 +17,6 @@ import {
   Send,
   ShieldCheck,
   Tag,
-  TrendingUp,
-  Truck,
-  Wrench,
 } from "lucide-react";
 
 import {
