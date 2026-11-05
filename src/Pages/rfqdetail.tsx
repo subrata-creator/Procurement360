@@ -310,7 +310,15 @@ export default function RfqDetail() {
                 });
                 tasks = await getApprovalTasksForRecord(2, rfqId);
               }
-              if (isMounted) setApprovalTasks(tasks);
+              if (isMounted) {
+                const filtered = tasks.filter(
+                  (t) =>
+                    (t.cr49f_sequence ?? 0) >= 1 &&
+                    getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
+                    !t.cr49f_task?.toLowerCase().includes("changes needed")
+                );
+                setApprovalTasks(filtered);
+              }
             } catch (taskErr) {
               console.warn("Could not load RFQ approval tasks:", taskErr);
             } finally {
@@ -491,7 +499,13 @@ export default function RfqDetail() {
   const refreshTasks = async (rfqId: string) => {
     try {
       const tasks = await getApprovalTasksForRecord(2, rfqId);
-      setApprovalTasks(tasks);
+      const filtered = tasks.filter(
+        (t) =>
+          (t.cr49f_sequence ?? 0) >= 1 &&
+          getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
+          !t.cr49f_task?.toLowerCase().includes("changes needed")
+      );
+      setApprovalTasks(filtered);
     } catch (err) {
       console.warn("Could not refresh tasks:", err);
     }

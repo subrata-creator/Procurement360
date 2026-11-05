@@ -5,7 +5,8 @@
 export const Cr49f_approvaltasksescr49f_approvalstatus = {
   1: 'Pending',
   2: 'Approved',
-  3: 'Rejected'
+  3: 'Rejected',
+  4: 'ChangesNeeded'
 } as const;
 export type Cr49f_approvaltasksescr49f_approvalstatus = keyof typeof Cr49f_approvaltasksescr49f_approvalstatus;
 export const Cr49f_approvaltasksescr49f_department = {
@@ -53,6 +54,7 @@ export interface Cr49f_approvaltasksesBase {
   cr49f_approvedby?: string;
   cr49f_approvedon?: string;
   cr49f_assignedon?: string;
+  cr49f_comments?: string;
   cr49f_department?: Cr49f_approvaltasksescr49f_department;
   cr49f_id?: string;
   cr49f_object?: Cr49f_approvaltasksescr49f_object;
@@ -77,6 +79,7 @@ export interface Cr49f_approvaltaskses extends Cr49f_approvaltasksesBase {
   cr49f_approvedby?: string;
   cr49f_approvedon?: string;
   cr49f_assignedon?: string;
+  cr49f_comments?: string;
   cr49f_departmentname?: string;
   cr49f_objectname?: string;
   cr49f_rolename?: string;

@@ -16,6 +16,7 @@ import {
 import { Cr49f_productsesService } from "../generated/services/Cr49f_productsesService";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import { createApprovalTasksForObject } from "../Services/ApprovalWorkflowService";
 
 import type { Cr49f_productses } from "../generated/models/Cr49f_productsesModel";
 
@@ -391,6 +392,20 @@ export default function CreatePRModal({
         }
       }
 
+      // 4. Create associated approval tasks in cr49f_approvaltasks from cr49f_tasks
+      try {
+        await createApprovalTasksForObject({
+          objectType: 1, // Purchase Request
+          recordId: createdPRId,
+          recordName: form.title.trim(),
+        });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+        }
+      } catch (taskErr) {
+        console.warn("Could not create approval tasks for PR:", taskErr);
+      }
+
       // All records have been created successfully. Keep the modal open
       // and show the success screen only after every line item is saved.
       setCreatedPRRecordId(createdPRId);
@@ -435,6 +450,16 @@ export default function CreatePRModal({
       >
         {isSuccess ? (
           <div className="create-pr-success">
+            <button
+              type="button"
+              className="create-pr-close create-pr-success-close"
+              aria-label="Close"
+              onClick={onClose}
+              title="Close modal"
+            >
+              <X size={17} />
+            </button>
+
             <div className="create-pr-success-icon">
               <Check size={25} strokeWidth={2.5} />
             </div>
@@ -446,6 +471,14 @@ export default function CreatePRModal({
               {createdItemCount === 1 ? "item" : "items"}.
             </p>
             <div className="create-pr-success-actions">
+              <button
+                type="button"
+                className="create-pr-discard"
+                onClick={onClose}
+              >
+                Close
+              </button>
+
               <button
                 type="button"
                 className="create-pr-discard"

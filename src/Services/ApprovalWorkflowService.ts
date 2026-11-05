@@ -1,8 +1,11 @@
+import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import { Cr49f_procurementapprovalcyclesService } from "../generated/services/Cr49f_procurementapprovalcyclesService";
 import { Cr49f_tasksesService } from "../generated/services/Cr49f_tasksesService";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
+import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
   Cr49f_approvaltasksescr49f_department,
@@ -18,6 +21,294 @@ export const cleanGuid = (id?: string | null): string => {
   const match = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
   return match ? match[0] : str.replace(/[{}]/g, "");
 };
+
+export function extractTaskParentIds(task: Cr49f_approvaltaskses | Record<string, unknown>): {
+  prId: string;
+  rfqId: string;
+  poId: string;
+} {
+  const raw = task as unknown as Record<string, unknown>;
+  let prId =
+    cleanGuid((task as Cr49f_approvaltaskses)._cr49f_pr_value) ||
+    cleanGuid(raw._cr49f_PR_value as string) ||
+    cleanGuid(raw.cr49f_pr as string) ||
+    cleanGuid(raw.cr49f_PR as string);
+
+  let rfqId =
+    cleanGuid((task as Cr49f_approvaltaskses)._cr49f_rfq_value) ||
+    cleanGuid(raw._cr49f_RFQ_value as string) ||
+    cleanGuid(raw.cr49f_rfq as string) ||
+    cleanGuid(raw.cr49f_RFQ as string);
+
+  let poId =
+    cleanGuid((task as Cr49f_approvaltaskses)._cr49f_po_value) ||
+    cleanGuid(raw._cr49f_PO_value as string) ||
+    cleanGuid(raw.cr49f_po as string) ||
+    cleanGuid(raw.cr49f_PO as string);
+
+  if (!prId) {
+    for (const [key, val] of Object.entries(raw)) {
+      if (
+        key.toLowerCase().includes("pr") &&
+        !key.toLowerCase().includes("approval") &&
+        typeof val === "string"
+      ) {
+        const cleaned = cleanGuid(val);
+        if (cleaned && cleaned.length >= 32) {
+          prId = cleaned;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!rfqId) {
+    for (const [key, val] of Object.entries(raw)) {
+      if (
+        key.toLowerCase().includes("rfq") &&
+        !key.toLowerCase().includes("approval") &&
+        typeof val === "string"
+      ) {
+        const cleaned = cleanGuid(val);
+        if (cleaned && cleaned.length >= 32) {
+          rfqId = cleaned;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!poId) {
+    for (const [key, val] of Object.entries(raw)) {
+      if (
+        key.toLowerCase().includes("po") &&
+        !key.toLowerCase().includes("approval") &&
+        typeof val === "string"
+      ) {
+        const cleaned = cleanGuid(val);
+        if (cleaned && cleaned.length >= 32) {
+          poId = cleaned;
+          break;
+        }
+      }
+    }
+  }
+
+  return { prId, rfqId, poId };
+}
+
+export interface TaskComment {
+  id: string;
+  text: string;
+  author: string;
+  timestamp: string;
+}
+
+/**
+ * Safely parses the cr49f_comments column from Dataverse into a list of TaskComment objects.
+ * Handles JSON string array, single/multiline text, and legacy text notes.
+ */
+export function parseTaskComments(rawComments?: unknown): TaskComment[] {
+  if (!rawComments) return [];
+
+  if (Array.isArray(rawComments)) {
+    return rawComments.map((item, idx) => {
+      if (typeof item === "object" && item !== null) {
+        return {
+          id: String((item as any).id || `c_${idx}`),
+          text: String((item as any).text || ""),
+          author: String((item as any).author || "Approver"),
+          timestamp: String((item as any).timestamp || new Date().toLocaleDateString()),
+        };
+      }
+      return {
+        id: `c_${idx}`,
+        text: String(item),
+        author: "Approver",
+        timestamp: new Date().toLocaleDateString(),
+      };
+    });
+  }
+
+  if (typeof rawComments === "string") {
+    const trimmed = rawComments.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item, idx) => ({
+            id: String((item as any).id || `c_${idx}`),
+            text: String((item as any).text || ""),
+            author: String((item as any).author || "Approver"),
+            timestamp: String((item as any).timestamp || new Date().toLocaleDateString()),
+          }));
+        } else if (typeof parsed === "object" && parsed !== null) {
+          return [{
+            id: String((parsed as any).id || "c_0"),
+            text: String((parsed as any).text || ""),
+            author: String((parsed as any).author || "Approver"),
+            timestamp: String((parsed as any).timestamp || new Date().toLocaleDateString()),
+          }];
+        }
+      } catch {
+        // Not valid JSON, fall through to text parsing
+      }
+    }
+
+    // Check if plain text with multiple lines formatted like "[Date] Author: message"
+    const lines = trimmed.split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length > 1) {
+      const lineComments: TaskComment[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const match = line.match(/^\[(.*?)\]\s*(.*?):\s*(.*)$/);
+        if (match) {
+          lineComments.push({
+            id: `c_line_${i}`,
+            timestamp: match[1],
+            author: match[2],
+            text: match[3],
+          });
+        } else {
+          lineComments.push({
+            id: `c_line_${i}`,
+            timestamp: "",
+            author: "Approver",
+            text: line,
+          });
+        }
+      }
+      return lineComments;
+    }
+
+    return [{
+      id: "c_db_0",
+      text: trimmed,
+      author: "Approver",
+      timestamp: "",
+    }];
+  }
+
+  return [];
+}
+
+/**
+ * Persists comments on the cr49f_approvaltasks table on the cr49f_comments field in Dataverse,
+ * while keeping localStorage updated for instant UI responsiveness.
+ */
+export async function updateTaskCommentsInDataverse(
+  taskId: string,
+  commentOrComments: TaskComment | TaskComment[],
+  _approverName?: string
+): Promise<TaskComment[]> {
+  const cleanId = cleanGuid(taskId);
+  if (!cleanId) return [];
+
+  // 1. Retrieve current comments from localStorage & Dataverse
+  let existingComments: TaskComment[] = [];
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem(`task_comments_${cleanId}`);
+      if (stored) {
+        existingComments = parseTaskComments(stored);
+      }
+    } catch {}
+  }
+
+  // If local storage is empty, attempt to fetch current record from Dataverse to avoid losing existing comments
+  if (existingComments.length === 0) {
+    try {
+      const dbTaskRes = await Cr49f_approvaltasksesService.get(cleanId);
+      if (dbTaskRes.data) {
+        const raw = dbTaskRes.data as unknown as Record<string, unknown>;
+        const dbCommentsVal = dbTaskRes.data.cr49f_comments ?? raw.cr49f_comments ?? raw.cr49f_Comments;
+        if (dbCommentsVal) {
+          existingComments = parseTaskComments(dbCommentsVal);
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(`[ApprovalWorkflow] Could not pre-fetch comments for task ${cleanId}:`, fetchErr);
+    }
+  }
+
+  // 2. Append new comment(s)
+  const toAdd: TaskComment[] = Array.isArray(commentOrComments) ? commentOrComments : [commentOrComments];
+  const merged: TaskComment[] = [...existingComments];
+
+  for (const c of toAdd) {
+    const alreadyExists = merged.some(
+      (m) => (m.id && m.id === c.id) || (m.text === c.text && m.timestamp === c.timestamp && m.author === c.author)
+    );
+    if (!alreadyExists) {
+      merged.push(c);
+    }
+  }
+
+  const serialized = JSON.stringify(merged);
+
+  // 3. Update localStorage
+  if (typeof window !== "undefined") {
+    localStorage.setItem(`task_comments_${cleanId}`, serialized);
+  }
+
+  // 4. Update Dataverse cr49f_approvaltasks on cr49f_comments field!
+  try {
+    await Cr49f_approvaltasksesService.update(cleanId, {
+      cr49f_comments: serialized,
+    } as any);
+    console.log(`[ApprovalWorkflow] Successfully updated cr49f_comments on task ${cleanId}`);
+  } catch (updateErr) {
+    console.warn(`[ApprovalWorkflow] Direct update of cr49f_comments failed, trying alternate case:`, updateErr);
+    try {
+      await Cr49f_approvaltasksesService.update(cleanId, {
+        cr49f_Comments: serialized,
+      } as any);
+    } catch (altErr) {
+      console.warn(`[ApprovalWorkflow] Failed to update cr49f_comments on ${cleanId}:`, altErr);
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+  }
+
+  return merged;
+}
+
+export async function addTaskComment(
+  taskId: string,
+  text: string,
+  authorName?: string
+): Promise<TaskComment[]> {
+  const cleanId = cleanGuid(taskId);
+  if (!cleanId || !text.trim()) return [];
+
+  let resolvedAuthor = authorName?.trim();
+  if (!resolvedAuthor && typeof window !== "undefined") {
+    resolvedAuthor =
+      localStorage.getItem("procurement_user_name") ||
+      localStorage.getItem("userName") ||
+      "Subrata Dey";
+  }
+  if (!resolvedAuthor) resolvedAuthor = "Subrata Dey";
+
+  const newComment: TaskComment = {
+    id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    text: text.trim(),
+    author: resolvedAuthor,
+    timestamp: new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+
+  return await updateTaskCommentsInDataverse(cleanId, newComment, resolvedAuthor);
+}
 
 export interface CreateApprovalTasksParams {
   objectType: 1 | 2 | 3; // 1: Purchase Request, 2: RFQ, 3: Orders (PO)
@@ -49,6 +340,8 @@ export const PENDING_CHOICE_VALUE = 1;
 export const APPROVED_CHOICE_CANDIDATES = [2, 154890001, 100000001];
 export const REJECTED_CHOICE_CANDIDATES = [3, 154890002, 100000002];
 export const PENDING_CHOICE_CANDIDATES = [1, 154890000, 100000000];
+export const CHANGES_NEEDED_CHOICE_VALUE = 4;
+export const CHANGES_NEEDED_CHOICE_CANDIDATES = [4, 154890003, 100000003, 2, 0];
 
 const STATUS_CANDIDATES: StatusStrategy[] = [
   {
@@ -142,16 +435,16 @@ export async function createApprovalTasksForObject(
       // Filter tasks by cycle if cycleId exists
       let matchedTasks = cycleId
         ? allDbTasks.filter((t) => {
-            const raw = t as unknown as Record<string, unknown>;
-            const tCycleId =
-              cleanGuid(t._cr49f_procurementapprovalcycle_value) ||
-              cleanGuid(raw._cr49f_ProcurementApprovalCycle_value as string) ||
-              cleanGuid(raw.cr49f_procurementapprovalcycle as string) ||
-              cleanGuid(raw.cr49f_ProcurementApprovalCycle as string);
-            const isMatch = tCycleId === cycleId;
-            const isActive = t.statecode === 0 || t.statecode === undefined;
-            return isMatch && isActive;
-          })
+          const raw = t as unknown as Record<string, unknown>;
+          const tCycleId =
+            cleanGuid(t._cr49f_procurementapprovalcycle_value) ||
+            cleanGuid(raw._cr49f_ProcurementApprovalCycle_value as string) ||
+            cleanGuid(raw.cr49f_procurementapprovalcycle as string) ||
+            cleanGuid(raw.cr49f_ProcurementApprovalCycle as string);
+          const isMatch = tCycleId === cycleId;
+          const isActive = t.statecode === 0 || t.statecode === undefined;
+          return isMatch && isActive;
+        })
         : [];
 
       // If no tasks matched by cycle lookup, use all active tasks from cr49f_tasks directly
@@ -345,7 +638,7 @@ export async function createApprovalTasksForObject(
  */
 export async function setTaskApprovalStatusInDataverse(
   taskId: string,
-  targetStatus: "Approved" | "Rejected" | "Pending",
+  targetStatus: "Approved" | "Rejected" | "Pending" | "Changes Needed",
   extraFields?: Record<string, unknown>
 ): Promise<Cr49f_approvaltaskses | null> {
   const cleanId = cleanGuid(taskId);
@@ -355,8 +648,10 @@ export async function setTaskApprovalStatusInDataverse(
     targetStatus === "Approved"
       ? APPROVED_CHOICE_CANDIDATES
       : targetStatus === "Rejected"
-      ? REJECTED_CHOICE_CANDIDATES
-      : PENDING_CHOICE_CANDIDATES;
+        ? REJECTED_CHOICE_CANDIDATES
+        : targetStatus === "Changes Needed"
+          ? CHANGES_NEEDED_CHOICE_CANDIDATES
+          : PENDING_CHOICE_CANDIDATES;
 
   // 1. Try updating with full extra fields first (choiceVal as number: 2=Approved, 3=Rejected, 1=Pending)
   for (const choiceVal of candidateValues) {
@@ -394,7 +689,7 @@ export async function setTaskApprovalStatusInDataverse(
         console.log(`[ApprovalWorkflow] Successfully updated cr49f_approvalstatus alone to ${choiceVal}`);
         return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
       }
-    } catch {}
+    } catch { }
   }
 
   // 3. Try with PascalCase cr49f_ApprovalStatus
@@ -408,7 +703,7 @@ export async function setTaskApprovalStatusInDataverse(
         console.log(`[ApprovalWorkflow] Successfully updated cr49f_ApprovalStatus to ${choiceVal}`);
         return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
       }
-    } catch {}
+    } catch { }
   }
 
   // 4. Try string target ("Approved", "Rejected", "Pending")
@@ -420,7 +715,7 @@ export async function setTaskApprovalStatusInDataverse(
     if (res && !res.error && (res.data !== undefined || res.success)) {
       return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: targetStatus, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
     }
-  } catch {}
+  } catch { }
 
   // 5. Try numeric string ("2", "3", "1")
   for (const choiceVal of candidateValues) {
@@ -432,7 +727,7 @@ export async function setTaskApprovalStatusInDataverse(
       if (res && !res.error && (res.data !== undefined || res.success)) {
         return (res.data || { cr49f_approvaltasksid: cleanId, cr49f_approvalstatus: choiceVal, ...(extraFields || {}) }) as Cr49f_approvaltaskses;
       }
-    } catch {}
+    } catch { }
   }
 
   return null;
@@ -537,9 +832,24 @@ export async function approveTask(
   // Always store approval in local storage overlay for instant, deterministic UI reactivity
   if (typeof window !== "undefined") {
     localStorage.setItem(`task_approved_status_${cleanTaskId}`, "Approved");
+    localStorage.setItem(`task_active_${cleanTaskId}`, "false");
     localStorage.setItem(`task_approved_by_${cleanTaskId}`, resolvedApprover);
     localStorage.setItem(`task_approved_on_${cleanTaskId}`, nowIso);
     localStorage.setItem(`task_assigned_on_${cleanTaskId}`, taskAssignedOn);
+
+    const approveComment: TaskComment = {
+      id: `c_${Date.now()}`,
+      text: "Approved task",
+      author: resolvedApprover,
+      timestamp: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+    void updateTaskCommentsInDataverse(cleanTaskId, approveComment, resolvedApprover);
   }
 
   const resolvedTask: Cr49f_approvaltaskses = updateResultRecord ||
@@ -564,20 +874,7 @@ export async function approveTask(
 
   // Step 3: Find next sequential task among siblings
   const siblingTasks = allTasks.filter((t) => {
-    const raw = t as unknown as Record<string, unknown>;
-    const tPR =
-      cleanGuid(t._cr49f_pr_value) ||
-      cleanGuid(raw._cr49f_PR_value as string) ||
-      cleanGuid(raw.cr49f_pr as string);
-    const tRFQ =
-      cleanGuid(t._cr49f_rfq_value) ||
-      cleanGuid(raw._cr49f_RFQ_value as string) ||
-      cleanGuid(raw.cr49f_rfq as string);
-    const tPO =
-      cleanGuid(t._cr49f_po_value) ||
-      cleanGuid(raw._cr49f_PO_value as string) ||
-      cleanGuid(raw.cr49f_po as string);
-
+    const { prId: tPR, rfqId: tRFQ, poId: tPO } = extractTaskParentIds(t);
     if (parentPR && tPR === parentPR) return true;
     if (parentRFQ && tRFQ === parentRFQ) return true;
     if (parentPO && tPO === parentPO) return true;
@@ -615,7 +912,7 @@ export async function approveTask(
             statuscode: 1,
           });
           if (activateRes.data) nextActivatedTask = activateRes.data;
-        } catch {}
+        } catch { }
       }
 
       // Explicitly set next task to Pending using candidate choice values
@@ -699,15 +996,7 @@ export async function rejectTask(
   });
 
   const rawCurrent = (currentTask ?? {}) as unknown as Record<string, unknown>;
-  const parentPR =
-    cleanGuid(currentTask?._cr49f_pr_value) ||
-    cleanGuid(rawCurrent._cr49f_PR_value as string) ||
-    cleanGuid(rawCurrent.cr49f_pr as string);
-
-  const parentRFQ =
-    cleanGuid(currentTask?._cr49f_rfq_value) ||
-    cleanGuid(rawCurrent._cr49f_RFQ_value as string) ||
-    cleanGuid(rawCurrent.cr49f_rfq as string);
+  const { prId: parentPR, rfqId: parentRFQ } = extractTaskParentIds(currentTask || rawCurrent);
 
   const nowIso = new Date().toISOString();
   let resolvedRejector = rejectorName?.trim();
@@ -734,8 +1023,23 @@ export async function rejectTask(
 
   if (typeof window !== "undefined") {
     localStorage.setItem(`task_approved_status_${cleanTaskId}`, "Rejected");
+    localStorage.setItem(`task_active_${cleanTaskId}`, "false");
     localStorage.setItem(`task_approved_by_${cleanTaskId}`, resolvedRejector);
     localStorage.setItem(`task_approved_on_${cleanTaskId}`, nowIso);
+
+    const rejectComment: TaskComment = {
+      id: `c_${Date.now()}`,
+      text: "Rejected task",
+      author: resolvedRejector,
+      timestamp: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+    void updateTaskCommentsInDataverse(cleanTaskId, rejectComment, resolvedRejector);
   }
 
   if (parentPR) {
@@ -777,6 +1081,671 @@ export async function rejectTask(
  * Retrieves all approval tasks for a given PR, RFQ, or PO sorted by sequence.
  * Uses comprehensive lookup resolution to match uppercase and lowercase Dataverse property names.
  */
+/**
+ * Executes the "Changes Needed" workflow on ANY approval task (PR, RFQ, PO):
+ * 1. Sets approval status to Pending (1) and record status to Inactive (statecode: 1, statuscode: 2)
+ *    on all existing approval tasks for this PR or RFQ.
+ * 2. Updates the parent record status (PR or RFQ) to Changes Needed (cr49f_status: 2) in Dataverse.
+ * 3. Creates a new active approval task record in cr49f_approvaltasks with:
+ *    - Approval Status = Changes Needed (cr49f_approvalstatus: 4)
+ *    - Record Status = Active (statecode: 0, statuscode: 1)
+ *    - Sequence = 0
+ *    - Object = 1 (PR), 2 (RFQ), or 3 (PO)
+ *    - Parent binding ("cr49f_PR@odata.bind" or "cr49f_RFQ@odata.bind")
+ * 4. Records the approver's remarks in the audit trail comments.
+ */
+export async function requestChangesOnTask(
+  approvalTaskId: string,
+  approverRemarks: string,
+  approverName?: string
+): Promise<{
+  parentPRId?: string;
+  parentRFQId?: string;
+  parentPOId?: string;
+  newTaskId?: string;
+  success: boolean;
+}> {
+  const cleanTaskId = cleanGuid(approvalTaskId);
+  if (!cleanTaskId) throw new Error("Invalid approval task ID");
+
+  console.log(`[ApprovalWorkflow] Requesting Changes Needed on task: ${cleanTaskId}`);
+
+  // Fetch all tasks to locate current task and its parent record
+  let allTasks: Cr49f_approvaltaskses[] = [];
+  try {
+    const allRes = await Cr49f_approvaltasksesService.getAll();
+    allTasks = allRes.data ?? [];
+  } catch (fetchErr) {
+    console.warn("[ApprovalWorkflow] Failed to fetch tasks:", fetchErr);
+  }
+
+  const currentTask = allTasks.find((t) => {
+    const raw = t as unknown as Record<string, unknown>;
+    const tId = cleanGuid(
+      t.cr49f_approvaltasksid ||
+      (raw.cr49f_ApprovalTasksId as string) ||
+      (raw.id as string)
+    );
+    return tId === cleanTaskId;
+  });
+
+  const rawCurrent = (currentTask || {}) as unknown as Record<string, unknown>;
+  const { prId: parentPRId, rfqId: parentRFQId, poId: parentPOId } = extractTaskParentIds(currentTask || rawCurrent);
+
+  const taskTitleLower = String(currentTask?.cr49f_task || "").toLowerCase();
+  const isObjectRfq =
+    currentTask?.cr49f_object === 2 ||
+    Boolean(parentRFQId) ||
+    taskTitleLower.includes("rfq") ||
+    taskTitleLower.includes("quotation");
+
+  const isObjectPr = !isObjectRfq && (currentTask?.cr49f_object === 1 || Boolean(parentPRId));
+  const isObjectPo = !isObjectRfq && !isObjectPr && (currentTask?.cr49f_object === 3 || Boolean(parentPOId));
+
+  // 1. Identify all sibling tasks for this parent object
+  const siblingTasks = allTasks.filter((t) => {
+    const raw = t as unknown as Record<string, unknown>;
+    const { prId: tPR, rfqId: tRFQ, poId: tPO } = extractTaskParentIds(t);
+
+    if (isObjectRfq && parentRFQId && tRFQ === parentRFQId) return true;
+    if (isObjectPr && parentPRId && tPR === parentPRId) return true;
+    if (isObjectPo && parentPOId && tPO === parentPOId) return true;
+
+    const tId = cleanGuid(t.cr49f_approvaltasksid || (raw.cr49f_ApprovalTasksId as string) || (raw.id as string));
+    if (tId === cleanTaskId) return true;
+
+    return false;
+  });
+
+  // 2. Set approval status = Pending (1) and record status = Inactive on ALL existing sibling tasks
+  // (All tasks get completely reset: any previously approved tasks also become pending and inactive)
+  console.log(`[ApprovalWorkflow] Resetting ${siblingTasks.length} existing tasks to Inactive Pending`);
+  for (const sib of siblingTasks) {
+    const sibId = cleanGuid(
+      sib.cr49f_approvaltasksid ||
+      (sib as unknown as Record<string, string>).cr49f_ApprovalTasksId
+    );
+    if (!sibId) continue;
+
+    const resetPayload: Record<string, unknown> = {
+      statecode: 1, // Inactive
+      statuscode: 2, // Inactive
+      cr49f_approvalstatus: 1 as any, // Pending
+      cr49f_approvedby: null,
+      cr49f_approvedon: null,
+    };
+
+    try {
+      await Cr49f_approvaltasksesService.update(sibId, resetPayload as any);
+    } catch {
+      try {
+        await Cr49f_approvaltasksesService.update(sibId, {
+          statecode: 1,
+          statuscode: 2,
+          cr49f_approvalstatus: 1,
+          cr49f_approvedby: "",
+        } as any);
+      } catch (sibErr) {
+        console.warn(`[ApprovalWorkflow] Could not update sibling task ${sibId} to Inactive Pending:`, sibErr);
+      }
+    }
+
+    void setTaskApprovalStatusInDataverse(sibId, "Pending", {
+      cr49f_approvedby: null,
+      cr49f_approvedon: null,
+    });
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`task_active_${sibId}`, "false");
+      localStorage.setItem(`task_approved_status_${sibId}`, "Pending");
+      localStorage.removeItem(`task_approved_by_${sibId}`);
+      localStorage.removeItem(`task_approved_on_${sibId}`);
+    }
+
+    // Reset in-memory task object completely
+    sib.cr49f_approvalstatus = 1 as any;
+    sib.statecode = 1 as any;
+    sib.statuscode = 2 as any;
+    sib.cr49f_approvedby = "";
+    sib.cr49f_approvedon = "";
+    delete (sib as any).cr49f_approvedby;
+    delete (sib as any).cr49f_approvedon;
+  }
+
+  // 3. Update parent record status to Changes Needed (cr49f_status: 2) in Dataverse
+  if (isObjectRfq && parentRFQId) {
+    try {
+      await Cr49f_requestforqoutationsService.update(parentRFQId, {
+        cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema
+      });
+      console.log(`[ApprovalWorkflow] Successfully updated RFQ ${parentRFQId} status to Changes Needed (2)`);
+    } catch (rfqErr) {
+      console.warn("[ApprovalWorkflow] Could not update parent RFQ status to Changes Needed:", rfqErr);
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`rfq_status_${parentRFQId}`, "Changes Needed");
+      localStorage.setItem(`rfq_changes_reason_${parentRFQId}`, approverRemarks || "Revisions requested by approver.");
+    }
+  } else if (parentPRId) {
+    try {
+      await Cr49f_purchaserequestsService.update(parentPRId, {
+        cr49f_status: 2, // 2 = ChangesNeeded in Dataverse schema
+      });
+      console.log(`[ApprovalWorkflow] Successfully updated PR ${parentPRId} status to Changes Needed (2)`);
+    } catch (prErr) {
+      console.warn("[ApprovalWorkflow] Could not update parent PR status to Changes Needed:", prErr);
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`pr_status_${parentPRId}`, "Changes Needed");
+      localStorage.setItem(`pr_changes_reason_${parentPRId}`, approverRemarks || "Revisions requested by approver.");
+    }
+  }
+
+  if (parentPOId && typeof window !== "undefined") {
+    localStorage.setItem(`po_status_${parentPOId}`, "Changes Needed");
+    localStorage.setItem(`po_changes_reason_${parentPOId}`, approverRemarks || "Revisions requested by approver.");
+  }
+
+  // 4. Create new active approval task record with Approval Status = Changes Needed (4)
+  const nowIso = new Date().toISOString();
+  const truncatedTaskName = `Changes Needed: ${(approverRemarks || "Review and update required details").trim()}`.slice(0, 95);
+
+  const remarkComment: TaskComment = {
+    id: `c_${Date.now()}`,
+    text: `Changes Needed: ${(approverRemarks || "").trim()}`,
+    author: approverName?.trim() || "Approver",
+    timestamp: new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+
+  const newChangesPayload: Record<string, unknown> = {
+    cr49f_task: truncatedTaskName,
+    cr49f_object: (isObjectRfq ? 2 : isObjectPo ? 3 : 1) as keyof typeof Cr49f_approvaltasksescr49f_object,
+    cr49f_sequence: 0,
+    cr49f_role: 1 as keyof typeof Cr49f_approvaltasksescr49f_role, // Requester
+    cr49f_department: (currentTask?.cr49f_department || 1) as keyof typeof Cr49f_approvaltasksescr49f_department,
+    cr49f_slanumber: 48,
+    cr49f_slaunit: 1 as keyof typeof Cr49f_approvaltasksescr49f_slaunit,
+    cr49f_approvalstatus: 4, // 4 = Changes Needed in Dataverse
+    cr49f_assignedon: nowIso,
+    cr49f_comments: JSON.stringify([remarkComment]),
+  };
+
+  if (isObjectRfq && parentRFQId) {
+    newChangesPayload["cr49f_RFQ@odata.bind"] = `/cr49f_requestforqoutations(${parentRFQId})`;
+  } else if (parentPRId) {
+    newChangesPayload["cr49f_PR@odata.bind"] = `/cr49f_purchaserequests(${parentPRId})`;
+  } else if (parentPOId) {
+    newChangesPayload["cr49f_PO@odata.bind"] = `/cr49f_purchaserequests(${parentPOId})`;
+  }
+
+  let createdChangesTask: Cr49f_approvaltaskses | null = null;
+  try {
+    console.log("[ApprovalWorkflow] Creating Changes Needed task in Dataverse:", newChangesPayload);
+    const createRes = await Cr49f_approvaltasksesService.create(
+      newChangesPayload as Parameters<typeof Cr49f_approvaltasksesService.create>[0]
+    );
+    if (createRes.data) {
+      createdChangesTask = createRes.data;
+      console.log("[ApprovalWorkflow] Successfully created Changes Needed task:", createRes.data);
+    } else {
+      console.warn("[ApprovalWorkflow] Create returned error:", createRes.error);
+    }
+  } catch (createErr) {
+    console.warn("[ApprovalWorkflow] Error creating Changes Needed task:", createErr);
+  }
+
+  // Fallback candidate values if choice 4 required publisher prefix or string
+  if (!createdChangesTask) {
+    for (const altVal of [154890003, 100000003, "Changes Needed"]) {
+      try {
+        const altPayload = { ...newChangesPayload, cr49f_approvalstatus: altVal };
+        const altRes = await Cr49f_approvaltasksesService.create(altPayload as any);
+        if (altRes.data) {
+          createdChangesTask = altRes.data;
+          break;
+        }
+      } catch { }
+    }
+  }
+
+  const newTaskId = cleanGuid(
+    createdChangesTask?.cr49f_approvaltasksid ||
+    (createdChangesTask as unknown as Record<string, string>)?.cr49f_ApprovalTasksId ||
+    `changes_${Date.now()}`
+  );
+
+  // 5. Store in local state overlay & record in comments audit trail
+  if (typeof window !== "undefined") {
+    localStorage.setItem(`task_approved_status_${newTaskId}`, "Changes Needed");
+    localStorage.setItem(`task_active_${newTaskId}`, "true");
+    localStorage.setItem(`task_assigned_on_${newTaskId}`, nowIso);
+    localStorage.setItem(`task_changes_reason_${newTaskId}`, approverRemarks || "");
+
+    const remarkComment = {
+      id: `c_${Date.now()}`,
+      text: `Changes Needed: ${approverRemarks.trim()}`,
+      author: approverName?.trim() || "Approver",
+      timestamp: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+
+    for (const tid of [cleanTaskId, newTaskId]) {
+      void updateTaskCommentsInDataverse(tid, remarkComment, approverName);
+    }
+
+    window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+  }
+
+  return {
+    parentPRId,
+    parentRFQId,
+    parentPOId,
+    newTaskId,
+    success: true,
+  };
+}
+
+/**
+ * Saves updated PR or RFQ information, marks the Changes Needed task as completed/inactive,
+ * and restarts the approval workflow from the first approval level (Step 1 active, all subsequent inactive pending).
+ */
+export async function submitChangesNeededUpdate(params: {
+  changesNeededTaskId: string;
+  prId?: string;
+  rfqId?: string;
+  updatedPR?: {
+    cr49f_prtitle?: string;
+    cr49f_businessjustification?: string;
+    cr49f_deliverylocation?: string;
+    cr49f_requireddeliverydate?: string;
+    cr49f_priority?: number;
+    cr49f_totalamount?: number;
+  };
+  updatedLines?: Array<{
+    lineId?: string;
+    itemName?: string;
+    description?: string;
+    category?: string;
+    quantity?: number;
+    unitPrice?: number;
+  }>;
+  deletedLineIds?: string[];
+  updatedRFQ?: {
+    cr49f_rfqtitle?: string;
+    cr49f_submissiondeadline?: string;
+    cr49f_deliverylocation?: string;
+    cr49f_description?: string;
+    purchaseRequestId?: string;
+  };
+  selectedSupplierIds?: string[];
+  requesterRemarks?: string;
+  requesterName?: string;
+}): Promise<{
+  success: boolean;
+  firstActivatedTask: Cr49f_approvaltaskses | null;
+}> {
+  const cleanTaskId = cleanGuid(params.changesNeededTaskId);
+  const cleanPRId = cleanGuid(params.prId);
+  const cleanRFQId = cleanGuid(params.rfqId);
+
+  console.log(`[ApprovalWorkflow] Submitting revisions for task: ${cleanTaskId}, PR: ${cleanPRId}, RFQ: ${cleanRFQId}`);
+
+  const nowIso = new Date().toISOString();
+  const requester = params.requesterName?.trim() || "Requester";
+
+  // 1. If PR updates provided, save line items and update PR record in Dataverse
+  if (cleanPRId && params.updatedPR) {
+    let calculatedTotal = params.updatedPR.cr49f_totalamount;
+
+    // Delete any removed line items
+    if (params.deletedLineIds && params.deletedLineIds.length > 0) {
+      for (const delId of params.deletedLineIds) {
+        const cleanDelId = cleanGuid(delId);
+        if (cleanDelId && !cleanDelId.startsWith("new_")) {
+          try {
+            await Cr49f_purchaserequestlinesService.delete(cleanDelId);
+            console.log(`[ApprovalWorkflow] Deleted removed PR line: ${cleanDelId}`);
+          } catch (delErr) {
+            console.warn(`[ApprovalWorkflow] Could not delete PR line ${cleanDelId}:`, delErr);
+          }
+        }
+      }
+    }
+
+    if (params.updatedLines && params.updatedLines.length > 0) {
+      let runningTotal = 0;
+      for (const l of params.updatedLines) {
+        const cleanLineId = cleanGuid(l.lineId);
+        const qty = Number(l.quantity) || 1;
+        const price = Number(l.unitPrice) || 0;
+        runningTotal += qty * price;
+
+        if (cleanLineId && !cleanLineId.startsWith("new_")) {
+          // Update existing line
+          const linePatch: Record<string, unknown> = {};
+          if (l.quantity !== undefined) linePatch.cr49f_quantity = qty;
+          if (l.unitPrice !== undefined) linePatch.cr49f_unitprice = price;
+          if (l.description !== undefined) linePatch.cr49f_itemdescription = l.description;
+          if (l.itemName !== undefined) linePatch.cr49f_itemname = l.itemName;
+          if (l.category !== undefined) linePatch.cr49f_category = l.category;
+
+          try {
+            await Cr49f_purchaserequestlinesService.update(cleanLineId, linePatch as any);
+          } catch (lineErr) {
+            console.warn(`[ApprovalWorkflow] Could not update PR line ${cleanLineId}:`, lineErr);
+          }
+        } else {
+          // Create new line
+          try {
+            await Cr49f_purchaserequestlinesService.create({
+              cr49f_itemname: l.itemName || l.description || "Product Item",
+              cr49f_itemdescription: l.description || "",
+              cr49f_category: l.category || "",
+              cr49f_quantity: qty,
+              cr49f_unitprice: price,
+              "cr49f_PurchaseRequest@odata.bind": `/cr49f_purchaserequests(${cleanPRId})`,
+              statecode: 0,
+              statuscode: 1,
+            } as any);
+            console.log(`[ApprovalWorkflow] Created new PR line for PR ${cleanPRId}`);
+          } catch (createLineErr) {
+            console.warn(`[ApprovalWorkflow] Could not create new PR line:`, createLineErr);
+          }
+        }
+      }
+      if (runningTotal > 0 && calculatedTotal === undefined) {
+        calculatedTotal = runningTotal;
+      }
+    }
+
+    const prPayload: Record<string, unknown> = {
+      ...params.updatedPR,
+      cr49f_status: 0, // 0 = Pending in Dataverse schema
+    };
+    if (calculatedTotal !== undefined) {
+      prPayload.cr49f_totalamount = calculatedTotal;
+    }
+
+    try {
+      await Cr49f_purchaserequestsService.update(cleanPRId, prPayload as any);
+      console.log(`[ApprovalWorkflow] Updated PR ${cleanPRId} to Pending (0)`);
+    } catch (prUpdateErr) {
+      console.warn(`[ApprovalWorkflow] Failed to update parent PR ${cleanPRId}:`, prUpdateErr);
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`pr_status_${cleanPRId}`, "Pending");
+      localStorage.removeItem(`pr_changes_reason_${cleanPRId}`);
+    }
+  }
+
+  // 2. If RFQ updates provided, save RFQ record in Dataverse and sync suppliers
+  if (cleanRFQId && params.updatedRFQ) {
+    const rfqPayload: Record<string, unknown> = {
+      ...params.updatedRFQ,
+      cr49f_status: 0, // 0 = Pending in Dataverse schema
+    };
+
+    if (params.updatedRFQ.purchaseRequestId) {
+      rfqPayload["cr49f_PRRFQ@odata.bind"] = `/cr49f_purchaserequests(${cleanGuid(params.updatedRFQ.purchaseRequestId)})`;
+    }
+
+    try {
+      await Cr49f_requestforqoutationsService.update(cleanRFQId, rfqPayload as any);
+      console.log(`[ApprovalWorkflow] Updated RFQ ${cleanRFQId} to Pending (0)`);
+    } catch (rfqUpdateErr) {
+      console.warn(`[ApprovalWorkflow] Failed to update parent RFQ ${cleanRFQId}:`, rfqUpdateErr);
+    }
+
+    // Associate selected suppliers if provided
+    if (params.selectedSupplierIds) {
+      try {
+        const [selRes, allSupRes] = await Promise.all([
+          Cr49f_selectedsuppliersesService.getAll(),
+          Cr49f_suppliersService.getAll(),
+        ]);
+        const existingSel = (selRes.data ?? []).filter(
+          (s) => cleanGuid(s._cr49f_rfq_value) === cleanRFQId
+        );
+        const allSuppliers = allSupRes.data ?? [];
+
+        const chosenSuppliers = allSuppliers.filter((s) =>
+          params.selectedSupplierIds?.includes(s.cr49f_supplierid)
+        );
+
+        // 1. Add any newly selected suppliers not in existingSel
+        for (const sup of chosenSuppliers) {
+          const alreadyLinked = existingSel.some(
+            (e) =>
+              e.cr49f_selectedsuppliernumber === (sup.cr49f_supplierid1 || sup.cr49f_supplierid) ||
+              e.cr49f_supplierquotation === sup.cr49f_name
+          );
+          if (!alreadyLinked) {
+            try {
+              await Cr49f_selectedsuppliersesService.create({
+                "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${cleanRFQId})`,
+                cr49f_selectedsuppliernumber: sup.cr49f_supplierid1 || sup.cr49f_supplierid || "SUP",
+                cr49f_supplierquotation: sup.cr49f_name || "Invited Supplier",
+                statecode: 0,
+                statuscode: 1,
+              });
+            } catch (addSelErr) {
+              console.warn("[ApprovalWorkflow] Could not create selected supplier:", addSelErr);
+            }
+
+            if (sup.cr49f_supplierid && !sup.cr49f_supplierid.startsWith("mock-")) {
+              try {
+                await Cr49f_suppliersService.update(sup.cr49f_supplierid, {
+                  "cr49f_RFQSuppliers@odata.bind": `/cr49f_requestforqoutations(${cleanRFQId})`,
+                });
+              } catch { }
+            }
+          }
+        }
+
+        // 2. Remove unselected suppliers
+        for (const es of existingSel) {
+          const stillSelected = chosenSuppliers.some(
+            (cs) =>
+              (cs.cr49f_supplierid1 || cs.cr49f_supplierid) === es.cr49f_selectedsuppliernumber ||
+              cs.cr49f_name === es.cr49f_supplierquotation
+          );
+          if (!stillSelected) {
+            try {
+              await Cr49f_selectedsuppliersesService.delete(es.cr49f_selectedsuppliersid);
+            } catch (delSelErr) {
+              console.warn("[ApprovalWorkflow] Could not remove unselected supplier:", delSelErr);
+            }
+          }
+        }
+
+        // 3. Update localStorage cache
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`rfq_invited_suppliers_${cleanRFQId}`, JSON.stringify(chosenSuppliers));
+        }
+
+        // 4. Initialize supplier responses dynamically
+        try {
+          const { createRfqSupplierResponses } = await import("./RfqSupplierResponseService");
+          const supplierIdentities = chosenSuppliers.map(
+            (s) => s.cr49f_supplierid1 || s.cr49f_supplierid
+          );
+          await createRfqSupplierResponses(
+            cleanRFQId,
+            supplierIdentities,
+            params.updatedRFQ.purchaseRequestId
+          );
+        } catch (respErr) {
+          console.warn("[ApprovalWorkflow] Could not initialize responses:", respErr);
+        }
+      } catch (supSyncErr) {
+        console.warn("[ApprovalWorkflow] Error syncing suppliers for RFQ:", supSyncErr);
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`rfq_status_${cleanRFQId}`, "Pending");
+      localStorage.removeItem(`rfq_changes_reason_${cleanRFQId}`);
+    }
+  }
+
+  // 3. Mark the Changes Needed task as completed/inactive
+  if (cleanTaskId) {
+    try {
+      await Cr49f_approvaltasksesService.update(cleanTaskId, {
+        statecode: 1, // Inactive
+        statuscode: 2, // Inactive
+        cr49f_approvalstatus: 2 as any, // Resolved / Approved
+        cr49f_approvedby: requester,
+        cr49f_approvedon: nowIso,
+      } as any);
+    } catch (deactErr) {
+      console.warn(`[ApprovalWorkflow] Could not mark Changes Needed task ${cleanTaskId} as inactive:`, deactErr);
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`task_approved_status_${cleanTaskId}`, "Approved");
+      localStorage.setItem(`task_active_${cleanTaskId}`, "false");
+      localStorage.setItem(`task_approved_by_${cleanTaskId}`, requester);
+      localStorage.setItem(`task_approved_on_${cleanTaskId}`, nowIso);
+
+      if (params.requesterRemarks) {
+        const revComment: TaskComment = {
+          id: `c_${Date.now()}`,
+          text: `Revisions submitted: ${params.requesterRemarks}`,
+          author: requester,
+          timestamp: new Date().toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        };
+        void updateTaskCommentsInDataverse(cleanTaskId, revComment, requester);
+      }
+    }
+  }
+
+  // 4. Restart approval workflow from the first approval level (Sequence #1 active, subsequent inactive pending)
+  let allTasks: Cr49f_approvaltaskses[] = [];
+  try {
+    const allRes = await Cr49f_approvaltasksesService.getAll();
+    allTasks = allRes.data ?? [];
+  } catch (fetchErr) {
+    console.warn("[ApprovalWorkflow] Failed to fetch tasks:", fetchErr);
+  }
+
+  const siblingTasks = allTasks.filter((t) => {
+    const { prId: tPR, rfqId: tRFQ } = extractTaskParentIds(t);
+    const tSeq = t.cr49f_sequence ?? 0;
+    if (tSeq < 1) return false; // Only sequential approval tasks (sequence >= 1)
+
+    if (cleanRFQId && tRFQ === cleanRFQId) return true;
+    if (cleanPRId && tPR === cleanPRId) return true;
+    return false;
+  });
+
+  siblingTasks.sort((a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0));
+
+  let firstActivatedTask: Cr49f_approvaltaskses | null = null;
+
+  if (siblingTasks.length > 0) {
+    // 5. Activate Sequence #1 task
+    const firstTask = siblingTasks[0];
+    const firstId = cleanGuid(
+      firstTask.cr49f_approvaltasksid ||
+      (firstTask as unknown as Record<string, string>).cr49f_ApprovalTasksId
+    );
+
+    if (firstId) {
+      try {
+        const actRes = await Cr49f_approvaltasksesService.update(firstId, {
+          statecode: 0, // Active
+          statuscode: 1, // Active
+          cr49f_approvalstatus: 1 as any, // Pending
+          cr49f_assignedon: nowIso,
+          cr49f_approvedby: "",
+        } as any);
+        if (actRes.data) firstActivatedTask = actRes.data;
+      } catch (actErr) {
+        console.warn(`[ApprovalWorkflow] Could not activate task 1 (${firstId}):`, actErr);
+      }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`task_approved_status_${firstId}`, "Pending");
+        localStorage.setItem(`task_active_${firstId}`, "true");
+        localStorage.removeItem(`task_approved_by_${firstId}`);
+        localStorage.removeItem(`task_approved_on_${firstId}`);
+      }
+      void setTaskApprovalStatusInDataverse(firstId, "Pending");
+
+      if (params.requesterRemarks) {
+        const revComment: TaskComment = {
+          id: `c_${Date.now()}_seq1`,
+          text: `Workflow restarted: ${params.requesterRemarks}`,
+          author: requester,
+          timestamp: new Date().toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        };
+        void updateTaskCommentsInDataverse(firstId, revComment, requester);
+      }
+    }
+
+    // 6. Keep all subsequent tasks inactive with Approval Status = Pending
+    for (let i = 1; i < siblingTasks.length; i++) {
+      const subTask = siblingTasks[i];
+      const subId = cleanGuid(
+        subTask.cr49f_approvaltasksid ||
+        (subTask as unknown as Record<string, string>).cr49f_ApprovalTasksId
+      );
+      if (!subId) continue;
+
+      try {
+        await Cr49f_approvaltasksesService.update(subId, {
+          statecode: 1, // Inactive
+          statuscode: 2, // Inactive
+          cr49f_approvalstatus: 1 as any, // Pending
+          cr49f_approvedby: "",
+        } as any);
+      } catch { }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`task_approved_status_${subId}`, "Pending");
+        localStorage.setItem(`task_active_${subId}`, "false");
+        localStorage.removeItem(`task_approved_by_${subId}`);
+        localStorage.removeItem(`task_approved_on_${subId}`);
+      }
+      void setTaskApprovalStatusInDataverse(subId, "Pending");
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("approvalTasksUpdated"));
+  }
+
+  return {
+    success: true,
+    firstActivatedTask,
+  };
+}
+
 export async function getApprovalTasksForRecord(
   objectType: 1 | 2 | 3,
   recordId: string
@@ -789,60 +1758,10 @@ export async function getApprovalTasksForRecord(
     const allTasks = res.data ?? [];
 
     const matched = allTasks.filter((t) => {
-      const raw = t as unknown as Record<string, unknown>;
-      const prVal =
-        cleanGuid(t._cr49f_pr_value) ||
-        cleanGuid(raw._cr49f_PR_value as string) ||
-        cleanGuid(raw.cr49f_pr as string) ||
-        cleanGuid(raw.cr49f_PR as string);
-
-      const rfqVal =
-        cleanGuid(t._cr49f_rfq_value) ||
-        cleanGuid(raw._cr49f_RFQ_value as string) ||
-        cleanGuid(raw.cr49f_rfq as string) ||
-        cleanGuid(raw.cr49f_RFQ as string);
-
-      const poVal =
-        cleanGuid(t._cr49f_po_value) ||
-        cleanGuid(raw._cr49f_PO_value as string) ||
-        cleanGuid(raw.cr49f_po as string) ||
-        cleanGuid(raw.cr49f_PO as string);
-
-      if (objectType === 1) {
-        if (prVal === cleanId) return true;
-        // Deep scan for any property holding the PR ID
-        for (const [key, val] of Object.entries(raw)) {
-          if (
-            key.toLowerCase().includes("pr") &&
-            typeof val === "string" &&
-            cleanGuid(val) === cleanId
-          ) {
-            return true;
-          }
-        }
-      } else if (objectType === 2) {
-        if (rfqVal === cleanId) return true;
-        for (const [key, val] of Object.entries(raw)) {
-          if (
-            key.toLowerCase().includes("rfq") &&
-            typeof val === "string" &&
-            cleanGuid(val) === cleanId
-          ) {
-            return true;
-          }
-        }
-      } else if (objectType === 3) {
-        if (poVal === cleanId) return true;
-        for (const [key, val] of Object.entries(raw)) {
-          if (
-            key.toLowerCase().includes("po") &&
-            typeof val === "string" &&
-            cleanGuid(val) === cleanId
-          ) {
-            return true;
-          }
-        }
-      }
+      const { prId: prVal, rfqId: rfqVal, poId: poVal } = extractTaskParentIds(t);
+      if (objectType === 1 && prVal === cleanId) return true;
+      if (objectType === 2 && rfqVal === cleanId) return true;
+      if (objectType === 3 && poVal === cleanId) return true;
       return false;
     });
 
@@ -860,31 +1779,59 @@ export async function getApprovalTasksForRecord(
         );
         if (tId) {
           const cached = localStorage.getItem(`task_approved_status_${tId}`);
-          const hasApprovedMetadata = Boolean(
-            t.cr49f_approvedby ||
-            t.cr49f_approvedon ||
-            raw.cr49f_approvedby ||
-            raw.cr49f_approvedon
-          );
+          const isParentChangesNeeded =
+            (objectType === 1 && localStorage.getItem(`pr_status_${cleanId}`) === "Changes Needed") ||
+            (objectType === 2 && localStorage.getItem(`rfq_status_${cleanId}`) === "Changes Needed");
 
-          const rawStatusVal = raw.cr49f_approvalstatus ?? raw.cr49f_ApprovalStatus ?? t.cr49f_approvalstatus;
-
-          if (cached === "Approved" || hasApprovedMetadata) {
-            t.cr49f_approvalstatus = 2 as any;
-            localStorage.setItem(`task_approved_status_${tId}`, "Approved");
-
-            // Auto-heal: If Dataverse record has approved metadata but choice column is still Pending (1 or 0), sync 2 (Approved) in Dataverse!
-            if (rawStatusVal === 1 || rawStatusVal === 0 || rawStatusVal === 154890000 || rawStatusVal === 100000000 || rawStatusVal === "Pending") {
-              void setTaskApprovalStatusInDataverse(tId, "Approved");
-            }
-
-            // If task i is approved, the next sequential task (i+1) is active
-            if (i + 1 < matched.length && matched[i + 1].statecode === 1) {
-              matched[i + 1].statecode = 0;
-              matched[i + 1].statuscode = 1;
-            }
+          if (isParentChangesNeeded && (t.cr49f_sequence ?? 0) >= 1) {
+            // Task has been reset to Pending and Inactive due to parent Changes Needed
+            t.cr49f_approvalstatus = 1 as any;
+            t.statecode = 1 as any;
+            t.statuscode = 2 as any;
+            t.cr49f_approvedby = "";
+            t.cr49f_approvedon = "";
+            delete (raw as any).cr49f_approvedby;
+            delete (raw as any).cr49f_approvedon;
+            localStorage.setItem(`task_approved_status_${tId}`, "Pending");
+            localStorage.setItem(`task_active_${tId}`, "false");
+            localStorage.removeItem(`task_approved_by_${tId}`);
+            localStorage.removeItem(`task_approved_on_${tId}`);
+          } else if (cached === "Changes Needed" || (t.cr49f_sequence ?? 0) === 0) {
+            t.cr49f_approvalstatus = 4 as any;
           } else if (cached === "Rejected") {
             t.cr49f_approvalstatus = 3 as any;
+            localStorage.setItem(`task_active_${tId}`, "false");
+          } else if (
+            cached === "Approved" ||
+            (!isParentChangesNeeded &&
+              (Number(t.cr49f_approvalstatus) === 2 || Boolean(t.cr49f_approvedby && t.cr49f_approvedon)))
+          ) {
+            t.cr49f_approvalstatus = 2 as any;
+            localStorage.setItem(`task_active_${tId}`, "false");
+            // Activate the next sequential task
+            const nextSeqTask = matched.find(
+              (s) => (s.cr49f_sequence ?? 0) > (t.cr49f_sequence ?? 0)
+            );
+            if (nextSeqTask) {
+              nextSeqTask.statecode = 0;
+              nextSeqTask.statuscode = 1;
+              const nextTId = cleanGuid(
+                nextSeqTask.cr49f_approvaltasksid ||
+                (nextSeqTask as any).cr49f_ApprovalTasksId ||
+                (nextSeqTask as any).id
+              );
+              if (nextTId) {
+                localStorage.setItem(`task_active_${nextTId}`, "true");
+              }
+            }
+          } else {
+            // Normal Pending task
+            t.cr49f_approvalstatus = 1 as any;
+            if ((t.cr49f_sequence ?? 0) === 1 && !isParentChangesNeeded) {
+              t.statecode = 0;
+              t.statuscode = 1;
+              localStorage.setItem(`task_active_${tId}`, "true");
+            }
           }
 
           const cachedApprovedBy = localStorage.getItem(`task_approved_by_${tId}`);
@@ -898,6 +1845,15 @@ export async function getApprovalTasksForRecord(
           const cachedAssignedOn = localStorage.getItem(`task_assigned_on_${tId}`);
           if (cachedAssignedOn && !t.cr49f_assignedon) {
             t.cr49f_assignedon = cachedAssignedOn;
+          }
+
+          const dbComments = t.cr49f_comments ?? (raw as any).cr49f_comments ?? (raw as any).cr49f_Comments;
+          if (dbComments) {
+            t.cr49f_comments = dbComments;
+            const parsed = parseTaskComments(dbComments);
+            if (parsed.length > 0) {
+              localStorage.setItem(`task_comments_${tId}`, JSON.stringify(parsed));
+            }
           }
         }
       }
@@ -916,7 +1872,7 @@ export async function getApprovalTasksForRecord(
  */
 export function getTaskApprovalStatusLabel(
   task: Cr49f_approvaltaskses
-): "Pending" | "Approved" | "Rejected" {
+): "Pending" | "Approved" | "Rejected" | "Changes Needed" {
   const raw = task as unknown as Record<string, unknown>;
   const cleanId = cleanGuid(
     task.cr49f_approvaltasksid ||
@@ -927,8 +1883,24 @@ export function getTaskApprovalStatusLabel(
   // 0. Fast local storage cache check for immediate reactivity
   if (cleanId && typeof window !== "undefined") {
     const cached = localStorage.getItem(`task_approved_status_${cleanId}`);
-    if (cached === "Approved" || cached === "Rejected" || cached === "Pending") {
-      return cached;
+    if (
+      cached === "Approved" ||
+      cached === "Rejected" ||
+      cached === "Pending" ||
+      cached === "Changes Needed"
+    ) {
+      return cached as "Pending" | "Approved" | "Rejected" | "Changes Needed";
+    }
+  }
+
+  // 0b. If parent PR or RFQ is in Changes Needed status, any sequential task (>= 1) is strictly Pending
+  const parentPRVal = cleanGuid(task._cr49f_pr_value || (raw._cr49f_PR_value as string) || (raw.cr49f_pr as string));
+  const parentRFQVal = cleanGuid(task._cr49f_rfq_value || (raw._cr49f_RFQ_value as string) || (raw.cr49f_rfq as string));
+  if (typeof window !== "undefined") {
+    const prStatus = parentPRVal ? localStorage.getItem(`pr_status_${parentPRVal}`) : null;
+    const rfqStatus = parentRFQVal ? localStorage.getItem(`rfq_status_${parentRFQVal}`) : null;
+    if ((prStatus === "Changes Needed" || rfqStatus === "Changes Needed") && (task.cr49f_sequence ?? 0) >= 1) {
+      return "Pending";
     }
   }
 
@@ -943,6 +1915,7 @@ export function getTaskApprovalStatusLabel(
     const fStr = formattedVal.trim().toLowerCase();
     if (fStr.includes("approv")) return "Approved";
     if (fStr.includes("reject")) return "Rejected";
+    if (fStr.includes("change")) return "Changes Needed";
     if (fStr.includes("pend")) return "Pending";
   }
 
@@ -953,10 +1926,16 @@ export function getTaskApprovalStatusLabel(
       const s = statusVal.trim().toLowerCase();
       if (s.includes("approv")) return "Approved";
       if (s.includes("reject")) return "Rejected";
+      if (s.includes("change")) return "Changes Needed";
       if (s.includes("pend")) return "Pending";
     }
 
     if (typeof statusVal === "number") {
+      // Dataverse Choice 4 = Changes Needed
+      if (statusVal === 4 || statusVal === 154890003 || statusVal === 100000003) {
+        return "Changes Needed";
+      }
+
       // Publisher prefix 15489xxxxx
       if (statusVal === 154890001) return "Approved";
       if (statusVal === 154890002) return "Rejected";
@@ -975,20 +1954,29 @@ export function getTaskApprovalStatusLabel(
     }
   }
 
-  // 3. If approvedby and approvedon are populated in Dataverse, the task was approved!
+  // 3. Check sequence or task name for changes needed task
+  if (
+    (task.cr49f_sequence ?? 0) === 0 ||
+    (task.cr49f_task && task.cr49f_task.toLowerCase().includes("changes needed"))
+  ) {
+    return "Changes Needed";
+  }
+
+  // 4. If approvedby and approvedon are populated in Dataverse, the task was approved!
   if (task.cr49f_approvedby || task.cr49f_approvedon || raw.cr49f_approvedby || raw.cr49f_approvedon) {
     return "Approved";
   }
 
-  // 4. Fallback to cr49f_id ONLY if explicitly string "Approved" or "Rejected"
+  // 5. Fallback to cr49f_id ONLY if explicitly string "Approved" or "Rejected" or "Changes Needed"
   if (task.cr49f_id === "Approved") return "Approved";
   if (task.cr49f_id === "Rejected") return "Rejected";
+  if (task.cr49f_id === "Changes Needed") return "Changes Needed";
 
-  // 5. Default: any task not explicitly approved or rejected is Pending!
+  // 6. Default: any task not explicitly approved or rejected is Pending!
   return "Pending";
 }
 
-  
+
 /**
  * Scans all existing PRs and RFQs in Dataverse,
  * it creates the full set of sequential approval tasks on cr49f_approvaltasks for it.
@@ -1024,7 +2012,11 @@ export async function syncAllPendingApprovalTasks(
 
       const hasTasks = existingTasks.some((t) => {
         const raw = t as unknown as Record<string, unknown>;
-        const tPR = cleanGuid(t._cr49f_pr_value) || cleanGuid(raw._cr49f_PR_value as string);
+        const tPR =
+          cleanGuid(t._cr49f_pr_value) ||
+          cleanGuid(raw._cr49f_PR_value as string) ||
+          cleanGuid(raw.cr49f_pr as string) ||
+          cleanGuid(raw.cr49f_PR as string);
         return tPR === prId;
       });
 
@@ -1051,7 +2043,11 @@ export async function syncAllPendingApprovalTasks(
 
       const hasTasks = existingTasks.some((t) => {
         const raw = t as unknown as Record<string, unknown>;
-        const tRFQ = cleanGuid(t._cr49f_rfq_value) || cleanGuid(raw._cr49f_RFQ_value as string);
+        const tRFQ =
+          cleanGuid(t._cr49f_rfq_value) ||
+          cleanGuid(raw._cr49f_RFQ_value as string) ||
+          cleanGuid(raw.cr49f_rfq as string) ||
+          cleanGuid(raw.cr49f_RFQ as string);
         return tRFQ === rfqId;
       });
 
@@ -1089,6 +2085,9 @@ if (typeof window !== "undefined") {
       getApprovalTasksForRecord: typeof getApprovalTasksForRecord;
       getTaskApprovalStatusLabel: typeof getTaskApprovalStatusLabel;
       syncAllPendingApprovalTasks: typeof syncAllPendingApprovalTasks;
+      updateTaskCommentsInDataverse: typeof updateTaskCommentsInDataverse;
+      addTaskComment: typeof addTaskComment;
+      parseTaskComments: typeof parseTaskComments;
     };
   }).approvalWorkflow = {
     createApprovalTasksForObject,
@@ -1097,5 +2096,8 @@ if (typeof window !== "undefined") {
     getApprovalTasksForRecord,
     getTaskApprovalStatusLabel,
     syncAllPendingApprovalTasks,
+    updateTaskCommentsInDataverse,
+    addTaskComment,
+    parseTaskComments,
   };
 }

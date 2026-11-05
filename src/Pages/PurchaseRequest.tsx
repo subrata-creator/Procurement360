@@ -45,7 +45,7 @@ import {
   Cr49f_approvaltasksescr49f_department,
   Cr49f_approvaltasksescr49f_role,
 } from "../generated/models/Cr49f_approvaltasksesModel";
-import { getTaskApprovalStatusLabel, cleanGuid } from "../Services/ApprovalWorkflowService";
+import { getTaskApprovalStatusLabel, cleanGuid, createApprovalTasksForObject } from "../Services/ApprovalWorkflowService";
 import "../Styles/PurchaseRequest.css";
 
 const PAGE_SIZE = 10;
@@ -56,6 +56,7 @@ const STATUS_PROGRESS: Record<PRStatus, number> = {
   "In Review": 50,
   Approved: 100,
   Rejected: 0,
+  "Changes Needed": 25,
 };
 
 type DataverseRequestWithFormattedLookups = Cr49f_purchaserequests & {
@@ -511,6 +512,33 @@ export default function PurchaseRequest() {
         }
       }
 
+      // Auto-heal: Ensure any PR that does not have approval tasks gets them created
+      for (const record of records) {
+        const prId = cleanGuid(record.cr49f_purchaserequestid);
+        if (!prId) continue;
+        const hasTasks = allTasks.some((t) => {
+          const raw = t as unknown as Record<string, unknown>;
+          const tPR =
+            cleanGuid(t._cr49f_pr_value) ||
+            cleanGuid(raw._cr49f_PR_value as string) ||
+            cleanGuid(raw.cr49f_pr as string) ||
+            cleanGuid(raw.cr49f_PR as string);
+          return tPR === prId;
+        });
+        if (!hasTasks) {
+          try {
+            const created = await createApprovalTasksForObject({
+              objectType: 1,
+              recordId: prId,
+              recordName: record.cr49f_prtitle || "Purchase Request Approval",
+            });
+            allTasks.push(...created);
+          } catch (autoErr) {
+            console.warn(`[PurchaseRequest] Could not auto-generate tasks for PR ${prId}:`, autoErr);
+          }
+        }
+      }
+
       setAllTasksList(allTasks);
       setRequests(
         records.map((record) => {
@@ -844,7 +872,7 @@ export default function PurchaseRequest() {
     reviewDurations.length
     : null;
 
-    const departmentTotals = new Map<string, number>();
+  const departmentTotals = new Map<string, number>();
 
   filteredRequests.forEach((request) => {
     const dept =
@@ -1259,7 +1287,7 @@ export default function PurchaseRequest() {
                   e.stopPropagation();
                   try {
                     (e.target as HTMLInputElement).showPicker();
-                  } catch {}
+                  } catch { }
                 }}
                 className="pr-hidden-date-input"
                 id="pr-created-date-input"

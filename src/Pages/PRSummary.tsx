@@ -42,6 +42,7 @@ import {
   approveTask,
   rejectTask,
   cleanGuid,
+  parseTaskComments,
 } from "../Services/ApprovalWorkflowService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
@@ -336,8 +337,26 @@ export default function PurchaseRequestDetail() {
   const loadApprovalTasks = async (prId: string) => {
     setLoadingTasks(true);
     try {
-      const tasks = await getApprovalTasksForRecord(1, prId);
-      setApprovalTasks(tasks);
+      let tasks = await getApprovalTasksForRecord(1, prId);
+      if (tasks.length === 0 && liveRecord) {
+        try {
+          await createApprovalTasksForObject({
+            objectType: 1,
+            recordId: prId,
+            recordName: liveRecord.cr49f_prtitle || "Purchase Request Approval",
+          });
+          tasks = await getApprovalTasksForRecord(1, prId);
+        } catch (autoErr) {
+          console.warn("[PRSummary] Auto-create tasks for PR failed:", autoErr);
+        }
+      }
+      const filtered = tasks.filter(
+        (t) =>
+          (t.cr49f_sequence ?? 0) >= 1 &&
+          getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
+          !t.cr49f_task?.toLowerCase().includes("changes needed")
+      );
+      setApprovalTasks(filtered);
     } catch (err) {
       console.warn("Failed to load approval tasks:", err);
     } finally {
@@ -690,13 +709,15 @@ export default function PurchaseRequestDetail() {
                         ? (Cr49f_approvaltasksescr49f_role[task.cr49f_role] || "Approver")
                         : "Approver";
                       const initials = getInitials(roleName);
-                      const remarks = isApproved
+                      const parsedComments = parseTaskComments(task.cr49f_comments ?? (task as unknown as Record<string, unknown>).cr49f_Comments);
+                      const latestComment = parsedComments.length > 0 ? parsedComments[parsedComments.length - 1].text : null;
+                      const remarks = latestComment || (isApproved
                         ? "Completed for this approval stage"
                         : isRejected
                         ? "Task rejected"
                         : isActive
                         ? "Awaiting approval decision"
-                        : "Pending previous task approval";
+                        : "Pending previous task approval");
 
                       const completedOn = isApproved
                         ? (task.modifiedon ? toUsDate(task.modifiedon) : (record.date || "—"))

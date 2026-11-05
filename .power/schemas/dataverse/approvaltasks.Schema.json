@@ -625,6 +625,13 @@
           "x-ms-schema-name": "VersionNumber",
           "x-ms-read-only": true
         },
+        "cr49f_comments": {
+          "type": "string",
+          "title": "Comments",
+          "x-ms-dataverse-attribute": "cr49f_comments",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr49f_comments"
+        },
         "cr49f_approvedby": {
           "type": "string",
           "title": "Approved By",

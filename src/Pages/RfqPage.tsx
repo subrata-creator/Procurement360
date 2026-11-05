@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   ArrowRight,
   Building2,
   Calendar,
@@ -143,6 +144,11 @@ function formatFilterDate(iso: string): string {
 }
 
 function getStatusLabel(row: RawRfq): string {
+  const rfqId = cleanGuid(row.cr49f_requestforqoutationid);
+  if (rfqId && typeof window !== "undefined") {
+    const cached = localStorage.getItem(`rfq_status_${rfqId}`);
+    if (cached) return cached;
+  }
   const formatted = row.cr49f_statusname?.trim();
   if (formatted) {
     const normalized = formatted.replace(/\s+/g, "").toLowerCase();
@@ -1017,6 +1023,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                     const statusLabel = getStatusLabel(row);
                     const isApproved = statusLabel === "Approved";
                     const isRejected = statusLabel === "Rejected";
+                    const isChangesNeeded = statusLabel === "Changes Needed";
                     const progressPct = STATUS_PROGRESS[statusLabel] ?? (isApproved ? 100 : 50);
                     const createdBy = getCreatedBy(row);
                     const associatedPr = getAssociatedPr(row);
@@ -1173,7 +1180,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
 
                           {/* 9. Status */}
                           <td className="pr-cell-status">
-                            <span className={`pr-status-badge ${isApproved ? "approved" : isRejected ? "rejected" : "pending"}`}>
+                            <span className={`pr-status-badge ${isApproved ? "approved" : isRejected ? "rejected" : isChangesNeeded ? "changes-needed" : "pending"}`}>
                               {isApproved ? (
                                 <>
                                   <Check size={11} className="badge-icon" /> Approved
@@ -1181,6 +1188,10 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                               ) : isRejected ? (
                                 <>
                                   <X size={11} className="badge-icon" /> Rejected
+                                </>
+                              ) : isChangesNeeded ? (
+                                <>
+                                  <AlertCircle size={11} className="badge-icon" /> Changes Needed
                                 </>
                               ) : (
                                 <>
