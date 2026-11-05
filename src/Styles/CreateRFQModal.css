@@ -1475,6 +1475,18 @@
   color: #0f172a;
 }
 
+.rfq-success-actions .rfq-btn-close-subtle {
+  background: var(--card-hex, #ffffff);
+  border: 1px solid var(--border-hex, #cbd5e1);
+  color: var(--muted-foreground-hex, #64748b);
+}
+
+.rfq-success-actions .rfq-btn-close-subtle:hover:not(:disabled) {
+  background: var(--muted-hex, #f1f5f9);
+  color: var(--foreground-hex, #0f172a);
+  border-color: var(--border-hex, #94a3b8);
+}
+
 /* ==========================================================================
    Dark Mode Adjustments
    ========================================================================== */
@@ -1596,6 +1608,18 @@
   background: rgba(37, 99, 235, 0.2);
   color: #93c5fd;
   border-color: rgba(59, 130, 246, 0.4);
+}
+
+.dark .rfq-success-actions .rfq-btn-close-subtle {
+  background: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+.dark .rfq-success-actions .rfq-btn-close-subtle:hover:not(:disabled) {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #475569;
 }
 
 .dark .rfq-supplier-chip {

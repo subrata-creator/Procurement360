@@ -1530,22 +1530,28 @@ function ModernDataverseTaskDetail({
             isRfq ? (
               /* Interactive RFQ Revision Form */
               <form onSubmit={handleSubmitRfqChangesRevision} className="task-card task-changes-form-card">
-                <div className="task-card-header">
+                <div className="task-card-header task-rfq-changes-header">
                   <div className="task-card-header-left">
-                    <div className="task-card-header-icon" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#d97706" }}>
+                    <div className="task-card-header-icon amber">
                       <FileEdit size={16} />
                     </div>
                     <div className="task-card-header-titles">
-                      <h2>Update Request for Quotation (RFQ) Information</h2>
-                      <p>Revise RFQ specifications, submission deadline, and requirements to resolve approver feedback</p>
+                      <h2>Revise Request for Quotation (RFQ)</h2>
+                      <p>Update quotation specifications, submission deadline, and invited suppliers to resolve approver feedback</p>
                     </div>
                   </div>
+                  <span className="task-seq-pill amber">
+                    Revision Mode · Step #{task.cr49f_sequence ?? 1}
+                  </span>
                 </div>
 
                 <div className="task-changes-form-body">
                   <div className="task-changes-form-row">
                     <div className="task-changes-field">
-                      <label>RFQ Title</label>
+                      <label>
+                        <FileText size={13} className="task-field-icon" />
+                        RFQ Title <span className="task-required-star">*</span>
+                      </label>
                       <input
                         type="text"
                         value={editRfqTitle}
@@ -1556,7 +1562,10 @@ function ModernDataverseTaskDetail({
                       />
                     </div>
                     <div className="task-changes-field">
-                      <label>Submission Deadline</label>
+                      <label>
+                        <CalendarDays size={13} className="task-field-icon" />
+                        Submission Deadline <span className="task-required-star">*</span>
+                      </label>
                       <input
                         type="date"
                         value={editRfqDeadline}
@@ -1569,7 +1578,10 @@ function ModernDataverseTaskDetail({
 
                   <div className="task-changes-form-row">
                     <div className="task-changes-field">
-                      <label>Delivery / Site Location</label>
+                      <label>
+                        <MapPin size={13} className="task-field-icon" />
+                        Delivery / Site Location
+                      </label>
                       <input
                         type="text"
                         value={editRfqLocation}
@@ -1579,8 +1591,11 @@ function ModernDataverseTaskDetail({
                       />
                     </div>
                     <div className="task-changes-field">
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                        <label style={{ margin: 0 }}>Originating Purchase Request</label>
+                      <div className="task-rfq-pr-field-header">
+                        <label>
+                          <List size={13} className="task-field-icon" />
+                          Originating Purchase Request
+                        </label>
                         {selectedPrId && (
                           <button
                             type="button"
@@ -1640,13 +1655,16 @@ function ModernDataverseTaskDetail({
                   </div>
 
                   <div className="task-changes-field">
-                    <label>Scope of Work, Requirements &amp; Description</label>
+                    <label>
+                      <ClipboardList size={13} className="task-field-icon" />
+                      Scope of Work, Requirements &amp; Description
+                    </label>
                     <textarea
                       rows={3}
                       value={editRfqDescription}
                       onChange={(e) => setEditRfqDescription(e.target.value)}
                       className="task-textarea"
-                      placeholder="Explain the revised scope of work, technical requirements, or bidding rules..."
+                      placeholder="Explain the revised scope of work, technical requirements, delivery terms, or bidding instructions..."
                     />
                   </div>
 
@@ -1657,20 +1675,30 @@ function ModernDataverseTaskDetail({
                         <h3><Building2 size={16} /> Invited Suppliers &amp; Quotation Participants</h3>
                         <p>Select suppliers who will be invited to review and submit quotations for this RFQ</p>
                       </div>
-                      <span className="task-selected-badge">
-                        {selectedSupplierIds.length} {selectedSupplierIds.length === 1 ? "supplier" : "suppliers"} selected
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {flowMatchedCodes.length > 0 && (
+                          <span className="task-supplier-ai-badge">
+                            <Sparkles size={11} /> AI Assisted
+                          </span>
+                        )}
+                        <span className="task-selected-badge">
+                          {selectedSupplierIds.length} {selectedSupplierIds.length === 1 ? "supplier" : "suppliers"} selected
+                        </span>
+                      </div>
                     </div>
 
                     {/* SearchSupplier Flow Status Banner */}
                     {isFlowLoading ? (
                       <div className="task-flow-banner loading">
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <Loader2 size={15} className="animate-spin" />
-                          <span>
-                            <strong>Running SearchSupplier Flow:</strong> Fetching AI vendor recommendations for{" "}
-                            {approvedPrs.find((p) => cleanGuid(p.cr49f_purchaserequestid) === selectedPrId)?.cr49f_prnumber || "selected PR"}...
-                          </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <Loader2 size={16} className="animate-spin text-purple-600" />
+                          <div>
+                            <strong>SearchSupplier Flow in Progress:</strong> Querying AI flow for vendor recommendations for{" "}
+                            <strong>
+                              {approvedPrs.find((p) => cleanGuid(p.cr49f_purchaserequestid) === selectedPrId)?.cr49f_prnumber || "selected PR"}
+                            </strong>
+                            ...
+                          </div>
                         </div>
                       </div>
                     ) : flowNotice ? (
@@ -1697,7 +1725,7 @@ function ModernDataverseTaskDetail({
                             gap: 3,
                           }}
                         >
-                          <RotateCcw size={12} /> Re-fetch
+                          <RotateCcw size={12} /> Re-run Flow
                         </button>
                       </div>
                     ) : null}
@@ -1732,8 +1760,9 @@ function ModernDataverseTaskDetail({
                           type="text"
                           value={supplierSearchQuery}
                           onChange={(e) => setSupplierSearchQuery(e.target.value)}
-                          placeholder="Search suppliers by name, code, contact..."
+                          placeholder="Search suppliers by name, code, category..."
                           className="task-suppliers-search-input"
+                          disabled={isFlowLoading}
                         />
                       </div>
                       <select
@@ -1741,6 +1770,7 @@ function ModernDataverseTaskDetail({
                         onChange={(e) => setSupplierCategoryFilter(e.target.value)}
                         className="task-select"
                         style={{ width: "auto", minWidth: 140, padding: "7px 10px", fontSize: 12 }}
+                        disabled={isFlowLoading}
                       >
                         {supplierCategories.map((cat) => (
                           <option key={cat} value={cat}>
@@ -1754,6 +1784,7 @@ function ModernDataverseTaskDetail({
                           onClick={handleSelectAllVisibleSuppliers}
                           className="task-btn-action-secondary"
                           style={{ padding: "5px 10px", fontSize: 11.5 }}
+                          disabled={isFlowLoading}
                         >
                           <CheckSquare size={13} /> Select All
                         </button>
@@ -1763,6 +1794,7 @@ function ModernDataverseTaskDetail({
                             onClick={handleClearSupplierSelection}
                             className="task-btn-action-secondary"
                             style={{ padding: "5px 10px", fontSize: 11.5, color: "#ef4444" }}
+                            disabled={isFlowLoading}
                           >
                             <X size={13} /> Clear
                           </button>
@@ -1770,9 +1802,26 @@ function ModernDataverseTaskDetail({
                       </div>
                     </div>
 
-                    {/* Supplier Cards Grid */}
+                    {/* Supplier Cards Grid with Prominent Flow Loading State */}
                     <div className="task-suppliers-grid">
-                      {filteredSuppliers.length > 0 ? (
+                      {isFlowLoading ? (
+                        <div className="task-flow-loading-box">
+                          <div className="task-flow-loading-spinner-wrap">
+                            <Sparkles size={26} className="task-flow-spin-pulse" />
+                          </div>
+                          <h4>Searching &amp; Matching Qualified Suppliers...</h4>
+                          <p>
+                            Running <strong>SearchSupplier</strong> Power Automate flow for{" "}
+                            <strong>
+                              {approvedPrs.find((p) => cleanGuid(p.cr49f_purchaserequestid) === selectedPrId)?.cr49f_prnumber || "selected PR"}
+                            </strong>
+                            . Evaluating line items and discovering catalog vendor matches...
+                          </p>
+                          <div className="task-flow-progress-bar">
+                            <div className="task-flow-progress-fill" />
+                          </div>
+                        </div>
+                      ) : filteredSuppliers.length > 0 ? (
                         filteredSuppliers.map((sup) => {
                           const isSelected = selectedSupplierIds.includes(sup.cr49f_supplierid);
                           const supCode = sup.cr49f_supplierid1?.toUpperCase() || "";
@@ -1782,6 +1831,12 @@ function ModernDataverseTaskDetail({
                           const matchRec =
                             flowRecommendations[supCode] ||
                             flowRecommendations[sup.cr49f_supplierid.toUpperCase()];
+                          const initials = (sup.cr49f_name || "SU")
+                            .split(" ")
+                            .map((w) => w[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase();
 
                           return (
                             <div
@@ -1796,9 +1851,15 @@ function ModernDataverseTaskDetail({
                                   ) : (
                                     <Square size={16} style={{ color: "#94a3b8" }} />
                                   )}
-                                  <span className="task-supplier-card-name" title={sup.cr49f_name || ""}>
-                                    {sup.cr49f_name || "Supplier"}
-                                  </span>
+                                  <div className="task-supplier-card-avatar">
+                                    {initials}
+                                  </div>
+                                  <div className="task-supplier-card-title-group">
+                                    <span className="task-supplier-card-name" title={sup.cr49f_name || ""}>
+                                      {sup.cr49f_name || "Supplier"}
+                                    </span>
+                                    <span className="task-supplier-card-category">{sup.cr49f_suppliercategory || "Vendor"}</span>
+                                  </div>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                                   {isAiMatched && (
@@ -1812,12 +1873,13 @@ function ModernDataverseTaskDetail({
                                 </div>
                               </div>
                               <div className="task-supplier-card-details">
-                                <span>{sup.cr49f_suppliercategory || "Vendor"}</span>
-                                <span>{sup.cr49f_city || sup.cr49f_country || "Active"}</span>
+                                <span>{sup.cr49f_city || sup.cr49f_country || "Active Vendor"}</span>
+                                {sup.cr49f_phonenumber && <span>{sup.cr49f_phonenumber}</span>}
                               </div>
                               {isAiMatched && matchRec?.reason && (
                                 <div className="task-supplier-reason" title={matchRec.reason}>
-                                  {matchRec.reason}
+                                  <Sparkles size={11} style={{ flexShrink: 0, marginTop: 2 }} />
+                                  <span>{matchRec.reason}</span>
                                 </div>
                               )}
                             </div>
@@ -1855,7 +1917,7 @@ function ModernDataverseTaskDetail({
                                 <td><strong>{idx + 1}</strong></td>
                                 <td><strong>{item.cr49f_itemname || `Item #${idx + 1}`}</strong></td>
                                 <td style={{ color: "var(--muted-foreground-hex, #64748b)" }}>
-                                  {item.cr49f_itemdescription || "â€”"}
+                                  {item.cr49f_itemdescription || "—"}
                                 </td>
                               </tr>
                             ))}
@@ -1866,12 +1928,15 @@ function ModernDataverseTaskDetail({
                   )}
 
                   <div className="task-changes-field" style={{ marginTop: 18 }}>
-                    <label>Requester Revision Notes (What changes did you apply?)</label>
+                    <label>
+                      <ClipboardList size={13} className="task-field-icon" />
+                      Requester Revision Notes (What changes did you apply?)
+                    </label>
                     <textarea
                       rows={2}
                       value={requesterRemarks}
                       onChange={(e) => setRequesterRemarks(e.target.value)}
-                      placeholder="e.g. Adjusted submission deadline and updated scope description per approver feedback."
+                      placeholder="e.g. Adjusted submission deadline, refined delivery site, and updated vendor roster per approver comments."
                       className="task-textarea"
                     />
                   </div>

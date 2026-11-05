@@ -1909,7 +1909,45 @@
   letter-spacing: 0.02em;
 }
 
+.task-supplier-card-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.task-supplier-card.ai-matched .task-supplier-card-avatar {
+  background: #ede9fe;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.task-supplier-card-title-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.task-supplier-card-category {
+  font-size: 10.5px;
+  color: var(--muted-foreground-hex, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .task-supplier-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
   margin-top: 4px;
   padding: 6px 8px;
   background: rgba(139, 92, 246, 0.08);
@@ -1917,7 +1955,35 @@
   border-radius: 0 4px 4px 0;
   font-size: 11px;
   line-height: 1.35;
-  color: #475569;
+  color: #6d28d9;
+}
+
+.task-rfq-changes-header .task-card-header-icon.amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.task-rfq-pr-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.task-rfq-pr-field-header label {
+  margin-bottom: 0 !important;
+}
+
+.task-field-icon {
+  margin-right: 5px;
+  color: var(--muted-foreground-hex, #64748b);
+  vertical-align: middle;
+}
+
+.task-required-star {
+  color: #ef4444;
+  margin-left: 2px;
 }
 
 .task-flow-banner {
@@ -1934,9 +2000,88 @@
 }
 
 .task-flow-banner.loading {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-  color: #166534;
+  background: linear-gradient(135deg, #f5f3ff, #eff6ff);
+  border-color: #c4b5fd;
+  color: #6d28d9;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.1);
+  animation: pulseFlowGlow 2s infinite ease-in-out;
+}
+
+@keyframes pulseFlowGlow {
+  0%, 100% { border-color: #c4b5fd; }
+  50% { border-color: #7c3aed; }
+}
+
+.task-flow-loading-box {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 20px;
+  background: linear-gradient(135deg, rgba(245, 243, 255, 0.9), rgba(239, 246, 255, 0.9));
+  border: 2px dashed #c4b5fd;
+  border-radius: 12px;
+  text-align: center;
+  gap: 12px;
+}
+
+.task-flow-loading-spinner-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-flow-spin-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #8b5cf6;
+  opacity: 0.35;
+  animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.task-flow-loading-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-flow-loading-text strong {
+  font-size: 14.5px;
+  color: #4c1d95;
+  font-weight: 700;
+}
+
+.task-flow-loading-text span {
+  font-size: 12.5px;
+  color: #6b21a8;
+}
+
+.task-flow-progress-bar {
+  width: min(240px, 100%);
+  height: 4px;
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.task-flow-progress-fill {
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, #9333ea, #3b82f6);
+  border-radius: 999px;
+  animation: flowProgressIndeterminate 1.5s infinite ease-in-out;
+}
+
+@keyframes flowProgressIndeterminate {
+  0% { transform: translateX(-100%); width: 30%; }
+  50% { transform: translateX(50%); width: 60%; }
+  100% { transform: translateX(200%); width: 30%; }
 }
 
 .task-flow-banner.matched {
@@ -2242,4 +2387,35 @@
 
 .dark .task-rfq-supplier-details {
   border-color: #334155;
+}
+
+.dark .task-flow-banner.loading {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: #7c3aed;
+  color: #c4b5fd;
+}
+
+.dark .task-flow-loading-box {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: #6d28d9;
+}
+
+.dark .task-flow-loading-text strong {
+  color: #c4b5fd;
+}
+
+.dark .task-flow-loading-text span {
+  color: #a78bfa;
+}
+
+.dark .task-supplier-card-avatar {
+  background: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+.dark .task-supplier-card.ai-matched .task-supplier-card-avatar {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: #7c3aed;
+  color: #c4b5fd;
 }
