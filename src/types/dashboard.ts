@@ -1,3 +1,11 @@
+export interface KpiForecastDetails {
+  forecast: number;
+  last3Months: string;
+  momText: string;
+  momTrendUp: boolean;
+  method: string;
+}
+
 export interface KpiItem {
   label: string;
   value: string;
@@ -11,6 +19,7 @@ export interface KpiItem {
   progressLabel?: string;
   insight?: string;
   insightTrend?: "positive" | "attention";
+  forecastDetails?: KpiForecastDetails;
 }
 
 export interface Task {

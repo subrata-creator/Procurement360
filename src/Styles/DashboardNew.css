@@ -1661,7 +1661,7 @@
 .xd-kpi-insight-tooltip {
   position: fixed;
   z-index: 2200;
-  width: min(276px, calc(100vw - 24px));
+  width: min(290px, calc(100vw - 24px));
   max-height: calc(100vh - 16px);
   overflow-y: auto;
   padding: 11px 12px 12px;
@@ -1723,14 +1723,48 @@
 .xd-kpi-tooltip-trend.attention { color: var(--warning-hex); }
 
 .xd-kpi-insight-tooltip p {
-  display: -webkit-box;
-  overflow: hidden;
   margin: 0;
   color: var(--card-foreground-hex);
   font-size: 11px;
-  line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  line-height: 1.45;
+}
+
+.xd-kpi-tooltip-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border-hex) 85%, transparent);
+}
+
+.xd-kpi-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.xd-kpi-tooltip-metric-label {
+  color: var(--muted-foreground-hex);
+  white-space: nowrap;
+}
+
+.xd-kpi-tooltip-metric-val {
+  color: var(--foreground-hex);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.xd-kpi-tooltip-metric-val.up {
+  color: var(--success-hex, #22c55e);
+}
+
+.xd-kpi-tooltip-metric-val.down {
+  color: var(--destructive-hex, #ef4444);
 }
 
 .xd-kpi-insight-tooltip.blue { --tone: var(--accent-hex); }
