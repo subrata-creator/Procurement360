@@ -4,6 +4,8 @@ import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_se
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
 import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
 import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
+import { Cr49f_supplierproductsService } from "../generated/services/Cr49f_supplierproductsService";
+import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 import { cleanGuid } from "./ApprovalWorkflowService";
 
 import type { Cr49f_rfqsupplierresponses } from "../generated/models/Cr49f_rfqsupplierresponsesModel";
@@ -11,6 +13,9 @@ import type { Cr49f_rfqresponselines } from "../generated/models/Cr49f_rfqrespon
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
+import type { Cr49f_selectedsupplierses } from "../generated/models/Cr49f_selectedsuppliersesModel";
+import type { Cr49f_supplierproducts } from "../generated/models/Cr49f_supplierproductsModel";
+import type { SampleSupplierItem } from "../data/SampleSuppliersData";
 
 export type SupplierResponseStatus = "Invited" | "Draft" | "Submitted" | "Rewarded";
 
@@ -117,7 +122,7 @@ export interface FullSupplierResponse {
 }
 
 /**
- * Parses response line composite ID into structured parts
+ * Parses response line composite ID into structured parts (backwards compatibility)
  */
 export function parseResponseLineId(compositeId?: string | null): {
   prLineId: string;
@@ -141,7 +146,7 @@ export function parseResponseLineId(compositeId?: string | null): {
 }
 
 /**
- * Builds composite response line ID string
+ * Builds composite response line ID string (maintained for legacy compatibility)
  */
 export function buildResponseLineId(prLineId: string, itemName: string, reqQty: number): string {
   const safeName = (itemName || "Item").replace(/[|:]/g, "-");
@@ -172,25 +177,176 @@ export function formatAdditionalCharges(leadTime?: string, comments?: string): s
 }
 
 /**
- * End-to-end creation of cr49f_rfqsupplierresponse and child cr49f_rfqresponseline records
- * when an RFQ is created for selected suppliers.
+ * Resolves catalog unit price for a given supplier and item name
  */
-export async function createRfqSupplierResponses(
+function findSupplierProductPrice(
+  supplierCodeOrGuid: string,
+  supplierName: string,
+  itemName: string,
+  dataverseProducts: Cr49f_supplierproducts[]
+): number {
+  const cleanItem = itemName.toLowerCase().trim();
+  const cleanSup = supplierCodeOrGuid.toLowerCase().replace(/[{}]/g, "").trim();
+  const cleanName = supplierName.toLowerCase().trim();
+
+  // 1. Search in Dataverse supplier products
+  for (const prod of dataverseProducts) {
+    const raw = prod as unknown as Record<string, unknown>;
+    const pSupGuid = (
+      prod._cr49f_supplier_value ||
+      (raw._cr49f_Supplier_value as string) ||
+      (raw.cr49f_Supplier as string) ||
+      (raw.cr49f_supplier as string) ||
+      ""
+    ).toLowerCase().replace(/[{}]/g, "").trim();
+
+    const pName = (prod.cr49f_productname || prod.cr49f_supplierproductnumber || (raw.cr49f_name as string) || "").toLowerCase().trim();
+
+    if (pSupGuid === cleanSup && (pName.includes(cleanItem) || cleanItem.includes(pName))) {
+      const price = Number(prod.cr49f_unitprice) || 0;
+      if (price > 0) return price;
+    }
+  }
+
+  // 2. Fallback to initial sample data
+  const sampleMatch = INITIAL_SAMPLE_SUPPLIERS.find(
+    (s: SampleSupplierItem) =>
+      (s.supplier.cr49f_supplierid1 && s.supplier.cr49f_supplierid1.toLowerCase().trim() === cleanSup) ||
+      (s.supplier.cr49f_name && s.supplier.cr49f_name.toLowerCase().trim() === cleanName)
+  );
+
+  if (sampleMatch && sampleMatch.products) {
+    for (const sp of sampleMatch.products) {
+      const spName = (sp.cr49f_productname || sp.cr49f_supplierproductnumber || "").toLowerCase().trim();
+      if (spName.includes(cleanItem) || cleanItem.includes(spName)) {
+        const price = Number(sp.cr49f_unitprice) || 0;
+        if (price > 0) return price;
+      }
+    }
+    // If no exact match, return first catalog product price if available
+    if (sampleMatch.products[0]?.cr49f_unitprice) {
+      return Number(sampleMatch.products[0].cr49f_unitprice) || 0;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Creates cr49f_rfqsupplierresponse and cr49f_rfqresponseline records
+ * ONLY AFTER all RFQ tasks get approved.
+ *
+ * Uses direct Dataverse relationships:
+ * - cr49f_rfqsupplierresponse links to RFQ via cr49f_rfq lookup
+ * - cr49f_rfqsupplierresponse links to Selected Supplier via cr49f_supplier lookup
+ * - cr49f_rfqresponseline links to cr49f_rfqsupplierresponse via cr49f_rfqsupplierresponse lookup
+ *
+ * Primary IDs are auto-generated by Dataverse.
+ */
+export async function initializeSupplierResponsesForApprovedRfq(
   rfqId: string,
-  supplierIds: string[],
+  supplierIdentities?: string[],
   purchaseRequestId?: string
 ): Promise<{ success: boolean; createdResponses: number; createdLines: number }> {
   const cleanRfqId = cleanGuid(rfqId);
-  if (!cleanRfqId || !supplierIds || supplierIds.length === 0) {
+  if (!cleanRfqId) {
     return { success: false, createdResponses: 0, createdLines: 0 };
   }
 
-  console.log(`[RfqSupplierResponseService] Initializing responses for RFQ ${cleanRfqId} with ${supplierIds.length} suppliers`);
+  console.log(`[RfqSupplierResponseService] Initializing responses for Approved RFQ: ${cleanRfqId}`);
 
-  // 1. Fetch PR lines associated with the Purchase Request if available
+  // 1. Fetch the RFQ record
+  let rfq: Cr49f_requestforqoutations | null = null;
+  try {
+    const rfqRes = await Cr49f_requestforqoutationsService.get(cleanRfqId);
+    if (rfqRes.success && rfqRes.data) {
+      rfq = rfqRes.data;
+    }
+  } catch (rfqErr) {
+    console.warn("[RfqSupplierResponseService] Could not fetch RFQ:", rfqErr);
+  }
+
+  const resolvedPrId = purchaseRequestId || cleanGuid(rfq?._cr49f_prrfq_value);
+
+  // 2. Fetch Selected Suppliers for this RFQ from Dataverse
+  let selectedSuppliers: Cr49f_selectedsupplierses[] = [];
+  try {
+    const selRes = await Cr49f_selectedsuppliersesService.getAll();
+    if (selRes.success && selRes.data) {
+      selectedSuppliers = selRes.data.filter(
+        (s) => cleanGuid(s._cr49f_rfq_value) === cleanRfqId
+      );
+    }
+  } catch (selErr) {
+    console.warn("[RfqSupplierResponseService] Could not fetch selected suppliers:", selErr);
+  }
+
+  // Fallback: If no selected suppliers in Dataverse yet, check local storage or supplierIdentities
+  let allSuppliers: Cr49f_suppliers[] = [];
+  try {
+    const suppRes = await Cr49f_suppliersService.getAll();
+    if (suppRes.success && suppRes.data) {
+      allSuppliers = suppRes.data;
+    }
+  } catch {
+    // ignore
+  }
+
+  if (selectedSuppliers.length === 0) {
+    let fallbackSuppliers: Array<{ id: string; code?: string; name?: string }> = [];
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(`rfq_invited_suppliers_${cleanRfqId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached) as Array<Record<string, string>>;
+          fallbackSuppliers = parsed.map((p, idx) => ({
+            id: cleanGuid(p.cr49f_supplierid) || p.cr49f_supplierid || `sup-${idx + 1}`,
+            code: p.cr49f_supplierid1 || `SUP-${idx + 1}`,
+            name: p.cr49f_name || "Invited Supplier",
+          }));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (fallbackSuppliers.length === 0 && supplierIdentities && supplierIdentities.length > 0) {
+      fallbackSuppliers = supplierIdentities.map((id, idx) => {
+        const cleanId = cleanGuid(id) || id;
+        const matched = allSuppliers.find(
+          (s) => cleanGuid(s.cr49f_supplierid) === cleanId || s.cr49f_supplierid1 === id
+        );
+        return {
+          id: matched?.cr49f_supplierid || cleanId,
+          code: matched?.cr49f_supplierid1 || `SUP-${idx + 1}`,
+          name: matched?.cr49f_name || "Invited Supplier",
+        };
+      });
+    }
+
+    // Auto-create missing selected suppliers in cr49f_selectedsupplierses
+    for (const fb of fallbackSuppliers) {
+      try {
+        const createSelRes = await Cr49f_selectedsuppliersesService.create({
+          "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${cleanRfqId})`,
+          cr49f_selectedsuppliernumber: fb.code || fb.id,
+          cr49f_supplierquotation: fb.name || "Invited Supplier",
+          statecode: 0,
+          statuscode: 1,
+        });
+        if (createSelRes.success && createSelRes.data) {
+          selectedSuppliers.push(createSelRes.data);
+        }
+      } catch (createSelErr) {
+        console.warn("[RfqSupplierResponseService] Could not create fallback selected supplier:", createSelErr);
+      }
+    }
+  }
+
+  // 3. Fetch PR lines associated with the Purchase Request if available
   let prLines: Cr49f_purchaserequestlines[] = [];
-  if (purchaseRequestId) {
-    const cleanPrId = cleanGuid(purchaseRequestId);
+  if (resolvedPrId) {
+    const cleanPrId = cleanGuid(resolvedPrId);
     try {
       const prLinesRes = await Cr49f_purchaserequestlinesService.getAll();
       if (prLinesRes.success && prLinesRes.data) {
@@ -220,14 +376,27 @@ export async function createRfqSupplierResponses(
     ];
   }
 
-  // 2. Fetch existing responses to prevent duplicate records
+  // 4. Fetch supplier products for price auto-fill
+  let dataverseProducts: Cr49f_supplierproducts[] = [];
+  try {
+    const prodRes = await Cr49f_supplierproductsService.getAll();
+    if (prodRes.success && prodRes.data) {
+      dataverseProducts = prodRes.data;
+    }
+  } catch {
+    // ignore
+  }
+
+  // 5. Fetch existing responses to prevent duplicate records
   let existingResponses: Cr49f_rfqsupplierresponses[] = [];
   try {
     const allResponsesRes = await Cr49f_rfqsupplierresponsesService.getAll();
     if (allResponsesRes.success && allResponsesRes.data) {
-      existingResponses = allResponsesRes.data.filter((r) =>
-        r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`)
-      );
+      existingResponses = allResponsesRes.data.filter((r) => {
+        const rfqLookup = cleanGuid(r._cr49f_rfq_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_rfq as string);
+        if (rfqLookup && rfqLookup === cleanRfqId) return true;
+        return r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`);
+      });
     }
   } catch (err) {
     console.warn("[RfqSupplierResponseService] Could not query existing responses:", err);
@@ -236,43 +405,110 @@ export async function createRfqSupplierResponses(
   let createdResponsesCount = 0;
   let createdLinesCount = 0;
 
-  for (const supplierId of supplierIds) {
-    const cleanSupId = cleanGuid(supplierId) || supplierId;
-    const responseTag = `RFQ:${cleanRfqId}|SUP:${cleanSupId}`;
+  // 6. For each selected supplier, ensure cr49f_rfqsupplierresponse and cr49f_rfqresponselines exist
+  for (const selSupp of selectedSuppliers) {
+    const selSuppId = cleanGuid(selSupp.cr49f_selectedsuppliersid);
+    const selSuppCode = selSupp.cr49f_selectedsuppliernumber || "";
+    const selSuppName = selSupp.cr49f_supplierquotation || "Invited Supplier";
 
-    // Prevent duplicate parent response record
-    let parentResponse = existingResponses.find((r) =>
-      r.cr49f_responseid?.includes(responseTag)
+    const matchedSupplierProfile = allSuppliers.find(
+      (s) =>
+        s.cr49f_supplierid1?.toLowerCase() === selSuppCode.toLowerCase() ||
+        cleanGuid(s.cr49f_supplierid) === selSuppCode.toLowerCase() ||
+        s.cr49f_name?.toLowerCase() === selSuppName.toLowerCase()
     );
+    const supplierGuid = matchedSupplierProfile ? cleanGuid(matchedSupplierProfile.cr49f_supplierid) : "";
+
+    // Check if response already exists for this selected supplier
+    let parentResponse = existingResponses.find((r) => {
+      const supLookup = cleanGuid(r._cr49f_supplier_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_supplier as string);
+      if (supLookup && selSuppId && supLookup === selSuppId) return true;
+      if (supLookup && supplierGuid && supLookup === supplierGuid) return true;
+      const respId = r.cr49f_responseid || "";
+      return (
+        (selSuppCode && respId.includes(`SUP:${selSuppCode}`)) ||
+        (supplierGuid && respId.includes(`SUP:${supplierGuid}`))
+      );
+    });
 
     let parentResponseId = parentResponse ? cleanGuid(parentResponse.cr49f_rfqsupplierresponseid) : "";
 
     if (!parentResponseId) {
-      try {
-        const createParentRes = await Cr49f_rfqsupplierresponsesService.create({
-          cr49f_responseid: responseTag,
+      // Map relationship correctly:
+      // cr49f_rfq column associates with RFQ
+      // cr49f_supplier column associates with Selected Supplier
+      // Primary ID cr49f_rfqsupplierresponseid is auto-generated by Dataverse
+      const parentPayloadStrategies: Array<Record<string, unknown>> = [
+        // Strategy 1: PascalCase lookups to Selected Supplier and RFQ
+        {
+          "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${cleanRfqId})`,
+          ...(selSuppId ? { "cr49f_Supplier@odata.bind": `/cr49f_selectedsupplierses(${selSuppId})` } : {}),
+          cr49f_responseid: `RESP-${selSuppCode || selSuppName.slice(0, 15)}`,
           cr49f_totalamount: 0,
           statecode: 0,
           statuscode: 1, // 1 = Active / Draft
-        });
+        },
+        // Strategy 2: Lowercase lookups
+        {
+          "cr49f_rfq@odata.bind": `/cr49f_requestforqoutations(${cleanRfqId})`,
+          ...(selSuppId ? { "cr49f_supplier@odata.bind": `/cr49f_selectedsupplierses(${selSuppId})` } : {}),
+          cr49f_responseid: `RESP-${selSuppCode || selSuppName.slice(0, 15)}`,
+          cr49f_totalamount: 0,
+          statecode: 0,
+          statuscode: 1,
+        },
+        // Strategy 3: Bind supplier to cr49f_suppliers if selectedsupplierses rejected
+        ...(supplierGuid
+          ? [
+              {
+                "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${cleanRfqId})`,
+                "cr49f_Supplier@odata.bind": `/cr49f_suppliers(${supplierGuid})`,
+                cr49f_responseid: `RESP-${selSuppCode || selSuppName.slice(0, 15)}`,
+                cr49f_totalamount: 0,
+                statecode: 0,
+                statuscode: 1,
+              },
+            ]
+          : []),
+        // Strategy 4: Minimal payload with RFQ binding
+        {
+          "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${cleanRfqId})`,
+          cr49f_responseid: `RESP-${selSuppCode || selSuppName.slice(0, 15)}`,
+          cr49f_totalamount: 0,
+          statecode: 0,
+          statuscode: 1,
+        },
+      ];
 
-        if (createParentRes.success && createParentRes.data) {
-          parentResponseId = cleanGuid(createParentRes.data.cr49f_rfqsupplierresponseid);
-          parentResponse = createParentRes.data;
-          createdResponsesCount++;
-          console.log(`[RfqSupplierResponseService] Created parent response ${parentResponseId} for supplier ${cleanSupId}`);
+      for (const payload of parentPayloadStrategies) {
+        try {
+          const createParentRes = await Cr49f_rfqsupplierresponsesService.create(
+            payload as Parameters<typeof Cr49f_rfqsupplierresponsesService.create>[0]
+          );
+
+          if (createParentRes.success && createParentRes.data) {
+            parentResponseId = cleanGuid(createParentRes.data.cr49f_rfqsupplierresponseid);
+            parentResponse = createParentRes.data;
+            createdResponsesCount++;
+            console.log(
+              `[RfqSupplierResponseService] Successfully created response ${parentResponseId} mapped to RFQ ${cleanRfqId} and supplier ${selSuppId || selSuppCode}`
+            );
+            break;
+          }
+        } catch (stratErr) {
+          console.warn("[RfqSupplierResponseService] Parent response strategy failed, trying next:", stratErr);
         }
-      } catch (createErr) {
-        console.warn(`[RfqSupplierResponseService] Could not create parent response for supplier ${cleanSupId}:`, createErr);
-        // Fallback simulated ID for offline/mock continuity
-        parentResponseId = `mock-resp-${cleanRfqId}-${cleanSupId}`;
+      }
+
+      // Offline/local fallback if Dataverse unavailable
+      if (!parentResponseId) {
+        parentResponseId = `mock-resp-${cleanRfqId}-${selSuppId || selSuppCode}`;
       }
     }
 
     if (!parentResponseId) continue;
 
-    // 3. Create child response lines for each PR line item
-    // First, check existing response lines for this parent to avoid duplicates
+    // 7. Create child response lines for each PR line item
     let existingLinesForResp: Cr49f_rfqresponselines[] = [];
     try {
       const allLinesRes = await Cr49f_rfqresponselinesService.getAll();
@@ -285,40 +521,76 @@ export async function createRfqSupplierResponses(
       // ignore
     }
 
-    for (const prLine of prLines) {
-      const prLineId = cleanGuid(prLine.cr49f_purchaserequestlineid) || prLine.cr49f_purchaserequestlineid;
-      const itemName = prLine.cr49f_itemname || "Line Item";
+    for (const [lineIdx, prLine] of prLines.entries()) {
+      const itemName = prLine.cr49f_itemname || `Line Item #${lineIdx + 1}`;
       const reqQty = Number(prLine.cr49f_quantity) || 1;
-      const compositeLineId = buildResponseLineId(prLineId, itemName, reqQty);
 
-      // Check if line already exists
-      const alreadyExists = existingLinesForResp.some(
-        (l) => l.cr49f_responselineid?.includes(`PRL:${prLineId}`)
+      // Find catalog price for this supplier and product
+      const unitPrice = findSupplierProductPrice(
+        supplierGuid || selSuppCode,
+        selSuppName,
+        itemName,
+        dataverseProducts
       );
 
+      const calc = calculateLineTotal(unitPrice, reqQty);
+
+      // Check if line already exists for this parent response
+      const alreadyExists = existingLinesForResp.some((l) => {
+        const lName = l.cr49f_responselineid || "";
+        if (lName === itemName) return true;
+        if (lName.includes(`PRL:${cleanGuid(prLine.cr49f_purchaserequestlineid)}`)) return true;
+        return false;
+      });
+
       if (!alreadyExists) {
-        try {
-          const linePayload = {
+        // Map relationship correctly:
+        // cr49f_rfqresponseline associates with parent cr49f_rfqsupplierresponse via cr49f_rfqsupplierresponse lookup
+        // Primary ID cr49f_rfqresponselineid is auto-generated by Dataverse
+        // cr49f_responselineid stores clean item name, NOT a composite ID
+        const linePayloadStrategies: Array<Record<string, unknown>> = [
+          {
             "cr49f_RFQSupplierResponse@odata.bind": `/cr49f_rfqsupplierresponses(${parentResponseId})`,
-            cr49f_responselineid: compositeLineId,
+            cr49f_responselineid: itemName,
             cr49f_quantity: reqQty,
-            cr49f_unitprice: 0,
+            cr49f_unitprice: unitPrice,
             cr49f_discount: 0,
             cr49f_tax: 0,
             cr49f_anyadditionalcharges: false,
             cr49f_additionalchargepercentage: 0,
-            cr49f_additionalchargesdetails: "",
-            cr49f_totalprice: 0,
+            cr49f_additionalchargesdetails: prLine.cr49f_itemdescription || "",
+            cr49f_totalprice: calc.totalPrice,
             statecode: 0 as const,
             statuscode: 1 as const,
-          };
+          },
+          {
+            "cr49f_rfqsupplierresponse@odata.bind": `/cr49f_rfqsupplierresponses(${parentResponseId})`,
+            cr49f_responselineid: itemName,
+            cr49f_quantity: reqQty,
+            cr49f_unitprice: unitPrice,
+            cr49f_discount: 0,
+            cr49f_tax: 0,
+            cr49f_anyadditionalcharges: false,
+            cr49f_additionalchargepercentage: 0,
+            cr49f_additionalchargesdetails: prLine.cr49f_itemdescription || "",
+            cr49f_totalprice: calc.totalPrice,
+            statecode: 0 as const,
+            statuscode: 1 as const,
+          },
+        ];
 
-          const lineRes = await Cr49f_rfqresponselinesService.create(linePayload);
-          if (lineRes.success && lineRes.data) {
-            createdLinesCount++;
+        for (const linePayload of linePayloadStrategies) {
+          try {
+            const lineRes = await Cr49f_rfqresponselinesService.create(
+              linePayload as Parameters<typeof Cr49f_rfqresponselinesService.create>[0]
+            );
+            if (lineRes.success && lineRes.data) {
+              createdLinesCount++;
+              break;
+            }
+          } catch (lineErr) {
+            console.warn("[RfqSupplierResponseService] Line strategy error:", lineErr);
           }
-        } catch (lineErr) {
-          console.warn(`[RfqSupplierResponseService] Could not create response line for PR line ${prLineId}:`, lineErr);
         }
       }
     }
@@ -332,6 +604,11 @@ export async function createRfqSupplierResponses(
 }
 
 /**
+ * Alias to maintain full compatibility across codebase
+ */
+export const createRfqSupplierResponses = initializeSupplierResponsesForApprovedRfq;
+
+/**
  * Retrieves all supplier responses and associated response lines for a specific RFQ.
  * Used on the Procurement side (rfqdetail.tsx).
  */
@@ -341,12 +618,13 @@ export async function getSupplierResponsesForRfq(
   const cleanRfqId = cleanGuid(rfqId);
   if (!cleanRfqId) return [];
 
-  // Query Dataverse parent responses, selected suppliers, suppliers, and response lines in parallel
-  const [respRes, selSuppRes, suppRes, linesRes] = await Promise.allSettled([
+  // Query Dataverse parent responses, selected suppliers, suppliers, PR lines, and response lines
+  const [respRes, selSuppRes, suppRes, linesRes, prLinesRes] = await Promise.allSettled([
     Cr49f_rfqsupplierresponsesService.getAll(),
     Cr49f_selectedsuppliersesService.getAll(),
     Cr49f_suppliersService.getAll(),
     Cr49f_rfqresponselinesService.getAll(),
+    Cr49f_purchaserequestlinesService.getAll(),
   ]);
 
   const allResponses: Cr49f_rfqsupplierresponses[] =
@@ -354,7 +632,7 @@ export async function getSupplierResponsesForRfq(
       ? respRes.value.data
       : [];
 
-  const allSelectedSuppliers =
+  const allSelectedSuppliers: Cr49f_selectedsupplierses[] =
     selSuppRes.status === "fulfilled" && selSuppRes.value.success && selSuppRes.value.data
       ? selSuppRes.value.data.filter((s) => cleanGuid(s._cr49f_rfq_value) === cleanRfqId)
       : [];
@@ -369,47 +647,101 @@ export async function getSupplierResponsesForRfq(
       ? linesRes.value.data
       : [];
 
-  // Filter responses matching this RFQ
-  const rfqResponses = allResponses.filter((r) =>
-    r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`)
-  );
+  const allPrLines: Cr49f_purchaserequestlines[] =
+    prLinesRes.status === "fulfilled" && prLinesRes.value.success && prLinesRes.value.data
+      ? prLinesRes.value.data
+      : [];
+
+  // Filter responses matching this RFQ via cr49f_rfq lookup OR legacy responseid tag
+  const rfqResponses = allResponses.filter((r) => {
+    const rfqLookup = cleanGuid(r._cr49f_rfq_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_rfq as string);
+    if (rfqLookup && rfqLookup === cleanRfqId) return true;
+    return r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`);
+  });
 
   const results: FullSupplierResponse[] = [];
 
-  // Combine parent responses and selected suppliers
+  // Process responses
   for (const resp of rfqResponses) {
     const respId = cleanGuid(resp.cr49f_rfqsupplierresponseid);
 
-    // Extract supplierId from composite responseid: RFQ:${rfqId}|SUP:${supplierId}
-    const supMatch = resp.cr49f_responseid?.match(/SUP:([^|]+)/);
-    const supplierId = supMatch ? supMatch[1] : "";
+    // 1. Resolve selected supplier and supplier profile via cr49f_supplier lookup
+    const supplierLookup = cleanGuid(resp._cr49f_supplier_value) || cleanGuid((resp as unknown as Record<string, unknown>).cr49f_supplier as string);
 
-    // Find supplier profile
-    const supplierProfile = allSuppliers.find(
-      (s) =>
-        cleanGuid(s.cr49f_supplierid) === supplierId ||
-        s.cr49f_supplierid1?.toLowerCase() === supplierId.toLowerCase()
+    let selSupp = allSelectedSuppliers.find(
+      (s) => cleanGuid(s.cr49f_selectedsuppliersid) === supplierLookup
     );
 
-    // Find selected supplier entry
-    const selSupp = allSelectedSuppliers.find(
-      (s) =>
-        s.cr49f_selectedsuppliernumber?.toLowerCase() === supplierId.toLowerCase() ||
-        s.cr49f_selectedsuppliernumber?.toLowerCase() === supplierProfile?.cr49f_supplierid1?.toLowerCase()
+    let supplierProfile = allSuppliers.find(
+      (s) => cleanGuid(s.cr49f_supplierid) === supplierLookup
     );
+
+    // Legacy fallback: parse SUP: from responseid
+    if (!selSupp && !supplierProfile) {
+      const supMatch = resp.cr49f_responseid?.match(/SUP:([^|]+)/);
+      const legacySupId = supMatch ? supMatch[1] : "";
+      if (legacySupId) {
+        supplierProfile = allSuppliers.find(
+          (s) =>
+            cleanGuid(s.cr49f_supplierid) === legacySupId ||
+            s.cr49f_supplierid1?.toLowerCase() === legacySupId.toLowerCase()
+        );
+        selSupp = allSelectedSuppliers.find(
+          (s) =>
+            s.cr49f_selectedsuppliernumber?.toLowerCase() === legacySupId.toLowerCase()
+        );
+      }
+    }
+
+    if (selSupp && !supplierProfile) {
+      supplierProfile = allSuppliers.find(
+        (s) =>
+          s.cr49f_supplierid1?.toLowerCase() === selSupp.cr49f_selectedsuppliernumber?.toLowerCase() ||
+          cleanGuid(s.cr49f_supplierid) === selSupp.cr49f_selectedsuppliernumber?.toLowerCase()
+      );
+    }
+
+    const supplierId =
+      supplierProfile?.cr49f_supplierid ||
+      selSupp?.cr49f_selectedsuppliersid ||
+      supplierLookup ||
+      "";
+
+    const supplierCode =
+      supplierProfile?.cr49f_supplierid1 ||
+      selSupp?.cr49f_selectedsuppliernumber ||
+      "";
 
     const supplierName =
       supplierProfile?.cr49f_name ||
       selSupp?.cr49f_supplierquotation ||
-      `Supplier (${supplierId.slice(0, 8)})`;
+      (supplierCode ? `Supplier (${supplierCode})` : "Invited Supplier");
 
-    // Lines for this response
+    // Lines for this response via cr49f_rfqsupplierresponse lookup
     const linesForResp = allLines.filter(
       (l) => cleanGuid(l._cr49f_rfqsupplierresponse_value) === respId
     );
 
-    const structuredLines: SupplierResponseLineItem[] = linesForResp.map((l) => {
-      const parsed = parseResponseLineId(l.cr49f_responselineid);
+    const structuredLines: SupplierResponseLineItem[] = linesForResp.map((l, lIdx) => {
+      let prLineId = "";
+      let itemName = l.cr49f_responselineid || `Item ${lIdx + 1}`;
+      let reqQty = Number(l.cr49f_quantity) || 1;
+
+      // Handle legacy composite ID if present
+      if (l.cr49f_responselineid?.includes("PRL:")) {
+        const parsed = parseResponseLineId(l.cr49f_responselineid);
+        prLineId = parsed.prLineId;
+        itemName = parsed.itemName;
+        reqQty = parsed.requestedQuantity || reqQty;
+      } else {
+        const matchedPrLine = allPrLines.find(
+          (pl) => pl.cr49f_itemname?.toLowerCase() === itemName.toLowerCase()
+        ) || allPrLines[lIdx];
+        if (matchedPrLine) {
+          prLineId = cleanGuid(matchedPrLine.cr49f_purchaserequestlineid);
+        }
+      }
+
       const parsedCharges = parseAdditionalCharges(l.cr49f_additionalchargesdetails);
       const anyAddl = Boolean(l.cr49f_anyadditionalcharges);
       const addlPct = Number(l.cr49f_additionalchargepercentage) || 0;
@@ -417,18 +749,18 @@ export async function getSupplierResponsesForRfq(
       const disc = Number(l.cr49f_discount) || 0;
       const tax = Number(l.cr49f_tax) || 0;
       const unitPrice = Number(l.cr49f_unitprice) || 0;
-      const qty = Number(l.cr49f_quantity) || parsed.requestedQuantity;
-      const calc = calculateLineTotal(unitPrice, qty, disc, tax, anyAddl, addlPct);
+      const offeredQty = Number(l.cr49f_quantity) || reqQty;
+      const calc = calculateLineTotal(unitPrice, offeredQty, disc, tax, anyAddl, addlPct);
       const lineTotal = Number(l.cr49f_totalprice) > 0 ? Number(l.cr49f_totalprice) : calc.totalPrice;
 
       return {
         id: cleanGuid(l.cr49f_rfqresponselineid) || l.cr49f_rfqresponselineid,
-        prLineId: parsed.prLineId,
-        itemName: parsed.itemName,
+        prLineId,
+        itemName,
         description: addlDetails || parsedCharges.comments || "",
         category: "Catalog Item",
-        requestedQuantity: parsed.requestedQuantity,
-        offeredQuantity: qty,
+        requestedQuantity: reqQty,
+        offeredQuantity: offeredQty,
         unitPrice,
         discount: disc,
         tax,
@@ -441,7 +773,7 @@ export async function getSupplierResponsesForRfq(
       };
     });
 
-    // Determine status: 2 = Submitted, or if statuscode === 1: check if saved draft or pristine invited
+    // Determine status: 2 = Submitted, or check draft vs invited
     let status: SupplierResponseStatus = "Invited";
     if (resp.statuscode === 2 || resp.statecode === 1 || resp.cr49f_responsedate) {
       status = "Submitted";
@@ -456,7 +788,7 @@ export async function getSupplierResponsesForRfq(
       responseId: respId,
       rfqId: cleanRfqId,
       supplierId,
-      supplierCode: supplierProfile?.cr49f_supplierid1 || selSupp?.cr49f_selectedsuppliernumber || "",
+      supplierCode,
       supplierName,
       supplierEmail: supplierProfile?.cr49f_email,
       status,
@@ -471,13 +803,16 @@ export async function getSupplierResponsesForRfq(
     });
   }
 
-  // Also include any selected suppliers who don't have a cr49f_rfqsupplierresponse record yet (status: Invited)
+  // Also include any selected suppliers who don't have a response record yet (e.g. pending approval)
   for (const sel of allSelectedSuppliers) {
     const selNum = sel.cr49f_selectedsuppliernumber || "";
+    const selId = cleanGuid(sel.cr49f_selectedsuppliersid);
+
     const matched = results.some(
       (r) =>
-        r.supplierCode?.toLowerCase() === selNum.toLowerCase() ||
-        r.supplierId.toLowerCase() === selNum.toLowerCase()
+        (selId && r.supplierId === selId) ||
+        (selNum && r.supplierCode?.toLowerCase() === selNum.toLowerCase()) ||
+        (selNum && r.supplierId.toLowerCase() === selNum.toLowerCase())
     );
 
     if (!matched) {
@@ -490,7 +825,7 @@ export async function getSupplierResponsesForRfq(
       results.push({
         responseId: "",
         rfqId: cleanRfqId,
-        supplierId: supplierProfile?.cr49f_supplierid || selNum,
+        supplierId: supplierProfile?.cr49f_supplierid || selId || selNum,
         supplierCode: selNum,
         supplierName: supplierProfile?.cr49f_name || sel.cr49f_supplierquotation || "Invited Supplier",
         supplierEmail: supplierProfile?.cr49f_email,
@@ -516,7 +851,7 @@ export async function getSupplierInvitations(
 ): Promise<SupplierRfqInvitation[]> {
   const cleanSupId = cleanGuid(supplierId);
 
-  // 1. Fetch all RFQs, responses, selected suppliers, and PR lines
+  // 1. Fetch all RFQs, responses, selected suppliers
   const [rfqsRes, responsesRes, selectedSuppRes] = await Promise.allSettled([
     Cr49f_requestforqoutationsService.getAll(),
     Cr49f_rfqsupplierresponsesService.getAll(),
@@ -533,21 +868,26 @@ export async function getSupplierInvitations(
       ? responsesRes.value.data
       : [];
 
-  const allSelectedSuppliers =
+  const allSelectedSuppliers: Cr49f_selectedsupplierses[] =
     selectedSuppRes.status === "fulfilled" && selectedSuppRes.value.success && selectedSuppRes.value.data
       ? selectedSuppRes.value.data
       : [];
 
-  // Filter selected suppliers and responses matching this supplier
+  // Filter selected suppliers matching this supplier identity
   const matchingSelectedSupp = allSelectedSuppliers.filter((s) => {
     const num = s.cr49f_selectedsuppliernumber?.toLowerCase() || "";
+    const selId = cleanGuid(s.cr49f_selectedsuppliersid);
     return (
       num === supplierId.toLowerCase() ||
-      (cleanSupId && num === cleanSupId.toLowerCase())
+      (cleanSupId && num === cleanSupId.toLowerCase()) ||
+      (cleanSupId && selId === cleanSupId)
     );
   });
 
   const matchingResponses = allResponses.filter((r) => {
+    const supLookup = cleanGuid(r._cr49f_supplier_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_supplier as string);
+    if (matchingSelectedSupp.some((s) => cleanGuid(s.cr49f_selectedsuppliersid) === supLookup)) return true;
+    if (cleanSupId && supLookup === cleanSupId) return true;
     const respId = r.cr49f_responseid || "";
     return (
       respId.includes(`SUP:${supplierId}`) ||
@@ -564,6 +904,8 @@ export async function getSupplierInvitations(
   }
 
   for (const r of matchingResponses) {
+    const rfqLookup = cleanGuid(r._cr49f_rfq_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_rfq as string);
+    if (rfqLookup) invitedRfqIds.add(rfqLookup);
     const match = r.cr49f_responseid?.match(/RFQ:([^|]+)/);
     if (match && match[1]) {
       const cleanRfq = cleanGuid(match[1]);
@@ -578,9 +920,11 @@ export async function getSupplierInvitations(
     if (!invitedRfqIds.has(rfqId)) continue;
 
     // Find parent response for this RFQ and supplier
-    const parentResp = matchingResponses.find((r) =>
-      r.cr49f_responseid?.includes(`RFQ:${rfqId}`)
-    );
+    const parentResp = matchingResponses.find((r) => {
+      const rfqLookup = cleanGuid(r._cr49f_rfq_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_rfq as string);
+      if (rfqLookup === rfqId) return true;
+      return r.cr49f_responseid?.includes(`RFQ:${rfqId}`);
+    });
 
     const isRewarded =
       Number(rfq.cr49f_status) === 1 ||
@@ -651,10 +995,11 @@ export async function getSupplierRfqDetails(
   }
   const rfq = rfqRes.data;
 
-  // 2. Security Check: verify supplier has an invitation
-  const [selectedSuppRes, responsesRes] = await Promise.allSettled([
+  // 2. Fetch Selected Suppliers and responses in parallel
+  const [selectedSuppRes, responsesRes, prLinesRes] = await Promise.allSettled([
     Cr49f_selectedsuppliersesService.getAll(),
     Cr49f_rfqsupplierresponsesService.getAll(),
+    Cr49f_purchaserequestlinesService.getAll(),
   ]);
 
   const selectedSupp =
@@ -662,52 +1007,68 @@ export async function getSupplierRfqDetails(
       ? selectedSuppRes.value.data.filter((s) => cleanGuid(s._cr49f_rfq_value) === cleanRfqId)
       : [];
 
-  const allResponses =
+  let allResponses =
     responsesRes.status === "fulfilled" && responsesRes.value.success && responsesRes.value.data
-      ? responsesRes.value.data.filter((r) => r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`))
+      ? responsesRes.value.data.filter((r) => {
+          const rfqLookup = cleanGuid(r._cr49f_rfq_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_rfq as string);
+          if (rfqLookup === cleanRfqId) return true;
+          return r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`);
+        })
       : [];
 
-  const hasInvitation =
-    selectedSupp.some(
-      (s) =>
-        s.cr49f_selectedsuppliernumber?.toLowerCase() === cleanSupId.toLowerCase() ||
-        s.cr49f_selectedsuppliernumber?.toLowerCase() === supplierId.toLowerCase()
-    ) ||
-    allResponses.some(
-      (r) =>
-        r.cr49f_responseid?.includes(`SUP:${cleanSupId}`) ||
-        r.cr49f_responseid?.includes(`SUP:${supplierId}`)
-    );
+  const allPrLines =
+    prLinesRes.status === "fulfilled" && prLinesRes.value.success && prLinesRes.value.data
+      ? prLinesRes.value.data
+      : [];
 
-  if (!hasInvitation) {
-    // If running in development with mock/demo supplier, allow graceful bypass only if authorized
-    console.warn(`[RfqSupplierResponseService] Authorization check for supplier ${cleanSupId} on RFQ ${cleanRfqId}`);
-  }
-
-  // 3. Find or auto-ensure parent response record
-  let parentResp = allResponses.find(
-    (r) =>
-      r.cr49f_responseid?.includes(`SUP:${cleanSupId}`) ||
-      r.cr49f_responseid?.includes(`SUP:${supplierId}`)
+  const matchedSelSupp = selectedSupp.find(
+    (s) =>
+      s.cr49f_selectedsuppliernumber?.toLowerCase() === cleanSupId.toLowerCase() ||
+      s.cr49f_selectedsuppliernumber?.toLowerCase() === supplierId.toLowerCase() ||
+      cleanGuid(s.cr49f_selectedsuppliersid) === cleanSupId.toLowerCase()
   );
+
+  const selSuppId = matchedSelSupp ? cleanGuid(matchedSelSupp.cr49f_selectedsuppliersid) : "";
+
+  // 3. Find parent response record using cr49f_supplier lookup or legacy tag
+  let parentResp = allResponses.find((r) => {
+    const supLookup = cleanGuid(r._cr49f_supplier_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_supplier as string);
+    if (selSuppId && supLookup === selSuppId) return true;
+    if (cleanSupId && supLookup === cleanSupId) return true;
+    const respId = r.cr49f_responseid || "";
+    return respId.includes(`SUP:${cleanSupId}`) || respId.includes(`SUP:${supplierId}`);
+  });
 
   let parentRespId = parentResp ? cleanGuid(parentResp.cr49f_rfqsupplierresponseid) : "";
 
-  // If no parent response exists yet, create it now along with line items
-  if (!parentRespId) {
-    console.log(`[RfqSupplierResponseService] Auto-initializing missing response records for RFQ ${cleanRfqId}`);
-    const prId = cleanGuid(rfq._cr49f_prrfq_value);
-    await createRfqSupplierResponses(cleanRfqId, [cleanSupId], prId);
+  // 4. If RFQ is Approved and no parent response exists yet (e.g. from prior runs), initialize it now
+  const isApproved =
+    Number(rfq.cr49f_status) === 1 ||
+    Boolean(rfq.cr49f_awarddate) ||
+    rfq.cr49f_statusname?.toLowerCase() === "approved";
 
-    // Re-fetch parent response
+  if (!parentRespId && isApproved) {
+    console.log(`[RfqSupplierResponseService] Initializing response for approved RFQ ${cleanRfqId}`);
+    await initializeSupplierResponsesForApprovedRfq(cleanRfqId);
+
+    // Refresh responses
     try {
       const refreshedResponses = await Cr49f_rfqsupplierresponsesService.getAll();
       if (refreshedResponses.success && refreshedResponses.data) {
-        parentResp = refreshedResponses.data.find(
-          (r) =>
-            r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`) &&
-            (r.cr49f_responseid?.includes(`SUP:${cleanSupId}`) || r.cr49f_responseid?.includes(`SUP:${supplierId}`))
-        );
+        allResponses = refreshedResponses.data.filter((r) => {
+          const rfqLookup = cleanGuid(r._cr49f_rfq_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_rfq as string);
+          if (rfqLookup === cleanRfqId) return true;
+          return r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`);
+        });
+
+        parentResp = allResponses.find((r) => {
+          const supLookup = cleanGuid(r._cr49f_supplier_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_supplier as string);
+          if (selSuppId && supLookup === selSuppId) return true;
+          if (cleanSupId && supLookup === cleanSupId) return true;
+          const respId = r.cr49f_responseid || "";
+          return respId.includes(`SUP:${cleanSupId}`) || respId.includes(`SUP:${supplierId}`);
+        });
+
         if (parentResp) {
           parentRespId = cleanGuid(parentResp.cr49f_rfqsupplierresponseid);
         }
@@ -717,7 +1078,7 @@ export async function getSupplierRfqDetails(
     }
   }
 
-  // 4. Fetch response lines
+  // 5. Fetch response lines
   let responseLines: Cr49f_rfqresponselines[] = [];
   if (parentRespId) {
     try {
@@ -732,9 +1093,27 @@ export async function getSupplierRfqDetails(
     }
   }
 
-  // 5. Structure lines
-  const structuredLines: SupplierResponseLineItem[] = responseLines.map((l) => {
-    const parsed = parseResponseLineId(l.cr49f_responselineid);
+  // 6. Structure lines
+  const structuredLines: SupplierResponseLineItem[] = responseLines.map((l, lIdx) => {
+    let prLineId = "";
+    let itemName = l.cr49f_responselineid || `Item ${lIdx + 1}`;
+    let reqQty = Number(l.cr49f_quantity) || 1;
+
+    // Handle legacy composite ID if present
+    if (l.cr49f_responselineid?.includes("PRL:")) {
+      const parsed = parseResponseLineId(l.cr49f_responselineid);
+      prLineId = parsed.prLineId;
+      itemName = parsed.itemName;
+      reqQty = parsed.requestedQuantity || reqQty;
+    } else {
+      const matchedPrLine = allPrLines.find(
+        (pl) => pl.cr49f_itemname?.toLowerCase() === itemName.toLowerCase()
+      ) || allPrLines[lIdx];
+      if (matchedPrLine) {
+        prLineId = cleanGuid(matchedPrLine.cr49f_purchaserequestlineid);
+      }
+    }
+
     const parsedCharges = parseAdditionalCharges(l.cr49f_additionalchargesdetails);
     const anyAddl = Boolean(l.cr49f_anyadditionalcharges);
     const addlPct = Number(l.cr49f_additionalchargepercentage) || 0;
@@ -742,18 +1121,18 @@ export async function getSupplierRfqDetails(
     const disc = Number(l.cr49f_discount) || 0;
     const tax = Number(l.cr49f_tax) || 0;
     const unitPrice = Number(l.cr49f_unitprice) || 0;
-    const qty = Number(l.cr49f_quantity) || parsed.requestedQuantity;
-    const calc = calculateLineTotal(unitPrice, qty, disc, tax, anyAddl, addlPct);
+    const offeredQty = Number(l.cr49f_quantity) || reqQty;
+    const calc = calculateLineTotal(unitPrice, offeredQty, disc, tax, anyAddl, addlPct);
     const lineTotal = Number(l.cr49f_totalprice) > 0 ? Number(l.cr49f_totalprice) : calc.totalPrice;
 
     return {
       id: cleanGuid(l.cr49f_rfqresponselineid) || l.cr49f_rfqresponselineid,
-      prLineId: parsed.prLineId,
-      itemName: parsed.itemName,
+      prLineId,
+      itemName,
       description: addlDetails || parsedCharges.comments || "",
       category: "Catalog Item",
-      requestedQuantity: parsed.requestedQuantity,
-      offeredQuantity: qty,
+      requestedQuantity: reqQty,
+      offeredQuantity: offeredQty,
       unitPrice,
       discount: disc,
       tax,
@@ -781,7 +1160,8 @@ export async function getSupplierRfqDetails(
     responseId: parentRespId,
     rfqId: cleanRfqId,
     supplierId: cleanSupId,
-    supplierName: "Current Supplier",
+    supplierCode: matchedSelSupp?.cr49f_selectedsuppliernumber || "",
+    supplierName: matchedSelSupp?.cr49f_supplierquotation || "Current Supplier",
     status,
     statuscode: parentResp?.statuscode ?? 1,
     statecode: parentResp?.statecode ?? 0,

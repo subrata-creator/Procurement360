@@ -945,6 +945,13 @@ export async function approveTask(
       if (typeof window !== "undefined") {
         localStorage.setItem(`rfq_status_${parentRFQ}`, "Approved");
       }
+      // Initialize supplier responses and response lines now that all RFQ tasks are approved
+      try {
+        const { initializeSupplierResponsesForApprovedRfq } = await import("./RfqSupplierResponseService");
+        await initializeSupplierResponsesForApprovedRfq(parentRFQ);
+      } catch (respInitErr) {
+        console.warn("[ApprovalWorkflow] Could not initialize supplier responses on RFQ approval:", respInitErr);
+      }
     }
   }
 
@@ -1575,20 +1582,7 @@ export async function submitChangesNeededUpdate(params: {
           localStorage.setItem(`rfq_invited_suppliers_${cleanRFQId}`, JSON.stringify(chosenSuppliers));
         }
 
-        // 4. Initialize supplier responses dynamically
-        try {
-          const { createRfqSupplierResponses } = await import("./RfqSupplierResponseService");
-          const supplierIdentities = chosenSuppliers.map(
-            (s) => s.cr49f_supplierid1 || s.cr49f_supplierid
-          );
-          await createRfqSupplierResponses(
-            cleanRFQId,
-            supplierIdentities,
-            params.updatedRFQ.purchaseRequestId
-          );
-        } catch (respErr) {
-          console.warn("[ApprovalWorkflow] Could not initialize responses:", respErr);
-        }
+        // 4. Supplier responses will be initialized only when all RFQ tasks get approved
       } catch (supSyncErr) {
         console.warn("[ApprovalWorkflow] Error syncing suppliers for RFQ:", supSyncErr);
       }

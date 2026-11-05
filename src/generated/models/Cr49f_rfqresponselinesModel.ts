@@ -22,6 +22,7 @@ export interface Cr49f_rfqresponselinesBase {
   cr49f_responselineid?: string;
   cr49f_rfqresponselineid: string;
   "cr49f_RFQSupplierResponse@odata.bind"?: string;
+  "cr49f_rfqsupplierresponse@odata.bind"?: string;
   cr49f_tax?: number;
   cr49f_totalprice?: number;
   cr49f_unitprice?: number;
