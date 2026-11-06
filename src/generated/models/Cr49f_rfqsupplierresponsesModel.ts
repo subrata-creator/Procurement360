@@ -21,6 +21,10 @@ export interface Cr49f_rfqsupplierresponsesBase {
   cr49f_rfqsupplierresponseid: string;
   cr49f_totalamount?: number;
   cr49f_warranty?: string;
+  "cr49f_RFQ@odata.bind"?: string;
+  "cr49f_rfq@odata.bind"?: string;
+  "cr49f_Supplier@odata.bind"?: string;
+  "cr49f_supplier@odata.bind"?: string;
   importsequencenumber?: number;
   overriddencreatedon?: string;
   statecode: Cr49f_rfqsupplierresponsesstatecode;
@@ -36,6 +40,10 @@ export interface Cr49f_rfqsupplierresponses extends Cr49f_rfqsupplierresponsesBa
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
+  cr49f_rfq?: object;
+  _cr49f_rfq_value?: string;
+  cr49f_supplier?: object;
+  _cr49f_supplier_value?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

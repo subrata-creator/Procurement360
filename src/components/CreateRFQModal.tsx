@@ -7,12 +7,15 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   FileText,
+  Hash,
   Info,
   LoaderCircle,
   Mail,
   MapPin,
   Phone,
+  Plus,
   RotateCw,
   Save,
   Search,
@@ -34,7 +37,6 @@ import {
   createApprovalTasksForObject,
   getTaskApprovalStatusLabel,
 } from "../Services/ApprovalWorkflowService";
-import { createRfqSupplierResponses } from "../Services/RfqSupplierResponseService";
 import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
 import type {
   Cr49f_purchaserequests,
@@ -268,7 +270,7 @@ export function hasExistingRfq(
       if (
         item === prNumber ||
         item.startsWith(`${prNumber} `) ||
-        item.startsWith(`${prNumber}—`) ||
+        item.startsWith(`${prNumber}â€”`) ||
         item.startsWith(`${prNumber}-`)
       ) {
         return true;
@@ -1250,19 +1252,6 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         console.warn("Could not bind RFQ to suppliers:", supErr);
       }
 
-      // 2b. Create cr49f_rfqsupplierresponse and cr49f_rfqresponseline records for each supplier
-      try {
-        const supplierIdentities = chosenSuppliers.map(
-          (s) => s.cr49f_supplierid1 || s.cr49f_supplierid
-        );
-        await createRfqSupplierResponses(
-          createdRfqId,
-          supplierIdentities,
-          formData.purchaseRequestId
-        );
-      } catch (respInitErr) {
-        console.warn("Could not initialize supplier responses and lines:", respInitErr);
-      }
 
       // 3. Cache invited suppliers locally for instant display on RFQ Summary/Detail
       try {
@@ -1342,7 +1331,11 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         }
       }}
     >
-      <div className="rfq-modal-container" role="dialog" aria-modal="true">
+      <div
+        className={`rfq-modal-container ${isSuccess ? "rfq-modal-container-success" : ""}`}
+        role="dialog"
+        aria-modal="true"
+      >
         {/* Toast Notification */}
         {toastMessage && (
           <div className="rfq-toast" role="status">
@@ -1354,48 +1347,136 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         {isSuccess ? (
           /* SUCCESS VIEW */
           <div className="rfq-success-container">
+            {/* Top-Right Close Button */}
+            <button
+              type="button"
+              className="rfq-success-close-btn"
+              onClick={onClose}
+              aria-label="Close modal"
+              title="Close modal"
+            >
+              <X size={18} />
+            </button>
+
             <div className="rfq-success-icon-wrap">
-              <CheckCircle2 size={44} className="rfq-success-icon" />
+              <CheckCircle2 size={40} className="rfq-success-icon" />
             </div>
             <h2 className="rfq-success-title">RFQ Created Successfully!</h2>
             <p className="rfq-success-desc">
-              Your Request for Quotation <strong>{createdRfqInfo?.rfqNumber || createdRfqInfo?.title}</strong>{" "}
-              has been created in Dataverse with status{" "}
-              <span className="rfq-status-badge">Pending</span>.
+              Your Request for Quotation{" "}
+              <strong>{createdRfqInfo?.rfqNumber || createdRfqInfo?.title}</strong> has been
+              created in Dataverse with status{" "}
+              <span className="rfq-status-badge">
+                <span className="rfq-status-dot" />
+                Pending
+              </span>
+              .
             </p>
 
             <div className="rfq-success-details-card">
               <div className="rfq-success-row">
-                <span>RFQ Number:</span>
-                <strong>{createdRfqInfo?.rfqNumber || "Pending Generation"}</strong>
-              </div>
-              <div className="rfq-success-row">
-                <span>Title:</span>
-                <strong>{createdRfqInfo?.title}</strong>
-              </div>
-              <div className="rfq-success-row">
-                <span>Delivery Location:</span>
-                <span>{createdRfqInfo?.deliveryLocation || formData.deliveryLocation || "From Selected Purchase Request"}</span>
-              </div>
-              <div className="rfq-success-row">
-                <span>Submission Deadline:</span>
-                <span>
-                  {formData.submissionDeadline
-                    ? new Date(formData.submissionDeadline).toLocaleString()
-                    : "—"}
+                <span className="rfq-success-label">
+                  <Hash size={14} className="rfq-success-row-icon" />
+                  RFQ Number
+                </span>
+                <span className="rfq-number-pill">
+                  {createdRfqInfo?.rfqNumber || "Pending Generation"}
                 </span>
               </div>
+
+              <div className="rfq-success-divider" />
+
               <div className="rfq-success-row">
-                <span>Invited Suppliers:</span>
-                <strong>
-                  {createdRfqInfo?.invitedCount
-                    ? `${createdRfqInfo.invitedCount} supplier${createdRfqInfo.invitedCount === 1 ? "" : "s"} (${createdRfqInfo.invitedNames.slice(0, 3).join(", ")}${createdRfqInfo.invitedNames.length > 3 ? "..." : ""})`
-                    : "None selected"}
+                <span className="rfq-success-label">
+                  <FileText size={14} className="rfq-success-row-icon" />
+                  Title
+                </span>
+                <strong className="rfq-success-value">
+                  {createdRfqInfo?.title || "Untitled"}
                 </strong>
+              </div>
+
+              <div className="rfq-success-divider" />
+
+              <div className="rfq-success-row">
+                <span className="rfq-success-label">
+                  <MapPin size={14} className="rfq-success-row-icon" />
+                  Delivery Location
+                </span>
+                <span className="rfq-success-value">
+                  {createdRfqInfo?.deliveryLocation ||
+                    formData.deliveryLocation ||
+                    "From Selected Purchase Request"}
+                </span>
+              </div>
+
+              <div className="rfq-success-divider" />
+
+              <div className="rfq-success-row">
+                <span className="rfq-success-label">
+                  <Calendar size={14} className="rfq-success-row-icon" />
+                  Submission Deadline
+                </span>
+                <span className="rfq-success-value">
+                  {formData.submissionDeadline
+                    ? new Date(formData.submissionDeadline).toLocaleString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "Not specified"}
+                </span>
+              </div>
+
+              <div className="rfq-success-divider" />
+
+              <div className="rfq-success-row rfq-success-suppliers-row">
+                <span className="rfq-success-label">
+                  <Users size={14} className="rfq-success-row-icon" />
+                  Invited Suppliers
+                </span>
+                <div className="rfq-success-suppliers-val">
+                  {createdRfqInfo?.invitedCount ? (
+                    <div className="rfq-invited-chips-wrap">
+                      <span className="rfq-suppliers-count-badge">
+                        {createdRfqInfo.invitedCount}{" "}
+                        {createdRfqInfo.invitedCount === 1 ? "supplier" : "suppliers"}
+                      </span>
+                      <div className="rfq-invited-chips">
+                        {createdRfqInfo.invitedNames.slice(0, 3).map((name, idx) => (
+                          <span key={idx} className="rfq-supplier-chip" title={name}>
+                            <Building2 size={11} className="rfq-chip-icon" />
+                            <span className="rfq-chip-text">{name}</span>
+                          </span>
+                        ))}
+                        {createdRfqInfo.invitedNames.length > 3 && (
+                          <span
+                            className="rfq-supplier-chip rfq-chip-more"
+                            title={createdRfqInfo.invitedNames.slice(3).join(", ")}
+                          >
+                            +{createdRfqInfo.invitedNames.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="rfq-success-value text-muted">None selected</span>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="rfq-success-actions">
+              <button
+                type="button"
+                className="rfq-btn rfq-btn-outline"
+                onClick={onClose}
+              >
+                <X size={15} />
+                Close
+              </button>
               <button
                 type="button"
                 className="rfq-btn rfq-btn-secondary"
@@ -1410,6 +1491,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                   setActiveStep(1);
                 }}
               >
+                <Plus size={15} />
                 Create Another RFQ
               </button>
               <button
@@ -1417,6 +1499,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                 className="rfq-btn rfq-btn-primary"
                 onClick={onClose}
               >
+                <ExternalLink size={15} />
                 View in RFQ List
               </button>
             </div>
@@ -1556,7 +1639,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                             key={pr.cr49f_purchaserequestid}
                             value={pr.cr49f_purchaserequestid}
                           >
-                            {pr.cr49f_prnumber || "PR"} — {pr.cr49f_prtitle || "Untitled"}
+                            {pr.cr49f_prnumber || "PR"} - {pr.cr49f_prtitle || "Untitled"}
                           </option>
                         ))}
                       </select>

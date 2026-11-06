@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Calendar,
   Check,
+  CheckCircle2,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  FileText,
+  Hash,
   LoaderCircle,
-  Package,
-  Search,
-  X,
+  MapPin,
   Minus,
+  Package,
   Plus,
+  Search,
   ShoppingCart,
+  X,
 } from "lucide-react";
 
 import { Cr49f_productsesService } from "../generated/services/Cr49f_productsesService";
@@ -26,6 +32,16 @@ interface CreatePRModalProps {
   onClose: () => void;
   onCreated?: () => void;
   onViewPurchaseRequest?: (id?: string) => void;
+}
+
+interface CreatedPrSummary {
+  recordId: string;
+  prNumber: string;
+  title: string;
+  deliveryLocation: string;
+  requiredDeliveryDate: string;
+  itemsCount: number;
+  items: Array<{ name: string; quantity: number; category?: string }>;
 }
 
 interface RequestForm {
@@ -71,9 +87,7 @@ export default function CreatePRModal({
 }: CreatePRModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [createdPRRecordId, setCreatedPRRecordId] = useState<string | null>(null);
-  const [createdPRTitle, setCreatedPRTitle] = useState("");
-  const [createdItemCount, setCreatedItemCount] = useState(0);
+  const [createdPRSummary, setCreatedPRSummary] = useState<CreatedPrSummary | null>(null);
 
   const [form, setForm] = useState<RequestForm>(initialForm);
 
@@ -408,11 +422,35 @@ export default function CreatePRModal({
 
       // All records have been created successfully. Keep the modal open
       // and show the success screen only after every line item is saved.
-      setCreatedPRRecordId(createdPRId);
-      setCreatedPRTitle(form.title.trim());
-      setCreatedItemCount(
-        selectedItems.reduce((sum, item) => sum + item.quantity, 0)
-      );
+      let prNumber = prResult.data.cr49f_prnumber || "";
+      if (!prNumber && createdPRId) {
+        try {
+          const freshPr = await Cr49f_purchaserequestsService.get(createdPRId, {
+            select: ["cr49f_prnumber", "cr49f_prtitle", "cr49f_deliverylocation", "cr49f_requireddeliverydate"],
+          });
+          if (freshPr.data?.cr49f_prnumber) {
+            prNumber = freshPr.data.cr49f_prnumber;
+          }
+        } catch {
+          // ignore error if quick get fails
+        }
+      }
+
+      const summary: CreatedPrSummary = {
+        recordId: createdPRId,
+        prNumber: prNumber || "Generated",
+        title: form.title.trim(),
+        deliveryLocation: form.deliveryLocation.trim() || "Not specified",
+        requiredDeliveryDate: form.requiredDeliveryDate,
+        itemsCount: selectedItems.reduce((sum, item) => sum + item.quantity, 0),
+        items: selectedItems.map((item) => ({
+          name: item.product.cr49f_productname || "Item",
+          quantity: item.quantity,
+          category: item.product.cr49f_category,
+        })),
+      };
+
+      setCreatedPRSummary(summary);
       setIsSuccess(true);
       onCreated?.();
     } catch (error: unknown) {
@@ -430,6 +468,18 @@ export default function CreatePRModal({
     }
   };
 
+  const handleCreateAnother = () => {
+    setForm(initialForm);
+    setSelectedProducts({});
+    setErrors({});
+    setSearch("");
+    setSelectedCategory("All");
+    setSubmitError("");
+    setCreatedPRSummary(null);
+    setStep(1);
+    setIsSuccess(false);
+  };
+
   return (
     <div
       className="create-pr-overlay"
@@ -443,37 +493,135 @@ export default function CreatePRModal({
       }}
     >
       <section
-        className={`create-pr-modal ${isSuccess || step === 2 ? "create-pr-modal-products" : ""} ${isSuccess ? "create-pr-success-modal" : ""}`}
+        className={`create-pr-modal ${isSuccess ? "create-pr-success-modal" : step === 2 ? "create-pr-modal-products" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={isSuccess ? "create-pr-success-title" : "create-pr-title"}
       >
         {isSuccess ? (
-          <div className="create-pr-success">
+          <div className="create-pr-success-container">
+            {/* Top-Right Close Button */}
             <button
               type="button"
-              className="create-pr-close create-pr-success-close"
-              aria-label="Close"
+              className="create-pr-success-close-btn"
+              aria-label="Close modal"
               onClick={onClose}
               title="Close modal"
             >
-              <X size={17} />
+              <X size={18} />
             </button>
 
-            <div className="create-pr-success-icon">
-              <Check size={25} strokeWidth={2.5} />
+            <div className="create-pr-success-icon-wrap">
+              <CheckCircle2 size={40} className="create-pr-success-icon" />
             </div>
 
-            <h2 id="create-pr-success-title">Purchase Request submitted</h2>
-
-            <p>
-              <strong>{createdPRTitle}</strong> was created with {createdItemCount}{" "}
-              {createdItemCount === 1 ? "item" : "items"}.
+            <h2 id="create-pr-success-title" className="create-pr-success-title">
+              Purchase Request Submitted!
+            </h2>
+            <p className="create-pr-success-desc">
+              Your Purchase Request{" "}
+              <strong>{createdPRSummary?.prNumber || createdPRSummary?.title || "PR"}</strong>{" "}
+              has been submitted to Dataverse with status{" "}
+              <span className="create-pr-status-badge">
+                <span className="create-pr-status-dot" />
+                Pending Approval
+              </span>
+              .
             </p>
+
+            <div className="create-pr-success-details-card">
+              <div className="create-pr-success-row">
+                <span className="create-pr-success-label">
+                  <Hash size={14} className="create-pr-success-row-icon" />
+                  PR Number
+                </span>
+                <span className="create-pr-number-pill">
+                  {createdPRSummary?.prNumber || "Generated"}
+                </span>
+              </div>
+
+              <div className="create-pr-success-divider" />
+
+              <div className="create-pr-success-row">
+                <span className="create-pr-success-label">
+                  <FileText size={14} className="create-pr-success-row-icon" />
+                  Title
+                </span>
+                <strong className="create-pr-success-value">
+                  {createdPRSummary?.title || form.title || "Untitled PR"}
+                </strong>
+              </div>
+
+              <div className="create-pr-success-divider" />
+
+              <div className="create-pr-success-row">
+                <span className="create-pr-success-label">
+                  <MapPin size={14} className="create-pr-success-row-icon" />
+                  Delivery Location
+                </span>
+                <span className="create-pr-success-value">
+                  {createdPRSummary?.deliveryLocation || "Not specified"}
+                </span>
+              </div>
+
+              <div className="create-pr-success-divider" />
+
+              <div className="create-pr-success-row">
+                <span className="create-pr-success-label">
+                  <Calendar size={14} className="create-pr-success-row-icon" />
+                  Required By Date
+                </span>
+                <span className="create-pr-success-value">
+                  {createdPRSummary?.requiredDeliveryDate
+                    ? new Date(createdPRSummary.requiredDeliveryDate).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "Not specified"}
+                </span>
+              </div>
+
+              <div className="create-pr-success-divider" />
+
+              <div className="create-pr-success-row create-pr-success-items-row">
+                <span className="create-pr-success-label">
+                  <Package size={14} className="create-pr-success-row-icon" />
+                  Requested Items
+                </span>
+                <div className="create-pr-success-items-val">
+                  <div className="create-pr-items-chips-wrap">
+                    <span className="create-pr-items-count-badge">
+                      {createdPRSummary?.itemsCount || 0}{" "}
+                      {(createdPRSummary?.itemsCount || 0) === 1 ? "unit" : "units"} (
+                      {createdPRSummary?.items.length || 0}{" "}
+                      {(createdPRSummary?.items.length || 0) === 1 ? "item" : "items"})
+                    </span>
+                    <div className="create-pr-items-chips">
+                      {createdPRSummary?.items.slice(0, 3).map((item, idx) => (
+                        <span key={idx} className="create-pr-item-chip" title={`${item.name} (${item.quantity} qty)`}>
+                          <Package size={11} className="create-pr-chip-icon" />
+                          <span className="create-pr-chip-text">{item.name} × {item.quantity}</span>
+                        </span>
+                      ))}
+                      {(createdPRSummary?.items.length || 0) > 3 && (
+                        <span
+                          className="create-pr-item-chip create-pr-chip-more"
+                          title={createdPRSummary?.items.slice(3).map((i) => `${i.name} × ${i.quantity}`).join(", ")}
+                        >
+                          +{(createdPRSummary?.items.length || 0) - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="create-pr-success-actions">
               <button
                 type="button"
-                className="create-pr-discard"
+                className="create-pr-btn create-pr-btn-close-subtle"
                 onClick={onClose}
               >
                 Close
@@ -481,32 +629,22 @@ export default function CreatePRModal({
 
               <button
                 type="button"
-                className="create-pr-discard"
-                onClick={() => {
-                  setForm(initialForm);
-                  setSelectedProducts({});
-                  setErrors({});
-                  setSearch("");
-                  setSelectedCategory("All");
-                  setSubmitError("");
-                  setCreatedPRRecordId(null);
-                  setCreatedPRTitle("");
-                  setCreatedItemCount(0);
-                  setStep(1);
-                  setIsSuccess(false);
-                }}
+                className="create-pr-btn create-pr-btn-secondary"
+                onClick={handleCreateAnother}
               >
+                <Plus size={14} />
                 Create Another
               </button>
 
               <button
                 type="button"
-                className="create-pr-view-request"
+                className="create-pr-btn create-pr-btn-primary"
                 onClick={() => {
                   onClose();
-                  onViewPurchaseRequest?.(createdPRRecordId || undefined);
+                  onViewPurchaseRequest?.(createdPRSummary?.recordId || undefined);
                 }}
               >
+                <Eye size={14} />
                 View Purchase Request
               </button>
             </div>

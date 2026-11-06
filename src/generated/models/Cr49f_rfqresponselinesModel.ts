@@ -22,6 +22,7 @@ export interface Cr49f_rfqresponselinesBase {
   cr49f_responselineid?: string;
   cr49f_rfqresponselineid: string;
   "cr49f_RFQSupplierResponse@odata.bind"?: string;
+  "cr49f_rfqsupplierresponse@odata.bind"?: string;
   cr49f_tax?: number;
   cr49f_totalprice?: number;
   cr49f_unitprice?: number;
@@ -57,4 +58,5 @@ export interface Cr49f_rfqresponselines extends Cr49f_rfqresponselinesBase {
   _owningteam_value?: string;
   owninguser?: object;
   _owninguser_value?: string;
+}
 }
