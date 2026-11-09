@@ -29,6 +29,18 @@
         "workflowDisplayName": "SearchSupplier",
         "workflowName": "334b415d-6637-497a-8547-4bac37c68d2d"
       }
+    },
+    "2b6b7495-02e4-440e-ab80-7cb3b244f45f": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "generateaiinsights"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "20c6d4e5-68dc-f111-84e8-70a8a5a68669",
+        "workflowDisplayName": "Generate AI Insights",
+        "workflowName": "932dbe93-3b34-e2ff-35a8-7dd48d778f02"
+      }
     }
   },
   "databaseReferences": {

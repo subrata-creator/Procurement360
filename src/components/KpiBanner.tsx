@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { KpiItem, KpiForecastDetails } from "../types/dashboard";
+import type { KpiItem, KpiForecastDetails, KpiSourcingDetails } from "../types/dashboard";
 import {
   ShoppingCart,
   ClipboardList,
@@ -13,17 +13,24 @@ import {
   Sparkles,
   AlertCircle,
 } from "lucide-react";
-import {
-  PROCUREMENT_BUDGET_REMAINING_USD,
-  PROCUREMENT_BUDGET_USD,
-} from "../data/procurementBudget";
+
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import { Cr49f_supplierproductsService } from "../generated/services/Cr49f_supplierproductsService";
+import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
+import { Cr49f_rfqsupplierresponsesService } from "../generated/services/Cr49f_rfqsupplierresponsesService";
+import { Cr49f_rfqresponselinesService } from "../generated/services/Cr49f_rfqresponselinesService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
+import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
+import type { Cr49f_supplierproducts } from "../generated/models/Cr49f_supplierproductsModel";
+import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
+import type { Cr49f_rfqsupplierresponses } from "../generated/models/Cr49f_rfqsupplierresponsesModel";
+import type { Cr49f_rfqresponselines } from "../generated/models/Cr49f_rfqresponselinesModel";
+import { calculateSourcingRecommendation } from "../utils/sourcingRecommendation";
+import { calculateBudgetWatchInsight } from "../utils/procurementIntelligence";
 
-const ALLOCATED = PROCUREMENT_BUDGET_USD / 1_000_000;
-const REMAINING = PROCUREMENT_BUDGET_REMAINING_USD / 1_000_000;
-const usedPct = Math.round(((ALLOCATED - REMAINING) / ALLOCATED) * 100);
+
 
 const icons: Record<string, React.ReactNode> = {
   cart: <ShoppingCart size={18} />,
@@ -325,7 +332,8 @@ const KpiInsight: React.FC<{
   tone: string;
   trend?: KpiItem["insightTrend"];
   forecastDetails?: KpiForecastDetails;
-}> = ({ label, text, tone, trend, forecastDetails }) => {
+  sourcingDetails?: KpiSourcingDetails;
+}> = ({ label, text, tone, trend, forecastDetails, sourcingDetails }) => {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0, placement: "above" as "above" | "below" });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -443,7 +451,12 @@ const KpiInsight: React.FC<{
         >
           <div className="xd-kpi-tooltip-heading">
             <span>
-              <Sparkles size={14} /> {forecastDetails ? "AI Forecast" : "AI Insight"}
+              <Sparkles size={14} />{" "}
+              {forecastDetails
+                ? "AI Forecast"
+                : sourcingDetails
+                ? "AI Sourcing Recommendation"
+                : "AI Insight"}
             </span>
             {trend === "positive" && (
               <span className="xd-kpi-tooltip-trend positive">
@@ -457,6 +470,12 @@ const KpiInsight: React.FC<{
             )}
           </div>
           <p className="xd-kpi-tooltip-summary">{text}</p>
+          {sourcingDetails?.recommendationAction && (
+            <div className="xd-kpi-tooltip-action">
+              <span className="xd-kpi-tooltip-action-title">Recommendation</span>
+              <p className="xd-kpi-tooltip-action-text">{sourcingDetails.recommendationAction}</p>
+            </div>
+          )}
           {forecastDetails && (
             <div className="xd-kpi-tooltip-metrics">
               <div className="xd-kpi-tooltip-row">
@@ -479,6 +498,24 @@ const KpiInsight: React.FC<{
               </div>
             </div>
           )}
+          {sourcingDetails && (
+            <div className="xd-kpi-tooltip-metrics">
+              <div className="xd-kpi-tooltip-row">
+                <span className="xd-kpi-tooltip-metric-label">Surging demand products</span>
+                <span className="xd-kpi-tooltip-metric-val">{sourcingDetails.surgingProductsText}</span>
+              </div>
+              <div className="xd-kpi-tooltip-row">
+                <span className="xd-kpi-tooltip-metric-label">Matching available suppliers</span>
+                <strong className="xd-kpi-tooltip-metric-val">{sourcingDetails.availableSuppliersCount}</strong>
+              </div>
+              {sourcingDetails.topSuppliersText && sourcingDetails.topSuppliersText !== "N/A" && (
+                <div className="xd-kpi-tooltip-row">
+                  <span className="xd-kpi-tooltip-metric-label">Top recommended</span>
+                  <span className="xd-kpi-tooltip-metric-val">{sourcingDetails.topSuppliersText}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>,
         document.body,
       )}
@@ -499,15 +536,35 @@ const KpiBanner: React.FC = () => {
   const [isLoadingPr, setIsLoadingPr] = useState(true);
   const [prError, setPrError] = useState(false);
   const [prRecords, setPrRecords] = useState<Cr49f_purchaserequests[]>([]);
+  const [prLines, setPrLines] = useState<Cr49f_purchaserequestlines[]>([]);
+  const [supplierProducts, setSupplierProducts] = useState<Cr49f_supplierproducts[]>([]);
+  const [suppliers, setSuppliers] = useState<Cr49f_suppliers[]>([]);
+  const [rfqResponses, setRfqResponses] = useState<Cr49f_rfqsupplierresponses[]>([]);
+  const [rfqLines, setRfqLines] = useState<Cr49f_rfqresponselines[]>([]);
+  const [isLoadingSourcing, setIsLoadingSourcing] = useState(true);
+  const [sourcingError, setSourcingError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadKpiCounts = async () => {
       try {
-        const [prsRes, rfqsRes] = await Promise.allSettled([
+        const [
+          prsRes,
+          rfqsRes,
+          prLinesRes,
+          supProdsRes,
+          supsRes,
+          rfqRespsRes,
+          rfqLinesRes,
+        ] = await Promise.allSettled([
           Cr49f_purchaserequestsService.getAll(),
           Cr49f_requestforqoutationsService.getAll(),
+          Cr49f_purchaserequestlinesService.getAll(),
+          Cr49f_supplierproductsService.getAll(),
+          Cr49f_suppliersService.getAll(),
+          Cr49f_rfqsupplierresponsesService.getAll(),
+          Cr49f_rfqresponselinesService.getAll(),
         ]);
 
         if (!isMounted) return;
@@ -543,10 +600,30 @@ const KpiBanner: React.FC = () => {
           const spark = computeSparkline(rfqRecords, [4, 3, 6, 5, 8, 7, 9, 10]);
           setRfqSpark(spark);
         }
+
+        // Handle Sourcing Data
+        if (prLinesRes.status === "fulfilled" && prLinesRes.value.success && prLinesRes.value.data) {
+          setPrLines(prLinesRes.value.data);
+        }
+        if (supProdsRes.status === "fulfilled" && supProdsRes.value.success && supProdsRes.value.data) {
+          setSupplierProducts(supProdsRes.value.data);
+        }
+        if (supsRes.status === "fulfilled" && supsRes.value.success && supsRes.value.data) {
+          setSuppliers(supsRes.value.data);
+        }
+        if (rfqRespsRes.status === "fulfilled" && rfqRespsRes.value.success && rfqRespsRes.value.data) {
+          setRfqResponses(rfqRespsRes.value.data);
+        }
+        if (rfqLinesRes.status === "fulfilled" && rfqLinesRes.value.success && rfqLinesRes.value.data) {
+          setRfqLines(rfqLinesRes.value.data);
+        }
+        setIsLoadingSourcing(false);
       } catch (err) {
         if (!isMounted) return;
         setIsLoadingPr(false);
         setPrError(true);
+        setIsLoadingSourcing(false);
+        setSourcingError(true);
         console.warn("Could not load dynamic PR/RFQ counts for KPI banner:", err);
       }
     };
@@ -567,6 +644,33 @@ const KpiBanner: React.FC = () => {
   const prForecastData = useMemo(() => {
     return calculatePRForecast(prRecords, isLoadingPr, prError);
   }, [prRecords, isLoadingPr, prError]);
+
+  // Compute dynamic AI Sourcing Recommendation from Dataverse records
+  const budgetWatchInsight = useMemo(() => {
+    return calculateBudgetWatchInsight(prRecords, prLines);
+  }, [prRecords, prLines]);
+
+  const rfqSourcingData = useMemo(() => {
+    return calculateSourcingRecommendation(
+      prLines,
+      prRecords,
+      supplierProducts,
+      suppliers,
+      rfqResponses,
+      rfqLines,
+      isLoadingSourcing,
+      sourcingError
+    );
+  }, [
+    prLines,
+    prRecords,
+    supplierProducts,
+    suppliers,
+    rfqResponses,
+    rfqLines,
+    isLoadingSourcing,
+    sourcingError,
+  ]);
 
   const kpis: KpiItem[] = useMemo(() => [
     {
@@ -591,8 +695,9 @@ const KpiBanner: React.FC = () => {
       trend: rfqTrend.trend,
       trendUp: rfqTrend.trendUp,
       spark: rfqSpark,
-      insight: "82% convert to orders, up 12% from last month.",
-      insightTrend: "positive",
+      insight: rfqSourcingData.summaryText,
+      insightTrend: rfqSourcingData.insightTrend,
+      sourcingDetails: rfqSourcingData.details ?? undefined,
     },
     {
       label: "Orders",
@@ -619,20 +724,12 @@ const KpiBanner: React.FC = () => {
       value: "USD 10.00M",
       icon: "budget",
       tone: "blue",
-      progress: usedPct,
-      progressLabel: `${usedPct}% utilized`,
-      insight: "IT department is at 85% of its allocation. Review upcoming requests.",
-      insightTrend: "attention",
+      progress: budgetWatchInsight.utilizationPct,
+      progressLabel: `${budgetWatchInsight.utilizationPct}% utilized`,
+      insight: budgetWatchInsight.description,
+      insightTrend: budgetWatchInsight.severity === "critical" || budgetWatchInsight.severity === "warning" ? "attention" : "positive",
     },
-    {
-      label: "Remaining Budget",
-      value: "USD 9.90M",
-      icon: "money",
-      tone: "violet",
-      progress: 100 - usedPct,
-      progressLabel: `${100 - usedPct}% available`,
-    },
-  ], [prCount, rfqCount, rfqTrend, prSpark, rfqSpark, prForecastData]);
+  ], [prCount, rfqCount, rfqTrend, prSpark, rfqSpark, prForecastData, rfqSourcingData, budgetWatchInsight]);
 
   return (
     <section className="xd-kpis">
@@ -674,6 +771,7 @@ const KpiBanner: React.FC = () => {
               tone={k.tone ?? "blue"}
               trend={k.insightTrend}
               forecastDetails={k.forecastDetails}
+              sourcingDetails={k.sourcingDetails}
             />
           )}
         </article>

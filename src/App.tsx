@@ -13,6 +13,7 @@ import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./Pages/Dashboard";
 import RfqPage from "./Pages/RfqPage";
+import RfqForecastPage from "./Pages/RfqForecastPage";
 import OrdersPage from "./Pages/OrdersPage";
 import OrderDetail from "./Pages/OrderDetail";
 import PurchaseRequest from "./Pages/PurchaseRequest";
@@ -30,6 +31,8 @@ import SupplierRfqResponsePage from "./Pages/Supplier/SupplierRfqResponsePage";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
+import ProcurementCopilot from "./components/ProcurementCopilot";
+import { Bot } from "lucide-react";
 import "./Styles/Styles.css";
 
 interface LoggedInUser {
@@ -51,6 +54,7 @@ const getInitials = (name: string): string => {
 };
 
 const AppContent: React.FC = () => {
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [fallbackNavigation, setFallbackNavigation] =
     useState("Dashboard");
 
@@ -86,6 +90,7 @@ const AppContent: React.FC = () => {
   const isPurchaseRequestRoute =
     location.pathname.startsWith("/purchase-requests");
 
+  const isForecastRoute = location.pathname.startsWith("/rfq-forecast");
   const isRfqRoute = location.pathname.startsWith("/rfqs");
   const isOrdersRoute = location.pathname.startsWith("/orders");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
@@ -111,7 +116,7 @@ const AppContent: React.FC = () => {
     ? "Users"
     : isApprovalCycleRoute ? "Approval Cycle" : isSuppliersRoute ? "Suppliers" : isProductsRoute ? "Products / Services" : isPurchaseRequestRoute
       ? "Purchase Requests"
-      : isRfqRoute
+      : isForecastRoute ? "RFQs" : isRfqRoute
         ? "RFQs"
         : isOrdersRoute
           ? "Orders"
@@ -304,7 +309,11 @@ const AppContent: React.FC = () => {
         />
 
         <main className="dashboard">
-          {isSupplierRfqsRoute ? (
+          {isForecastRoute ? (
+            <Routes>
+              <Route path="/rfq-forecast" element={<RfqForecastPage />} />
+            </Routes>
+          ) : isSupplierRfqsRoute ? (
             <Routes>
               <Route
                 path="/supplier-rfqs"
@@ -406,10 +415,34 @@ const AppContent: React.FC = () => {
               userName={loggedInUser.userName}
             />
           ) : (
-            <Dashboard isAdmin={isAdmin} />
+            <Dashboard
+              isAdmin={isAdmin}
+              userName={loggedInUser.userName}
+              onOpenChatbot={() => setIsCopilotOpen(true)}
+            />
           )}
         </main>
       </div>
+
+      {/* =====================================================
+          GLOBAL CHATBOT (Visible on all pages)
+      ===================================================== */}
+      <button
+        type="button"
+        className="dashboard-chatbot-button global-chatbot-button"
+        aria-label="Open PR Assistant"
+        aria-expanded={isCopilotOpen}
+        title="Open PR Assistant"
+        onClick={() => setIsCopilotOpen(true)}
+      >
+        <Bot size={24} strokeWidth={1.9} />
+      </button>
+
+      {isCopilotOpen && (
+        <ProcurementCopilot
+          onClose={() => setIsCopilotOpen(false)}
+        />
+      )}
     </div>
   );
 };
