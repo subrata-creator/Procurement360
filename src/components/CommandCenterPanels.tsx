@@ -883,7 +883,7 @@ export default function CommandCenterPanels({
                 : displayIntelligence.forecast.description}
             </p>
             <div className="cc-insight-source">
-              Source <b>RFQ Response ({intelligenceData.forecast.responseCoveragePct !== null ? `${intelligenceData.forecast.responseCoveragePct}%` : "N/A"}{intelligenceData.forecast.forecastCount !== null ? ` &bull; Proj: ${intelligenceData.forecast.forecastCount}` : ""})</b>
+              Source <b>RFQ Response ({intelligenceData.forecast.responseCoveragePct !== null ? `${intelligenceData.forecast.responseCoveragePct}%` : "N/A"}{intelligenceData.forecast.forecastCount !== null ? ` • Proj: ${intelligenceData.forecast.forecastCount}` : ""})</b>
             </div>
             <button type="button" onClick={onViewForecast}>
               {displayIntelligence.forecast.ctaText} <ArrowRight size={13} />
