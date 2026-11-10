@@ -59,4 +59,3 @@ export interface Cr49f_rfqresponselines extends Cr49f_rfqresponselinesBase {
   owninguser?: object;
   _owninguser_value?: string;
 }
-}

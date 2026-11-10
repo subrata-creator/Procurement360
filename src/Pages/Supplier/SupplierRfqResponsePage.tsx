@@ -33,6 +33,11 @@ import {
   type FullSupplierResponse,
   type SupplierResponseLineItem,
 } from "../../Services/RfqSupplierResponseService";
+import { QuotationDocumentModal } from "../../components/QuotationDocumentModal";
+import {
+  buildQuotationDocument,
+  saveQuotationDocumentToStorage,
+} from "../../Services/QuotationDocumentService";
 import { Cr49f_suppliersService } from "../../generated/services/Cr49f_suppliersService";
 import { Cr49f_supplierproductsService } from "../../generated/services/Cr49f_supplierproductsService";
 import type { Cr49f_requestforqoutations } from "../../generated/models/Cr49f_requestforqoutationsModel";
@@ -70,6 +75,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [accessDenied, setAccessDenied] = useState<boolean>(false);
+  const [isQuotationDocOpen, setIsQuotationDocOpen] = useState<boolean>(false);
 
   // Accordion & Interactive states
   const [expandedLineIndices, setExpandedLineIndices] = useState<Set<number>>(new Set([0]));
@@ -538,13 +544,41 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
         comments: l.additionalChargesDetails || l.comments,
       }));
 
-      await submitSupplierResponse(response.responseId, formattedLines, {
+      const submitResult = await submitSupplierResponse(response.responseId, formattedLines, {
         deliveryDate,
         paymentTerms,
         warranty,
+        rfqId: response.rfqId,
+        supplierId: response.supplierId,
+        supplierCode: response.supplierCode,
       });
 
-      setSuccessMsg("Quotation submitted successfully! The response is now locked and submitted to Procurement.");
+      // Construct and persist full quotation document
+      const submittedResponse: FullSupplierResponse = {
+        ...response,
+        status: "Submitted",
+        statuscode: 2,
+        statecode: 1,
+        totalAmount: submitResult.totalAmount,
+        responseDate: submitResult.submittedDate,
+        deliveryDate,
+        paymentTerms,
+        warranty,
+        lines,
+      };
+
+      const quotationDoc = buildQuotationDocument({
+        rfq,
+        rfqNumber: rfq?.cr49f_rfqnumber,
+        rfqTitle: rfq?.cr49f_rfqtitle,
+        deliveryLocation: rfq?.cr49f_deliverylocation,
+        response: submittedResponse,
+        supplierProfile: activeSupplier,
+      });
+      saveQuotationDocumentToStorage(quotationDoc);
+
+      setSuccessMsg("Quotation submitted successfully and official Quotation Document generated!");
+      setIsQuotationDocOpen(true);
       await loadData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to submit quotation.");
@@ -594,6 +628,17 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {isSubmitted && (
+            <button
+              type="button"
+              className="supplier-btn-action primary"
+              onClick={() => setIsQuotationDocOpen(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+            >
+              <FileText size={13} />
+              View Quotation Document
+            </button>
+          )}
           <span className="supplier-badge-active">
             <Building2 size={13} />
             {activeSupplier?.cr49f_name || "Supplier"}
@@ -650,16 +695,35 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                 </div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>
-                    Quotation Successfully Submitted
+                    Quotation Successfully Submitted &amp; Generated
                   </div>
                   <div style={{ fontSize: 12.5, opacity: 0.9 }}>
-                    Submitted on {response.responseDate ? new Date(response.responseDate).toLocaleString() : "Recently"}. This response is locked for review by the Procurement team.
+                    Submitted on {response.responseDate ? new Date(response.responseDate).toLocaleString() : "Recently"}. Official quotation document is recorded and locked for review by Procurement.
                   </div>
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600 }}>
-                <Lock size={13} />
-                Read-Only
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  type="button"
+                  className="supplier-btn-action"
+                  onClick={() => setIsQuotationDocOpen(true)}
+                  style={{
+                    background: "#ffffff",
+                    color: "#065f46",
+                    borderColor: "#a7f3d0",
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <FileText size={13} />
+                  View Quotation Document
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600 }}>
+                  <Lock size={13} />
+                  Read-Only
+                </div>
               </div>
             </div>
           )}
@@ -1297,14 +1361,33 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                       </button>
                     </>
                   ) : (
-                    <div className="supplier-submitted-status-box">
-                      <CheckCircle2 size={18} color="#059669" />
-                      <div>
-                        <strong>Quotation Submitted</strong>
-                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#64748b" }}>
-                          Locked in Dataverse for evaluation
-                        </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+                      <div className="supplier-submitted-status-box">
+                        <CheckCircle2 size={18} color="#059669" />
+                        <div>
+                          <strong>Quotation Submitted</strong>
+                          <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#64748b" }}>
+                            Locked in Dataverse for evaluation
+                          </p>
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        className="supplier-btn-action primary"
+                        onClick={() => setIsQuotationDocOpen(true)}
+                        style={{
+                          width: "100%",
+                          justifyContent: "center",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 7,
+                          padding: "9px 14px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        <FileText size={14} />
+                        View Quotation Document
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1318,6 +1401,30 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
             </div>
           </div>
         </div>
+      )}
+
+      {/* Official Quotation Document Modal */}
+      {isQuotationDocOpen && (
+        <QuotationDocumentModal
+          isOpen={isQuotationDocOpen}
+          onClose={() => setIsQuotationDocOpen(false)}
+          rfq={rfq}
+          rfqNumber={rfq?.cr49f_rfqnumber}
+          rfqTitle={rfq?.cr49f_rfqtitle}
+          deliveryLocation={rfq?.cr49f_deliverylocation}
+          response={
+            response
+              ? {
+                  ...response,
+                  lines,
+                  deliveryDate,
+                  paymentTerms,
+                  warranty,
+                }
+              : null
+          }
+          supplierProfile={activeSupplier}
+        />
       )}
     </div>
   );

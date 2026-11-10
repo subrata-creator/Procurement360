@@ -31,6 +31,8 @@ export interface RfqSupplier {
   code?: string;
   category?: string;
   reason?: string;
+  hasResponse?: boolean;
+  flowRank?: number;
 }
 
 export interface RfqLineItem {
