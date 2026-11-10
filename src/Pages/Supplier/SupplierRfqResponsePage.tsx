@@ -598,7 +598,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px" }}>
             Access Restricted
           </h2>
-          <p style={{ fontSize: 13, color: "#475569", margin: "0 0 20px" }}>
+          <p style={{ fontSize: 13, margin: "0 0 20px" }}>
             You do not have authorization to view or respond to this RFQ. Only invited suppliers with verified credentials can submit quotations.
           </p>
           <button
@@ -660,7 +660,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
       </div>
 
       {loading ? (
-        <div style={{ padding: 60, textAlign: "center", color: "#64748b" }}>
+        <div className="supplier-loading-state" style={{ padding: 60, textAlign: "center" }}>
           <RefreshCw size={24} className="rfq-spinner" style={{ margin: "0 auto 12px" }} />
           Loading RFQ details and quotation lines from Dataverse...
         </div>
@@ -705,17 +705,8 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button
                   type="button"
-                  className="supplier-btn-action"
+                  className="supplier-btn-banner-action"
                   onClick={() => setIsQuotationDocOpen(true)}
-                  style={{
-                    background: "#ffffff",
-                    color: "#065f46",
-                    borderColor: "#a7f3d0",
-                    fontWeight: 700,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
                 >
                   <FileText size={13} />
                   View Quotation Document
@@ -830,7 +821,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
               <div className="supplier-scope-card-body">
                 <div style={{ marginBottom: 10 }}>
                   <strong>Description &amp; Instructions:</strong>
-                  <p style={{ margin: "4px 0 0", color: "#475569" }}>
+                  <p style={{ margin: "4px 0 0" }}>
                     {rfq?.cr49f_description || "Standard procurement scope for requested items. Review line items and specifications below to quote your best competitive rates and timelines."}
                   </p>
                 </div>
@@ -1067,7 +1058,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                           <div className="supplier-charge-row-card">
                             <div className="supplier-charge-header">
                               <div className="supplier-charge-left">
-                                <Truck size={15} color="#64748b" />
+                                <Truck size={15} className="supplier-charge-truck-icon" />
                                 <div>
                                   <span className="supplier-charge-title">Additional charges</span>
                                   <span className="supplier-charge-desc">
@@ -1366,7 +1357,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                         <CheckCircle2 size={18} color="#059669" />
                         <div>
                           <strong>Quotation Submitted</strong>
-                          <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#64748b" }}>
+                          <p style={{ margin: "2px 0 0", fontSize: 11.5 }}>
                             Locked in Dataverse for evaluation
                           </p>
                         </div>

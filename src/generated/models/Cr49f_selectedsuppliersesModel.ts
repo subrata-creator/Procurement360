@@ -20,6 +20,8 @@ export interface Cr49f_selectedsuppliersesBase {
   cr49f_selectedsuppliersid: string;
   cr49f_supplierquotation?: string;
   cr49f_responded?: boolean;
+  cr49f_selectedsuppliers?: boolean;
+  cr49f_selectedsupplier?: boolean;
   importsequencenumber?: number;
   overriddencreatedon?: string;
   statecode: Cr49f_selectedsuppliersesstatecode;

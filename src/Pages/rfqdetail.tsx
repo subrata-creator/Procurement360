@@ -646,24 +646,34 @@ export default function RfqDetail() {
         cachedInvited = [];
       }
 
-      // Check awarded supplier cache
-      const cachedAwardedSupplierId = rfqId
+      // Check awarded supplier cache and Dataverse cr49f_selectedsuppliers field
+      const dataverseAwardedSel = selectedSuppliers.find(
+        (sel) => Boolean(sel.cr49f_selectedsuppliers) || Boolean((sel as any).cr49f_selectedsupplier)
+      );
+      const dvAwardedId = dataverseAwardedSel?.cr49f_selectedsuppliersid;
+      const dvAwardedName = dataverseAwardedSel?.cr49f_supplierquotation;
+
+      const cachedAwardedSupplierId = dvAwardedId || (rfqId
         ? localStorage.getItem(`rfq_awarded_supplier_${rfqId}`) ||
           (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_${liveRfq.cr49f_rfqnumber}`) : null)
-        : null;
-      const cachedAwardedSupplierName = rfqId
+        : null);
+      const cachedAwardedSupplierName = dvAwardedName || (rfqId
         ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqId}`) ||
           (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_name_${liveRfq.cr49f_rfqnumber}`) : null)
-        : null;
+        : null);
 
       const isSupplierRewardedCheck = (supId?: string, supName?: string, rank?: number) => {
+        if (dataverseAwardedSel) {
+          if (supId && (cleanGuid(supId) === cleanGuid(dvAwardedId) || supId === dvAwardedId)) return true;
+          if (supName && dvAwardedName && supName.toLowerCase().trim() === dvAwardedName.toLowerCase().trim()) return true;
+        }
         if (cachedAwardedSupplierId && supId && (cleanGuid(supId) === cleanGuid(cachedAwardedSupplierId) || supId === cachedAwardedSupplierId)) {
           return true;
         }
         if (cachedAwardedSupplierName && supName && supName.toLowerCase().trim() === cachedAwardedSupplierName.toLowerCase().trim()) {
           return true;
         }
-        if (!cachedAwardedSupplierId && !cachedAwardedSupplierName && statusInfo.label === "Rewarded" && rank === 1) {
+        if (!cachedAwardedSupplierId && !cachedAwardedSupplierName && !dataverseAwardedSel && statusInfo.label === "Rewarded" && rank === 1) {
           return true;
         }
         return false;
@@ -786,7 +796,10 @@ export default function RfqDetail() {
             code: supCode,
             verified: true,
             ranking: invitedMap.size + 1,
-            rewarded: isSupplierRewardedCheck(supId, matched?.cr49f_name || name, invitedMap.size + 1),
+            rewarded:
+              Boolean(sel.cr49f_selectedsuppliers) ||
+              Boolean((sel as any).cr49f_selectedsupplier) ||
+              isSupplierRewardedCheck(supId, matched?.cr49f_name || name, invitedMap.size + 1),
             hasResponse: hasResponded,
           });
         }
@@ -950,8 +963,35 @@ export default function RfqDetail() {
       : "Active in review sequence with designated approvers.",
   ].join(" ");
 
-  // Dynamic Journey Milestones
-  const isApprovedOrRewarded = rfqData.status === "Approved" || rfqData.status === "Rewarded";
+  // Dynamic Journey Milestones & Award Evaluation State
+  const rfqIdStr = cleanGuid(liveRfq?.cr49f_requestforqoutationid);
+  const rfqNumStr = liveRfq?.cr49f_rfqnumber;
+
+  const awardedSupplier = rfqData.invitedSuppliers.find((s) => s.rewarded) || null;
+  const cachedAwardedId = rfqIdStr
+    ? localStorage.getItem(`rfq_awarded_supplier_${rfqIdStr}`) ||
+      (rfqNumStr ? localStorage.getItem(`rfq_awarded_supplier_${rfqNumStr}`) : null)
+    : null;
+  const cachedAwardedName = rfqIdStr
+    ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqIdStr}`) ||
+      (rfqNumStr ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqNumStr}`) : null)
+    : null;
+
+  const isAnySupplierAwarded = Boolean(
+    awardedSupplier ||
+    cachedAwardedId ||
+    cachedAwardedName ||
+    rfqData.status === "Rewarded" ||
+    (rfqIdStr && localStorage.getItem(`rfq_status_${rfqIdStr}`) === "Rewarded") ||
+    (rfqNumStr && localStorage.getItem(`rfq_status_${rfqNumStr}`) === "Rewarded")
+  );
+
+  const awardedSupplierName =
+    awardedSupplier?.name ||
+    cachedAwardedName ||
+    "";
+
+  const isApprovedOrRewarded = rfqData.status === "Approved" || rfqData.status === "Rewarded" || isAnySupplierAwarded;
   const isRejected = rfqData.status === "Rejected";
 
   const journeySteps: RfqApprovalStep[] = [
@@ -1087,6 +1127,14 @@ export default function RfqDetail() {
   // Reward RFQ to selected supplier
   const handleRewardSupplier = async (supplier: RfqSupplier) => {
     if (!liveRfq) return;
+    if (isAnySupplierAwarded) {
+      alert(
+        `This RFQ has already been awarded${
+          awardedSupplierName ? ` to "${awardedSupplierName}"` : ""
+        }. Another supplier cannot be rewarded.`
+      );
+      return;
+    }
     const rfqId = cleanGuid(liveRfq.cr49f_requestforqoutationid);
     const rfqNum = liveRfq.cr49f_rfqnumber;
     try {
@@ -1124,6 +1172,62 @@ export default function RfqDetail() {
         }
       } catch (dvErr) {
         console.warn("Could not update RFQ in Dataverse directly:", dvErr);
+      }
+
+      // Update cr49f_selectedsuppliers table to set cr49f_selectedsuppliers: true
+      try {
+        let matchedSel = selectedSuppliers.find((s) => {
+          const sId = cleanGuid(s.cr49f_selectedsuppliersid);
+          const sNum = (s.cr49f_selectedsuppliernumber || "").toLowerCase().trim();
+          const sQuote = (s.cr49f_supplierquotation || "").toLowerCase().trim();
+          const supId = cleanGuid(supplier.id);
+          const supCode = (supplier.code || "").toLowerCase().trim();
+          const supName = (supplier.name || "").toLowerCase().trim();
+
+          return (
+            (supId && sId === supId) ||
+            (supCode && sNum === supCode) ||
+            (supName && (sQuote.includes(supName) || supName.includes(sQuote)))
+          );
+        });
+
+        if (!matchedSel) {
+          const allSelRes = await Cr49f_selectedsuppliersesService.getAll();
+          if (allSelRes.success && allSelRes.data) {
+            matchedSel = allSelRes.data.find((s) => {
+              const sId = cleanGuid(s.cr49f_selectedsuppliersid);
+              const sNum = (s.cr49f_selectedsuppliernumber || "").toLowerCase().trim();
+              const sQuote = (s.cr49f_supplierquotation || "").toLowerCase().trim();
+              const supId = cleanGuid(supplier.id);
+              const supCode = (supplier.code || "").toLowerCase().trim();
+              const supName = (supplier.name || "").toLowerCase().trim();
+
+              return (
+                (supId && sId === supId) ||
+                (supCode && sNum === supCode) ||
+                (supName && (sQuote.includes(supName) || supName.includes(sQuote)))
+              );
+            });
+          }
+        }
+
+        if (matchedSel?.cr49f_selectedsuppliersid) {
+          const targetSelId = cleanGuid(matchedSel.cr49f_selectedsuppliersid);
+          await Cr49f_selectedsuppliersesService.update(targetSelId, {
+            cr49f_selectedsuppliers: true,
+            cr49f_selectedsupplier: true,
+          } as any);
+
+          setSelectedSuppliers((prev) =>
+            prev.map((item) =>
+              cleanGuid(item.cr49f_selectedsuppliersid) === targetSelId
+                ? { ...item, cr49f_selectedsuppliers: true, cr49f_selectedsupplier: true }
+                : item
+            )
+          );
+        }
+      } catch (selUpdateErr) {
+        console.warn("Could not update cr49f_selectedsuppliers in Dataverse:", selUpdateErr);
       }
 
       // Update local state
@@ -1533,10 +1637,10 @@ export default function RfqDetail() {
 
                           <span
                             className={`rfq-supplier-rewarded-pill ${
-                              isAwarded ? "rewarded" : hasResponse ? "submitted" : "pending"
+                              isAwarded ? "rewarded" : isAnySupplierAwarded ? "not-selected" : hasResponse ? "submitted" : "pending"
                             }`}
                           >
-                            {isAwarded ? "Awarded" : hasResponse ? "Submitted" : "Pending Bid"}
+                            {isAwarded ? "Awarded" : isAnySupplierAwarded ? "Not Selected" : hasResponse ? "Submitted" : "Pending Bid"}
                           </span>
                         </div>
 
@@ -1572,6 +1676,10 @@ export default function RfqDetail() {
                           {isAwarded ? (
                             <span className="rfq-supplier-winner-tag">
                               ★ Selected Vendor
+                            </span>
+                          ) : isAnySupplierAwarded ? (
+                            <span className="rfq-supplier-delivery-tag" style={{ background: "rgba(100, 116, 139, 0.08)", color: "#64748b", border: "1px solid #cbd5e1" }}>
+                              Contract Awarded
                             </span>
                           ) : (
                             <span className="rfq-supplier-delivery-tag">
@@ -2377,10 +2485,28 @@ export default function RfqDetail() {
           isAwarded={
             Boolean(
               selectedSupplierForModal?.rewarded ||
-              (selectedQuotationForView && selectedQuotationForView.status === "Rewarded")
+              (selectedQuotationForView && selectedQuotationForView.status === "Rewarded") ||
+              (cachedAwardedId && (
+                (selectedSupplierForModal && (cleanGuid(selectedSupplierForModal.id) === cleanGuid(cachedAwardedId) || selectedSupplierForModal.id === cachedAwardedId)) ||
+                (selectedQuotationForView && (cleanGuid(selectedQuotationForView.supplierId) === cleanGuid(cachedAwardedId) || selectedQuotationForView.supplierId === cachedAwardedId))
+              )) ||
+              (awardedSupplierName && (
+                (selectedSupplierForModal && selectedSupplierForModal.name.toLowerCase().trim() === awardedSupplierName.toLowerCase().trim()) ||
+                (selectedQuotationForView && selectedQuotationForView.supplierName.toLowerCase().trim() === awardedSupplierName.toLowerCase().trim())
+              ))
             )
           }
+          isRfqAlreadyAwarded={isAnySupplierAwarded}
+          awardedSupplierName={awardedSupplierName}
           onReward={() => {
+            if (isAnySupplierAwarded) {
+              alert(
+                `This RFQ has already been awarded${
+                  awardedSupplierName ? ` to "${awardedSupplierName}"` : ""
+                }. Another supplier cannot be awarded.`
+              );
+              return;
+            }
             const targetSupplier =
               selectedSupplierForModal ||
               (selectedQuotationForView

@@ -5,9 +5,9 @@ import {
   CheckCircle2,
   Clock,
   FileCheck2,
-  FileCode,
   FileDown,
   Loader2,
+  Lock,
   Printer,
   ShieldCheck,
   Sparkles,
@@ -18,7 +18,6 @@ import {
 import {
   type QuotationDocumentData,
   buildQuotationDocument,
-  downloadQuotationDocumentHtml,
   downloadQuotationDocumentPdf,
   numberToWords,
 } from "../Services/QuotationDocumentService";
@@ -56,6 +55,8 @@ export interface QuotationDocumentModalProps {
   } | null;
   aiRecommendation?: string;
   isAwarded?: boolean;
+  isRfqAlreadyAwarded?: boolean;
+  awardedSupplierName?: string;
   onReward?: () => Promise<void> | void;
   isRewarding?: boolean;
 }
@@ -74,6 +75,8 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
   supplier,
   aiRecommendation,
   isAwarded: isAwardedProp,
+  isRfqAlreadyAwarded = false,
+  awardedSupplierName,
   onReward,
   isRewarding = false,
 }) => {
@@ -90,6 +93,7 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
   }, [isOpen, onClose]);
 
   const isAwarded = Boolean(isAwardedProp || supplier?.rewarded || response?.status === "Rewarded");
+  const isLockedAnotherAwarded = Boolean(isRfqAlreadyAwarded && !isAwarded);
 
   // Construct or resolve document data
   const doc: QuotationDocumentData | null = useMemo(() => {
@@ -176,10 +180,6 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
     window.print();
   };
 
-  const handleDownload = () => {
-    downloadQuotationDocumentHtml(doc);
-  };
-
   const handleDownloadPdf = async () => {
     if (!paperRef.current || isDownloadingPdf) return;
     try {
@@ -215,7 +215,7 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
             <div>
               <div className="quotation-doc-topbar-title">
                 <span>Supplier Quotation &amp; Recommendation</span>
-                <span style={{ fontSize: 11.5, color: "#93c5fd", fontWeight: 700 }}>
+                <span className="quotation-topbar-quotation-num">
                   ({hasResponded ? doc.quotationNumber : "Awaiting Bid Submission"})
                 </span>
               </div>
@@ -256,16 +256,6 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
                 >
                   <Printer size={14} />
                   <span>Print</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="quotation-btn-control"
-                  onClick={handleDownload}
-                  title="Download standalone HTML document"
-                >
-                  <FileCode size={14} />
-                  <span>Download HTML</span>
                 </button>
               </>
             )}
@@ -314,7 +304,7 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
                 )}
                 <div className="quotation-ai-chip">
                   <span className="quotation-ai-chip-label">Bid Status:</span>
-                  <span className="quotation-ai-chip-val" style={{ color: hasResponded ? "#34d399" : "#fbbf24" }}>
+                  <span className={`quotation-ai-chip-val status-${hasResponded ? "submitted" : "pending"}`}>
                     {hasResponded ? "Quotation Submitted" : "Awaiting Bid Submission"}
                   </span>
                 </div>
@@ -670,14 +660,19 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
         {/* Bottom Action Bar: Close & Reward Buttons */}
         <div className="quotation-doc-bottombar">
           <div className="quotation-doc-bottombar-left">
-            <span style={{ fontSize: 12, color: "#94a3b8", marginRight: 6 }}>Supplier:</span>
-            <strong style={{ fontSize: 13.5, color: "#f8fafc" }}>{doc.supplierName}</strong>
-            {isAwarded && (
-              <span className="quotation-awarded-status-pill" style={{ marginLeft: 10 }}>
+            <span className="quotation-bottombar-label">Supplier:</span>
+            <strong className="quotation-bottombar-name">{doc.supplierName}</strong>
+            {isAwarded ? (
+              <span className="quotation-awarded-status-pill">
                 <Trophy size={13} />
                 Awarded Vendor
               </span>
-            )}
+            ) : isLockedAnotherAwarded ? (
+              <span className="quotation-locked-status-pill">
+                <Lock size={12} />
+                RFQ Awarded to {awardedSupplierName || "Another Vendor"}
+              </span>
+            ) : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
@@ -691,10 +686,26 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
             {onReward && (
               <button
                 type="button"
-                className="quotation-btn-footer-reward"
-                onClick={() => onReward()}
-                disabled={isAwarded || isRewarding}
-                title={isAwarded ? "This supplier is already awarded" : "Award RFQ contract to this supplier"}
+                className={`quotation-btn-footer-reward ${
+                  isAwarded
+                    ? "awarded"
+                    : isLockedAnotherAwarded
+                    ? "locked"
+                    : ""
+                }`}
+                onClick={() => {
+                  if (!isAwarded && !isLockedAnotherAwarded && !isRewarding) {
+                    onReward();
+                  }
+                }}
+                disabled={isAwarded || isLockedAnotherAwarded || isRewarding}
+                title={
+                  isAwarded
+                    ? "This supplier is already the awarded vendor for this RFQ"
+                    : isLockedAnotherAwarded
+                    ? `This RFQ has already been awarded to ${awardedSupplierName || "another supplier"}. Cannot award another supplier.`
+                    : "Award RFQ contract to this supplier"
+                }
               >
                 {isRewarding ? (
                   <>
@@ -705,6 +716,11 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
                   <>
                     <Trophy size={15} />
                     <span>★ Currently Awarded</span>
+                  </>
+                ) : isLockedAnotherAwarded ? (
+                  <>
+                    <Lock size={15} />
+                    <span>RFQ Already Awarded</span>
                   </>
                 ) : (
                   <>
