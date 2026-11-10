@@ -1,53 +1,98 @@
-import { useState } from "react";
-import { Bot } from "lucide-react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { Sparkles, Bot, Plus } from "lucide-react";
 import CreatePRModal from "../components/CreatePRModal";
 import CommandCenterPanels from "../components/CommandCenterPanels";
-import ProcurementCopilot from "../components/ProcurementCopilot";
 import KpiBanner from "../components/KpiBanner";
 import PRJourney from "../components/PRJourney";
 import ChartCards from "../components/ChartCards";
 import TaskInbox from "../components/TaskInbox";
 import "../Styles/DashboardNew.css";
+import "../Styles/HeroBanner.css";
 
 interface DashboardProps {
   isAdmin?: boolean;
+  userName?: string;
 }
 
-export default function Dashboard({ isAdmin = false }: DashboardProps) {
+export default function Dashboard({ isAdmin = false, userName }: DashboardProps) {
   const navigate = useNavigate();
   const [isCreatePROpen, setIsCreatePROpen] = useState(false);
-  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const greeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening";
+
+  const displayName = useMemo(() => {
+    if (!userName || userName.toLowerCase().includes("loading") || userName.toLowerCase().includes("unknown")) {
+      return "Alex";
+    }
+    const parts = userName.trim().split(/\s+/);
+    return parts[0] || "Alex";
+  }, [userName]);
 
   return (
     <main className="dashboard-page">
 
       {/* =====================================================
-          HEADER
+          AI INTELLIGENCE HERO HEADER
       ===================================================== */}
-      <header className="dashboard-heading command-heading">
-        <div className="command-title">
-          <span className="command-eyebrow">PROCUREMENT INTELLIGENCE</span>
-          <h1> Procurement 360 </h1>
-          <p>{greeting}. Here’s what needs your attention today.</p>
-          <div className="command-context-row">
-            <span className="command-context-chip priority"><i />3 approvals need attention</span>
-            <span className="command-context-chip budget"><i />IT budget at 85%</span>
-            <span className="command-context-chip intelligence"><i />3 AI recommendations</span>
+      <header className="dashboard-hero-banner" aria-label="Procurement Intelligence Overview">
+        <div className="hero-content-left">
+          <div className="hero-eyebrow">
+            <Sparkles size={13} className="hero-sparkle-icon" />
+            <span>PROCUREMENT INTELLIGENCE</span>
+          </div>
+
+          <h1 className="hero-greeting">
+            {greeting}, {displayName}.
+          </h1>
+          <p className="hero-subline">
+            Here’s what needs your attention.
+          </p>
+
+          <div className="hero-chips-row">
+            <span className="hero-chip priority">
+              <i className="chip-dot dot-priority" />
+              <span>3 approvals need attention</span>
+            </span>
+            <span className="hero-chip budget">
+              <i className="chip-dot dot-budget" />
+              <span>IT budget at 81%</span>
+            </span>
+            <span className="hero-chip intelligence">
+              <i className="chip-dot dot-ai" />
+              <span>3 AI recommendations</span>
+            </span>
           </div>
         </div>
-        {!isAdmin && (
-          <div className="command-tools">
+
+        <div className="hero-content-right">
+          {/* AI Revolving Circular Motion Graphic */}
+          <div className="hero-ai-orbit-container" aria-hidden="true">
+            {/* Concentric rotating orbital rings */}
+            <div className="hero-orbit-ring ring-outer">
+              <span className="hero-orbit-node node-1" />
+            </div>
+            <div className="hero-orbit-ring ring-middle">
+              <span className="hero-orbit-node node-2" />
+            </div>
+            <div className="hero-orbit-ring ring-inner" />
+
+            {/* Glowing Bot Badge in Center */}
+            <div className="hero-ai-bot-avatar">
+              <Bot size={24} strokeWidth={1.9} />
+            </div>
+          </div>
+
+          {!isAdmin && (
             <button
               type="button"
-              className="dashboard-create-button"
+              className="hero-create-pr-btn"
               onClick={() => setIsCreatePROpen(true)}
             >
-              <span className="create-plus">+</span>Create Purchase Request
+              <Plus size={16} strokeWidth={2.4} />
+              <span>Create purchase request</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
 
@@ -60,8 +105,14 @@ export default function Dashboard({ isAdmin = false }: DashboardProps) {
 
       <CommandCenterPanels
         onViewPRs={() => navigate("/purchase-requests")}
-        onOpenTask={(id) => navigate(`/tasks/${id}`)}
-        onViewForecast={() => document.getElementById("dashboard-analytics")?.scrollIntoView({ behavior: "smooth" })}
+        onOpenTask={() => {
+          const el = document.getElementById("work-queue") || document.querySelector(".work-queue");
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }}
+        onViewSuppliers={() => navigate("/suppliers")}
+        onViewForecast={() => navigate("/rfq-forecast")}
       />
 
 
@@ -70,7 +121,7 @@ export default function Dashboard({ isAdmin = false }: DashboardProps) {
       ===================================================== */}
       <section className="dashboard-journey-section">
         <PRJourney
-          onViewPending={() => navigate("/purchase-requests")}
+          onViewPending={() => navigate("/purchase-requests?status=In Review")}
         />
       </section>
 
@@ -86,40 +137,13 @@ export default function Dashboard({ isAdmin = false }: DashboardProps) {
       {/* =====================================================
           TASK + ACTIVITY
       ===================================================== */}
-      <section className="dashboard-bottom">
+      <section className="dashboard-bottom" id="work-queue">
 
         <div className="dashboard-task-wrapper">
           <TaskInbox />
         </div>
 
-        
-
       </section>
-
-
-      {/* =====================================================
-          CHATBOT
-      ===================================================== */}
-      <button
-        type="button"
-        className="dashboard-chatbot-button"
-        aria-label="Open Procurement Copilot"
-        aria-expanded={isCopilotOpen}
-        title="Open Procurement Copilot"
-        onClick={() => setIsCopilotOpen(true)}
-      >
-        <Bot size={23} strokeWidth={1.8} />
-      </button>
-
-      {isCopilotOpen && (
-        <ProcurementCopilot
-          onClose={() => setIsCopilotOpen(false)}
-          onViewPending={() => {
-            setIsCopilotOpen(false);
-            navigate("/purchase-requests");
-          }}
-        />
-      )}
 
       {isCreatePROpen && (
         <CreatePRModal

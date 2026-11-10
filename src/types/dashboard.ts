@@ -6,6 +6,17 @@ export interface KpiForecastDetails {
   method: string;
 }
 
+export interface KpiSourcingDetails {
+  surgingCount: number;
+  availableSuppliersCount: number;
+  surgingProductsText: string;
+  topSuppliersText: string;
+  priceBenchmarkText: string;
+  rationaleText: string;
+  recommendationAction: string;
+  method?: string;
+}
+
 export interface KpiItem {
   label: string;
   value: string;
@@ -20,6 +31,7 @@ export interface KpiItem {
   insight?: string;
   insightTrend?: "positive" | "attention";
   forecastDetails?: KpiForecastDetails;
+  sourcingDetails?: KpiSourcingDetails;
 }
 
 export interface Task {

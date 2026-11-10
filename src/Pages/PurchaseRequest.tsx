@@ -25,7 +25,7 @@ import {
   Sparkles,
   Clock,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import CreatePRModal from "../components/CreatePRModal";
 import {
   getInitials,
@@ -393,9 +393,23 @@ export default function PurchaseRequest() {
       }
     }
   };
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const initialStatusParam = searchParams.get("status");
+
   const [statusQuery, setStatusQuery] = useState<"All Status" | PRStatus>(
-    "All Status"
+    initialStatusParam && (initialStatusParam === "In Review" || initialStatusParam === "Approved" || initialStatusParam === "Rejected" || initialStatusParam === "Changes Needed")
+      ? (initialStatusParam as PRStatus)
+      : "All Status"
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const s = params.get("status");
+    if (s && (s === "In Review" || s === "Approved" || s === "Rejected" || s === "Changes Needed")) {
+      setStatusQuery(s as PRStatus);
+    }
+  }, [location.search]);
   const [priorityQuery, setPriorityQuery] = useState("All Priority");
   const [expandedRowId, setExpandedRowId] = useState<string | null>("PR-1009");
   const [activeDrawerTab, setActiveDrawerTab] = useState<"details" | "history" | "comments" | "ai">("details");
