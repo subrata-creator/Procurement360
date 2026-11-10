@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle,
   ArrowLeft,
+  Award,
   Building2,
   Calendar,
   Check,
@@ -646,7 +647,9 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
           </span>
           {response && (
             <span className={`supplier-status-pill ${response.status.toLowerCase()}`}>
-              {response.status === "Submitted" ? (
+              {response.status === "Rewarded" ? (
+                <Award size={12} />
+              ) : response.status === "Submitted" ? (
                 <CheckCircle2 size={12} />
               ) : response.status === "Draft" ? (
                 <Clock size={12} />

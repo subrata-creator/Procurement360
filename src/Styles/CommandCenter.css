@@ -1037,6 +1037,17 @@
   transition: border-color 150ms ease;
 }
 
+.work-queue-select option {
+  background: var(--card-hex, #ffffff);
+  color: var(--card-foreground-hex, #0f172a);
+}
+
+.dark .work-queue-select option,
+[data-theme="dark"] .work-queue-select option {
+  background: var(--card-hex, #182230);
+  color: var(--foreground-hex, #f8fafc);
+}
+
 .work-queue-select:focus {
   border-color: var(--primary-hex);
 }

@@ -43,6 +43,8 @@ export interface WorkQueueItem {
   isActive: boolean;
   targetUrl: string;
   sequence?: number;
+  createdOnTime?: number;
+  rawCreatedDate?: string;
 }
 
 const badge = (t: string) =>
@@ -66,6 +68,7 @@ const TaskInbox: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
 
   const fetchTasks = useCallback(async () => {
     setIsLoading(true);
@@ -262,15 +265,16 @@ const TaskInbox: React.FC = () => {
                 t.cr49f_task.toLowerCase().includes("quotation"))
           );
 
+        const parentRfq = rfqId
+          ? rfqs.find((r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId)
+          : null;
+
         if (isRfq) {
           taskType = "Request for Quotation";
-          const rfq = rfqs.find(
-            (r) => cleanGuid(r.cr49f_requestforqoutationid) === rfqId
-          );
           const rfqNum =
-            rfq?.cr49f_rfqnumber ||
+            parentRfq?.cr49f_rfqnumber ||
             (rfqId ? rfqId.slice(0, 8) : `RFQ-${1000 + idx}`);
-          const rfqTitle = rfq?.cr49f_rfqtitle ? ` ${rfq.cr49f_rfqtitle}` : "";
+          const rfqTitle = parentRfq?.cr49f_rfqtitle ? ` ${parentRfq.cr49f_rfqtitle}` : "";
           const taskName = t.cr49f_task ? ` (${t.cr49f_task})` : "";
           title = `RFQ Approval - ${rfqNum}${rfqTitle}${taskName}`;
         } else if (poId || t.cr49f_object === 3) {
@@ -297,9 +301,23 @@ const TaskInbox: React.FC = () => {
           }
         }
 
-        const createdDate = t.createdon ? new Date(t.createdon) : new Date();
-        const assignedOn = !Number.isNaN(createdDate.getTime())
-          ? `${createdDate.getMonth() + 1}/${createdDate.getDate()}/${createdDate.getFullYear()}`
+        const rawDateStr =
+          (t.createdon as string | undefined) ||
+          (raw.createdon as string | undefined) ||
+          (raw.CreatedOn as string | undefined) ||
+          (t.overriddencreatedon as string | undefined) ||
+          (raw.overriddencreatedon as string | undefined) ||
+          (parentPR as any)?.createdon ||
+          (parentPR as any)?.CreatedOn ||
+          (parentRfq as any)?.createdon ||
+          (parentRfq as any)?.CreatedOn;
+
+        const createdDate = rawDateStr ? new Date(rawDateStr) : null;
+        const isValidDate = Boolean(createdDate && !Number.isNaN(createdDate.getTime()));
+        const createdOnTime = isValidDate ? (createdDate as Date).getTime() : 0;
+
+        const assignedOn = isValidDate
+          ? `${(createdDate as Date).getMonth() + 1}/${(createdDate as Date).getDate()}/${(createdDate as Date).getFullYear()}`
           : "Today";
 
         return {
@@ -313,6 +331,8 @@ const TaskInbox: React.FC = () => {
           isActive,
           targetUrl,
           sequence: t.cr49f_sequence,
+          createdOnTime,
+          rawCreatedDate: rawDateStr,
         };
       });
 
@@ -344,22 +364,29 @@ const TaskInbox: React.FC = () => {
     const source =
       dataverseTasks.length > 0 || hasLoaded
         ? dataverseTasks
-        : taskInboxItems.map((task): WorkQueueItem => ({
-            id: `sample-${task.id}`,
-            taskName: task.taskName,
-            taskType: task.taskType as WorkQueueItem["taskType"],
-            assignedTo: task.assignedTo,
-            assignedOn: task.assignedOn,
-            description: task.description,
-            priority: task.priority ?? "Normal",
-            status: "Pending" as const,
-            isActive: true,
-            targetUrl: `/tasks/${task.id}`,
-          }));
+        : taskInboxItems.map((task): WorkQueueItem => {
+            const parsed = task.assignedOn ? new Date(task.assignedOn).getTime() : 0;
+            return {
+              id: `sample-${task.id}`,
+              taskName: task.taskName,
+              taskType: task.taskType as WorkQueueItem["taskType"],
+              assignedTo: task.assignedTo,
+              assignedOn: task.assignedOn,
+              description: task.description,
+              priority: task.priority ?? "Normal",
+              status: "Pending" as const,
+              isActive: true,
+              targetUrl: `/tasks/${task.id}`,
+              createdOnTime: Number.isNaN(parsed) ? 0 : parsed,
+              rawCreatedDate: task.assignedOn,
+            };
+          });
 
-    return source.filter(
-      (task) => task.isActive && (task.status === "Pending" || task.status === "Changes Needed")
-    );
+    return source
+      .filter(
+        (task) => task.isActive && (task.status === "Pending" || task.status === "Changes Needed")
+      )
+      .sort((a, b) => (b.createdOnTime || 0) - (a.createdOnTime || 0));
   }, [dataverseTasks, hasLoaded]);
 
   // Tab counts for active tasks
@@ -380,7 +407,7 @@ const TaskInbox: React.FC = () => {
 
   // Filtered active tasks based on user selections
   const filteredTasks = useMemo(() => {
-    return activeTasks.filter((task) => {
+    const list = activeTasks.filter((task) => {
       // 1. Type filter
       if (typeFilter === "PR" && task.taskType !== "Purchase Request") return false;
       if (typeFilter === "RFQ" && task.taskType !== "Request for Quotation") return false;
@@ -412,19 +439,33 @@ const TaskInbox: React.FC = () => {
 
       return true;
     });
-  }, [activeTasks, typeFilter, statusFilter, priorityFilter, searchQuery]);
+
+    return [...list].sort((a, b) => {
+      const timeA = a.createdOnTime ?? 0;
+      const timeB = b.createdOnTime ?? 0;
+      if (timeA !== timeB) {
+        return sortOrder === "oldest" ? timeA - timeB : timeB - timeA;
+      }
+      const seqA = a.sequence ?? 0;
+      const seqB = b.sequence ?? 0;
+      if (seqA !== seqB) return seqA - seqB;
+      return a.taskName.localeCompare(b.taskName);
+    });
+  }, [activeTasks, typeFilter, statusFilter, priorityFilter, searchQuery, sortOrder]);
 
   const hasActiveFilters =
     searchQuery.trim() !== "" ||
     typeFilter !== "ALL" ||
     statusFilter !== "ALL" ||
-    priorityFilter !== "ALL";
+    priorityFilter !== "ALL" ||
+    sortOrder !== "newest";
 
   const handleResetFilters = () => {
     setSearchQuery("");
     setTypeFilter("ALL");
     setStatusFilter("ALL");
     setPriorityFilter("ALL");
+    setSortOrder("newest");
     setPage(1);
   };
 
@@ -561,6 +602,20 @@ const TaskInbox: React.FC = () => {
         <div className="work-queue-filter-selects">
           <select
             className="work-queue-select"
+            value={sortOrder}
+            onChange={(e) => {
+              setSortOrder(e.target.value as "newest" | "oldest");
+              setPage(1);
+            }}
+            aria-label="Sort by Created Date"
+            title="Sort tasks by created date"
+          >
+            <option value="newest">Created Date: Newest First</option>
+            <option value="oldest">Created Date: Oldest First</option>
+          </select>
+
+          <select
+            className="work-queue-select"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
@@ -617,7 +672,7 @@ const TaskInbox: React.FC = () => {
                 <div className="work-queue-task-meta">
                   <span>{task.taskType}</span>
                   <span>
-                    <CalendarDays size={11} /> Assigned {task.assignedOn}
+                    <CalendarDays size={11} /> Created {task.assignedOn}
                   </span>
                 </div>
               </div>

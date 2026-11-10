@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -411,6 +411,7 @@ export default function PurchaseRequest() {
     }
   }, [location.search]);
   const [priorityQuery, setPriorityQuery] = useState("All Priority");
+  const [dateSortOrder, setDateSortOrder] = useState<"desc" | "asc">("desc");
   const [expandedRowId, setExpandedRowId] = useState<string | null>("PR-1009");
   const [activeDrawerTab, setActiveDrawerTab] = useState<"details" | "history" | "comments" | "ai">("details");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
@@ -705,36 +706,50 @@ export default function PurchaseRequest() {
     return () => controller.abort();
   }, [loadRequests]);
 
-  const filteredRequests = requests.filter((request) => {
-    const haystack = [
-      request.ref,
-      request.title,
-      request.rfq,
-      request.po,
-      request.createdBy,
-      request.date,
-      request.status,
-      request.priority,
-      request.requiredDate,
-    ]
-      .join(" ")
-      .toLowerCase();
+  const filteredRequests = useMemo(() => {
+    const list = requests.filter((request) => {
+      const haystack = [
+        request.ref,
+        request.title,
+        request.rfq,
+        request.po,
+        request.createdBy,
+        request.date,
+        request.status,
+        request.priority,
+        request.requiredDate,
+      ]
+        .join(" ")
+        .toLowerCase();
 
-    const matchesQuery = haystack.includes(
-      tableQuery.trim().toLowerCase()
-    );
-    const matchesCreatedOn = matchesCreatedDate(
-      request.rawCreatedDate || request.date,
-      createdOnQuery
-    );
-    const matchesStatus =
-      statusQuery === "All Status" || request.status === statusQuery;
-    const matchesPriority =
-      priorityQuery === "All Priority" ||
-      (request.priority || "").toLowerCase() === priorityQuery.toLowerCase();
+      const matchesQuery = haystack.includes(
+        tableQuery.trim().toLowerCase()
+      );
+      const matchesCreatedOn = matchesCreatedDate(
+        request.rawCreatedDate || request.date,
+        createdOnQuery
+      );
+      const matchesStatus =
+        statusQuery === "All Status" || request.status === statusQuery;
+      const matchesPriority =
+        priorityQuery === "All Priority" ||
+        (request.priority || "").toLowerCase() === priorityQuery.toLowerCase();
 
-    return matchesQuery && matchesCreatedOn && matchesStatus && matchesPriority;
-  });
+      return matchesQuery && matchesCreatedOn && matchesStatus && matchesPriority;
+    });
+
+    return [...list].sort((a, b) => {
+      const timeA = a.rawCreatedDate ? new Date(a.rawCreatedDate).getTime() : (a.date ? new Date(a.date).getTime() : 0);
+      const timeB = b.rawCreatedDate ? new Date(b.rawCreatedDate).getTime() : (b.date ? new Date(b.date).getTime() : 0);
+      const validA = Number.isNaN(timeA) ? 0 : timeA;
+      const validB = Number.isNaN(timeB) ? 0 : timeB;
+
+      if (validA !== validB) {
+        return dateSortOrder === "asc" ? validA - validB : validB - validA;
+      }
+      return (b.ref || "").localeCompare(a.ref || "");
+    });
+  }, [requests, tableQuery, createdOnQuery, statusQuery, priorityQuery, dateSortOrder]);
 
   const totalPages = Math.max(
     1,
@@ -758,7 +773,7 @@ export default function PurchaseRequest() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [tableQuery, createdOnQuery, statusQuery, priorityQuery]);
+  }, [tableQuery, createdOnQuery, statusQuery, priorityQuery, dateSortOrder]);
 
   const requestCounts = {
     total: requests.length,
@@ -1357,6 +1372,24 @@ export default function PurchaseRequest() {
               <ChevronDown size={12} className="dropdown-chevron" />
             </div>
 
+            {/* Created Date Sort Dropdown */}
+            <div className="pr-filter-dropdown-wrap">
+              <select
+                value={dateSortOrder}
+                onChange={(e) => {
+                  setDateSortOrder(e.target.value as "desc" | "asc");
+                  setCurrentPage(1);
+                }}
+                className="pr-filter-dropdown"
+                title="Sort by Created Date"
+                aria-label="Sort by Created Date"
+              >
+                <option value="desc">Date: Newest First</option>
+                <option value="asc">Date: Oldest First</option>
+              </select>
+              <ChevronDown size={12} className="dropdown-chevron" />
+            </div>
+
 
 
             {/* List / Grid View Toggle */}
@@ -1466,8 +1499,15 @@ export default function PurchaseRequest() {
                 <tr>
                   <th style={{ width: 34 }}></th>
                   <th style={{ width: 44 }}>#</th>
-                  <th style={{ width: "23%" }}>
-                    REQUEST DETAILS <span className="sort-diamond">◊</span>
+                  <th
+                    style={{ width: "23%", cursor: "pointer", userSelect: "none" }}
+                    onClick={() => setDateSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
+                    title={`Sorted by Created Date (${dateSortOrder === "desc" ? "Newest First" : "Oldest First"}). Click to toggle.`}
+                  >
+                    REQUEST DETAILS{" "}
+                    <span className="sort-diamond" style={{ color: "var(--primary-hex, #2563eb)", fontWeight: 700 }}>
+                      {dateSortOrder === "desc" ? "▼" : "▲"}
+                    </span>
                   </th>
                   <th style={{ width: "12%" }}>ASSOCIATED RFQ</th>
                   <th style={{ width: "12%" }}>

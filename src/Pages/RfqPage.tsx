@@ -444,6 +444,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
     }
   };
   const [statusQuery, setStatusQuery] = useState<StatusFilter>("All Status");
+  const [dateSortOrder, setDateSortOrder] = useState<"desc" | "asc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(openCreateModal);
 
@@ -497,7 +498,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return records.filter((row) => {
+    const list = records.filter((row) => {
       const createdBy = getCreatedBy(row);
       const associatedPr = getAssociatedPr(row);
       const statusLabel = getStatusLabel(row);
@@ -526,11 +527,25 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
 
       return matchesSearch && matchesCreatedOn && matchesStatus;
     });
-  }, [records, search, createdOnQuery, statusQuery]);
+
+    return [...list].sort((a, b) => {
+      const dateAStr = a.createdon || a.cr49f_requestdate;
+      const dateBStr = b.createdon || b.cr49f_requestdate;
+      const timeA = dateAStr ? new Date(dateAStr).getTime() : 0;
+      const timeB = dateBStr ? new Date(dateBStr).getTime() : 0;
+      const validA = Number.isNaN(timeA) ? 0 : timeA;
+      const validB = Number.isNaN(timeB) ? 0 : timeB;
+
+      if (validA !== validB) {
+        return dateSortOrder === "asc" ? validA - validB : validB - validA;
+      }
+      return (b.cr49f_rfqnumber || "").localeCompare(a.cr49f_rfqnumber || "");
+    });
+  }, [records, search, createdOnQuery, statusQuery, dateSortOrder]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, createdOnQuery, statusQuery]);
+  }, [search, createdOnQuery, statusQuery, dateSortOrder]);
 
   const counts = useMemo(
     () => ({
@@ -876,6 +891,24 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
               <ChevronDown size={12} className="dropdown-chevron" />
             </div>
 
+            {/* Created Date Sort Dropdown */}
+            <div className="pr-filter-dropdown-wrap">
+              <select
+                value={dateSortOrder}
+                onChange={(e) => {
+                  setDateSortOrder(e.target.value as "desc" | "asc");
+                  setCurrentPage(1);
+                }}
+                className="pr-filter-dropdown"
+                title="Sort by Created Date"
+                aria-label="Sort by Created Date"
+              >
+                <option value="desc">Date: Newest First</option>
+                <option value="asc">Date: Oldest First</option>
+              </select>
+              <ChevronDown size={12} className="dropdown-chevron" />
+            </div>
+
 
 
             {/* List / Grid View Toggle */}
@@ -991,8 +1024,15 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                 <tr>
                   <th style={{ width: 30 }}></th>
                   <th style={{ width: 32 }}>#</th>
-                  <th style={{ width: "23%" }}>
-                    RFQ DETAILS <span className="sort-diamond">◊</span>
+                  <th
+                    style={{ width: "23%", cursor: "pointer", userSelect: "none" }}
+                    onClick={() => setDateSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
+                    title={`Sorted by Created Date (${dateSortOrder === "desc" ? "Newest First" : "Oldest First"}). Click to toggle.`}
+                  >
+                    RFQ DETAILS{" "}
+                    <span className="sort-diamond" style={{ color: "var(--primary-hex, #2563eb)", fontWeight: 700 }}>
+                      {dateSortOrder === "desc" ? "▼" : "▲"}
+                    </span>
                   </th>
                   <th style={{ width: "11%" }}>ASSOCIATED PR</th>
                   <th style={{ width: "9%" }}>ASSOCIATED PO</th>

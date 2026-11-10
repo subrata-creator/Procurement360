@@ -848,6 +848,38 @@ export async function getSupplierResponsesForRfq(
 }
 
 /**
+ * Safely evaluates whether a Dataverse record is marked as Rewarded.
+ * Checks explicit reward fields (IsRewarded, isrewarded, cr49f_isrewarded,
+ * cr49f_IsRewarded, cr49f_selectedsuppliers, cr49f_selectedsupplier) without static
+ * assumptions or treating active/approved status (status: 1) as rewarded.
+ */
+export function isRecordRewarded(record: unknown): boolean {
+  if (!record || typeof record !== "object") return false;
+  const r = record as Record<string, unknown>;
+
+  const checkTruth = (val: unknown): boolean => {
+    if (val === true || val === 1) return true;
+    if (typeof val === "string") {
+      const lower = val.trim().toLowerCase();
+      return lower === "true" || lower === "1" || lower === "yes";
+    }
+    return false;
+  };
+
+  return (
+    checkTruth(r.IsRewarded) ||
+    checkTruth(r.isrewarded) ||
+    checkTruth(r.cr49f_isrewarded) ||
+    checkTruth(r.cr49f_IsRewarded) ||
+    checkTruth(r.isRewarded) ||
+    checkTruth(r.cr49f_selectedsuppliers) ||
+    checkTruth(r.cr49f_selectedsupplier) ||
+    checkTruth(r.cr49f_rewarded) ||
+    checkTruth(r.rewarded)
+  );
+}
+
+/**
  * Retrieves all RFQ invitations for the logged-in supplier.
  * Strictly filters by the supplier identity to enforce supplier data security.
  */
@@ -932,14 +964,69 @@ export async function getSupplierInvitations(
       return r.cr49f_responseid?.includes(`RFQ:${rfqId}`);
     });
 
-    const isRewarded =
-      Number(rfq.cr49f_status) === 1 ||
-      Boolean(rfq.cr49f_awarddate) ||
-      rfq.cr49f_statusname?.toLowerCase() === "approved" ||
-      rfq.cr49f_statusname?.toLowerCase() === "rewarded";
+    // 1. Find all selected supplier entries for this RFQ
+    const rfqSelectedSuppliers = allSelectedSuppliers.filter((s) => {
+      const rVal = cleanGuid(s._cr49f_rfq_value);
+      return rVal === rfqId;
+    });
+
+    // 2. Find this supplier's selected supplier record for this RFQ
+    const currentSupplierSel = matchingSelectedSupp.find((s) => {
+      const rVal = cleanGuid(s._cr49f_rfq_value);
+      return rVal === rfqId;
+    });
+
+    // 3. Check if THIS supplier is specifically marked rewarded
+    const isThisSupplierSelRewarded = isRecordRewarded(currentSupplierSel);
+    const isThisResponseRewarded = isRecordRewarded(parentResp);
+
+    // 4. Check if ANOTHER supplier on this RFQ is marked rewarded
+    const anotherSupplierRewarded = rfqSelectedSuppliers.some((s) => {
+      if (currentSupplierSel && s === currentSupplierSel) return false;
+      const sId = cleanGuid(s.cr49f_selectedsuppliersid);
+      if (currentSupplierSel && sId === cleanGuid(currentSupplierSel.cr49f_selectedsuppliersid)) return false;
+      return isRecordRewarded(s);
+    });
+
+    // 5. Check if RFQ entity has explicit IsRewarded field or status name 'rewarded'
+    const isRfqDirectlyRewarded =
+      isRecordRewarded(rfq) || rfq.cr49f_statusname?.toLowerCase() === "rewarded";
+
+    // 6. Check local cache (only if awarded in this session)
+    const cachedAwardedSup =
+      (typeof window !== "undefined" && window.localStorage
+        ? localStorage.getItem(`rfq_awarded_supplier_${rfqId}`) ||
+          (rfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_${rfq.cr49f_rfqnumber}`) : null)
+        : null);
+
+    const isCachedAwardedToThisSupplier = Boolean(
+      cachedAwardedSup &&
+        (cleanGuid(cachedAwardedSup) === cleanSupId ||
+          cachedAwardedSup.toLowerCase() === supplierId.toLowerCase() ||
+          (currentSupplierSel && cleanGuid(currentSupplierSel.cr49f_selectedsuppliersid) === cleanGuid(cachedAwardedSup)) ||
+          (currentSupplierSel && currentSupplierSel.cr49f_selectedsuppliernumber?.toLowerCase() === cachedAwardedSup.toLowerCase()))
+    );
+
+    const isCachedAwardedToOther = Boolean(
+      cachedAwardedSup && !isCachedAwardedToThisSupplier
+    );
+
+    // Strictly evaluate whether this supplier is rewarded:
+    // - NEVER treat status: 1 ("Approved") or statusname: "approved" as Rewarded.
+    // - Check IsRewarded / cr49f_selectedsuppliers field on selected supplier record.
+    let isRewarded = false;
+    if (anotherSupplierRewarded || isCachedAwardedToOther) {
+      isRewarded = false;
+    } else if (isThisSupplierSelRewarded || isThisResponseRewarded || isCachedAwardedToThisSupplier) {
+      isRewarded = true;
+    } else if (isRfqDirectlyRewarded && !rfqSelectedSuppliers.some((s) => isRecordRewarded(s))) {
+      // RFQ marked rewarded in Dataverse and no specific selected supplier flagged;
+      // reward is assigned if this supplier submitted a response
+      isRewarded = Boolean(parentResp && (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate));
+    }
 
     let status: SupplierResponseStatus = "Invited";
-    if (isRewarded && parentResp && (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate)) {
+    if (isRewarded) {
       status = "Rewarded";
     } else if (parentResp) {
       if (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate) {
@@ -947,8 +1034,6 @@ export async function getSupplierInvitations(
       } else if (parentResp.cr49f_totalamount && parentResp.cr49f_totalamount > 0) {
         status = "Draft";
       }
-    } else if (isRewarded) {
-      status = "Rewarded";
     }
 
     invitations.push({
@@ -1159,7 +1244,14 @@ export async function getSupplierRfqDetails(
 
   // Determine status
   let status: SupplierResponseStatus = "Invited";
-  if (parentResp?.statuscode === 2 || parentResp?.statecode === 1 || parentResp?.cr49f_responsedate) {
+  const isReward =
+    isRecordRewarded(matchedSelSupp) ||
+    isRecordRewarded(parentResp) ||
+    (isRecordRewarded(rfq) && !selectedSupp.some((s) => s !== matchedSelSupp && isRecordRewarded(s)));
+
+  if (isReward) {
+    status = "Rewarded";
+  } else if (parentResp?.statuscode === 2 || parentResp?.statecode === 1 || parentResp?.cr49f_responsedate) {
     status = "Submitted";
   } else if (
     (parentResp?.cr49f_totalamount && parentResp.cr49f_totalamount > 0) ||

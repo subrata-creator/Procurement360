@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
+  Award,
   Building2,
   CheckCircle2,
   Clock,
@@ -25,7 +26,7 @@ import "../../Styles/SupplierPortal.css";
 interface SupplierRfqsPageProps {
   userEmail?: string;
   userName?: string;
-  defaultFilter?: "All" | "Pending" | "Draft" | "Submitted";
+  defaultFilter?: "All" | "Pending" | "Draft" | "Submitted" | "Rewarded";
 }
 
 export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
@@ -124,9 +125,9 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
     }
   };
 
-  // Filtered invitations
+  // Filtered invitations (sorted by date, newest first)
   const filteredInvitations = useMemo(() => {
-    return invitations.filter((item) => {
+    const list = invitations.filter((item) => {
       const matchesSearch =
         item.rfqNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -135,16 +136,28 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
       if (!matchesSearch) return false;
 
       if (statusFilter === "Pending") {
-        return item.status === "Invited";
+        return item.status === "Invited" && !item.isRewarded;
       }
       if (statusFilter === "Draft") {
-        return item.status === "Draft";
+        return item.status === "Draft" && !item.isRewarded;
       }
       if (statusFilter === "Submitted") {
-        return item.status === "Submitted";
+        return item.status === "Submitted" && !item.isRewarded;
+      }
+      if (statusFilter === "Rewarded") {
+        return item.status === "Rewarded" || Boolean(item.isRewarded);
       }
 
       return true;
+    });
+
+    return [...list].sort((a, b) => {
+      const timeA = a.submissionDeadline ? new Date(a.submissionDeadline).getTime() : 0;
+      const timeB = b.submissionDeadline ? new Date(b.submissionDeadline).getTime() : 0;
+      const validA = Number.isNaN(timeA) ? 0 : timeA;
+      const validB = Number.isNaN(timeB) ? 0 : timeB;
+      if (validA !== validB) return validB - validA;
+      return (b.rfqNumber || "").localeCompare(a.rfqNumber || "");
     });
   }, [invitations, searchQuery, statusFilter]);
 
@@ -228,21 +241,28 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
             className={`supplier-filter-tab ${statusFilter === "Pending" ? "active" : ""}`}
             onClick={() => setStatusFilter("Pending")}
           >
-            Invited ({invitations.filter((i) => i.status === "Invited").length})
+            Invited ({invitations.filter((i) => i.status === "Invited" && !i.isRewarded).length})
           </button>
           <button
             type="button"
             className={`supplier-filter-tab ${statusFilter === "Draft" ? "active" : ""}`}
             onClick={() => setStatusFilter("Draft")}
           >
-            Drafts ({invitations.filter((i) => i.status === "Draft").length})
+            Drafts ({invitations.filter((i) => i.status === "Draft" && !i.isRewarded).length})
           </button>
           <button
             type="button"
             className={`supplier-filter-tab ${statusFilter === "Submitted" ? "active" : ""}`}
             onClick={() => setStatusFilter("Submitted")}
           >
-            Submitted ({invitations.filter((i) => i.status === "Submitted").length})
+            Submitted ({invitations.filter((i) => i.status === "Submitted" && !i.isRewarded).length})
+          </button>
+          <button
+            type="button"
+            className={`supplier-filter-tab ${statusFilter === "Rewarded" ? "active" : ""}`}
+            onClick={() => setStatusFilter("Rewarded")}
+          >
+            Rewarded ({invitations.filter((i) => i.status === "Rewarded" || i.isRewarded).length})
           </button>
         </div>
       </div>
@@ -303,34 +323,59 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
                       : "Open"}
                   </td>
                   <td>
-                    <span className={`supplier-status-pill ${inv.status.toLowerCase()}`}>
-                      {inv.status === "Submitted" ? (
+                    <span
+                      className={`supplier-status-pill ${
+                        inv.status === "Rewarded" || inv.isRewarded
+                          ? "rewarded"
+                          : inv.status.toLowerCase()
+                      }`}
+                    >
+                      {inv.status === "Rewarded" || inv.isRewarded ? (
+                        <Award size={11} />
+                      ) : inv.status === "Submitted" ? (
                         <CheckCircle2 size={11} />
                       ) : inv.status === "Draft" ? (
                         <Clock size={11} />
                       ) : (
                         <Mail size={11} />
                       )}
-                      {inv.status}
+                      {inv.status === "Rewarded" || inv.isRewarded ? "Rewarded" : inv.status}
                     </span>
                   </td>
                   <td>
                     <strong>
                       {inv.totalAmount && inv.totalAmount > 0
-                        ? `$${inv.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                        ? `₹${inv.totalAmount.toLocaleString("en-IN", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`
                         : "—"}
                     </strong>
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <button
                       type="button"
-                      className={`supplier-btn-action ${inv.status === "Submitted" ? "" : "primary"}`}
+                      className={`supplier-btn-action ${
+                        inv.status === "Rewarded" || inv.isRewarded || inv.status === "Submitted"
+                          ? ""
+                          : "primary"
+                      }`}
                       onClick={() => navigate(`/supplier-rfqs/${inv.rfqId}`)}
                     >
-                      {inv.status === "Submitted" ? (
+                      {inv.status === "Rewarded" || inv.isRewarded ? (
+                        <>
+                          <Award size={12} />
+                          View Award
+                        </>
+                      ) : inv.status === "Submitted" ? (
                         <>
                           <FileText size={12} />
                           View Quotation
+                        </>
+                      ) : inv.status === "Draft" ? (
+                        <>
+                          <Clock size={12} />
+                          Resume Draft
                         </>
                       ) : (
                         <>

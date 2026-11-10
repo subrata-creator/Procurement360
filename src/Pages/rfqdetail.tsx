@@ -409,8 +409,8 @@ export default function RfqDetail() {
               ranking: s.ranking ?? s.flowRank ?? (idx + 1),
               reason: s.reason || s.flowReason,
               verified: true,
-              rewarded: idx === 0,
-              hasResponse: idx === 0,
+              rewarded: false,
+              hasResponse: false,
             }))
           );
         }
@@ -447,7 +447,7 @@ export default function RfqDetail() {
                 "Offers Cisco Catalyst 9300 network switch matching the requested 48-port Gigabit PoE+ managed switch with Layer 3 routing capabilities.",
             },
             {
-              rank: 1,
+              rank: 2,
               supplierId: "SUP-1009",
               reason:
                 "Provides comprehensive managed services including 24/7 proactive monitoring and level 2/3 incident resolution aligned with the requested emergency SLA.",
@@ -469,8 +469,8 @@ export default function RfqDetail() {
           ranking: s.flowRank ?? (idx + 1),
           reason: s.flowReason,
           verified: true,
-          rewarded: idx === 0,
-          hasResponse: idx === 0,
+          rewarded: false,
+          hasResponse: false,
         }));
 
         if (isMounted) {
@@ -646,9 +646,15 @@ export default function RfqDetail() {
         cachedInvited = [];
       }
 
-      // Check awarded supplier cache and Dataverse cr49f_selectedsuppliers field
+      // Check awarded supplier cache and Dataverse cr49f_selectedsuppliers / IsRewarded field
       const dataverseAwardedSel = selectedSuppliers.find(
-        (sel) => Boolean(sel.cr49f_selectedsuppliers) || Boolean((sel as any).cr49f_selectedsupplier)
+        (sel) =>
+          Boolean(sel.cr49f_selectedsuppliers) ||
+          Boolean((sel as any).cr49f_selectedsupplier) ||
+          Boolean((sel as any).IsRewarded) ||
+          Boolean((sel as any).isrewarded) ||
+          Boolean((sel as any).cr49f_isrewarded) ||
+          Boolean((sel as any).cr49f_IsRewarded)
       );
       const dvAwardedId = dataverseAwardedSel?.cr49f_selectedsuppliersid;
       const dvAwardedName = dataverseAwardedSel?.cr49f_supplierquotation;
@@ -662,7 +668,7 @@ export default function RfqDetail() {
           (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_name_${liveRfq.cr49f_rfqnumber}`) : null)
         : null);
 
-      const isSupplierRewardedCheck = (supId?: string, supName?: string, rank?: number) => {
+      const isSupplierRewardedCheck = (supId?: string, supName?: string, _rank?: number) => {
         if (dataverseAwardedSel) {
           if (supId && (cleanGuid(supId) === cleanGuid(dvAwardedId) || supId === dvAwardedId)) return true;
           if (supName && dvAwardedName && supName.toLowerCase().trim() === dvAwardedName.toLowerCase().trim()) return true;
@@ -673,9 +679,7 @@ export default function RfqDetail() {
         if (cachedAwardedSupplierName && supName && supName.toLowerCase().trim() === cachedAwardedSupplierName.toLowerCase().trim()) {
           return true;
         }
-        if (!cachedAwardedSupplierId && !cachedAwardedSupplierName && !dataverseAwardedSel && statusInfo.label === "Rewarded" && rank === 1) {
-          return true;
-        }
+        // Do not guess or assume rank 1 is rewarded without explicit Dataverse confirmation
         return false;
       };
 
@@ -799,6 +803,10 @@ export default function RfqDetail() {
             rewarded:
               Boolean(sel.cr49f_selectedsuppliers) ||
               Boolean((sel as any).cr49f_selectedsupplier) ||
+              Boolean((sel as any).IsRewarded) ||
+              Boolean((sel as any).isrewarded) ||
+              Boolean((sel as any).cr49f_isrewarded) ||
+              Boolean((sel as any).cr49f_IsRewarded) ||
               isSupplierRewardedCheck(supId, matched?.cr49f_name || name, invitedMap.size + 1),
             hasResponse: hasResponded,
           });
@@ -883,8 +891,8 @@ export default function RfqDetail() {
         flowInvitedSuppliers.length > 0
           ? flowInvitedSuppliers.map((s) => ({
               ...s,
-              rewarded: statusInfo.label === "Rewarded" && s.ranking === 1,
-              hasResponse: s.ranking === 1,
+              rewarded: Boolean(s.rewarded),
+              hasResponse: Boolean(s.hasResponse),
             }))
           : mockRfq.invitedSuppliers.map((s) => ({
               ...s,
@@ -1166,15 +1174,26 @@ export default function RfqDetail() {
       // Try updating Dataverse if available
       try {
         if (rfqId) {
-          await Cr49f_requestforqoutationsService.update(rfqId, {
-            cr49f_status: 1,
-          });
+          try {
+            await Cr49f_requestforqoutationsService.update(rfqId, {
+              cr49f_awarddate: new Date().toISOString(),
+              cr49f_status: 1,
+              cr49f_isrewarded: true,
+              isrewarded: true,
+              IsRewarded: true,
+            } as any);
+          } catch {
+            await Cr49f_requestforqoutationsService.update(rfqId, {
+              cr49f_awarddate: new Date().toISOString(),
+              cr49f_status: 1,
+            } as any);
+          }
         }
       } catch (dvErr) {
         console.warn("Could not update RFQ in Dataverse directly:", dvErr);
       }
 
-      // Update cr49f_selectedsuppliers table to set cr49f_selectedsuppliers: true
+      // Update cr49f_selectedsuppliers table to set cr49f_selectedsuppliers / IsRewarded: true
       try {
         let matchedSel = selectedSuppliers.find((s) => {
           const sId = cleanGuid(s.cr49f_selectedsuppliersid);
@@ -1213,16 +1232,68 @@ export default function RfqDetail() {
 
         if (matchedSel?.cr49f_selectedsuppliersid) {
           const targetSelId = cleanGuid(matchedSel.cr49f_selectedsuppliersid);
-          await Cr49f_selectedsuppliersesService.update(targetSelId, {
-            cr49f_selectedsuppliers: true,
-            cr49f_selectedsupplier: true,
-          } as any);
+          try {
+            await Cr49f_selectedsuppliersesService.update(targetSelId, {
+              cr49f_selectedsuppliers: true,
+              cr49f_selectedsupplier: true,
+              cr49f_isrewarded: true,
+              isrewarded: true,
+              IsRewarded: true,
+            } as any);
+          } catch {
+            await Cr49f_selectedsuppliersesService.update(targetSelId, {
+              cr49f_selectedsuppliers: true,
+              cr49f_selectedsupplier: true,
+            } as any);
+          }
+
+          // Ensure other suppliers for this RFQ are set to false (only one supplier rewarded)
+          const otherSels = selectedSuppliers.filter(
+            (s) => cleanGuid(s.cr49f_selectedsuppliersid) !== targetSelId
+          );
+          for (const other of otherSels) {
+            const oId = cleanGuid(other.cr49f_selectedsuppliersid);
+            if (oId) {
+              try {
+                await Cr49f_selectedsuppliersesService.update(oId, {
+                  cr49f_selectedsuppliers: false,
+                  cr49f_selectedsupplier: false,
+                  cr49f_isrewarded: false,
+                  isrewarded: false,
+                  IsRewarded: false,
+                } as any);
+              } catch {
+                try {
+                  await Cr49f_selectedsuppliersesService.update(oId, {
+                    cr49f_selectedsuppliers: false,
+                    cr49f_selectedsupplier: false,
+                  } as any);
+                } catch {
+                  // Ignore
+                }
+              }
+            }
+          }
 
           setSelectedSuppliers((prev) =>
             prev.map((item) =>
               cleanGuid(item.cr49f_selectedsuppliersid) === targetSelId
-                ? { ...item, cr49f_selectedsuppliers: true, cr49f_selectedsupplier: true }
-                : item
+                ? {
+                    ...item,
+                    cr49f_selectedsuppliers: true,
+                    cr49f_selectedsupplier: true,
+                    cr49f_isrewarded: true,
+                    isrewarded: true,
+                    IsRewarded: true,
+                  }
+                : {
+                    ...item,
+                    cr49f_selectedsuppliers: false,
+                    cr49f_selectedsupplier: false,
+                    cr49f_isrewarded: false,
+                    isrewarded: false,
+                    IsRewarded: false,
+                  }
             )
           );
         }
