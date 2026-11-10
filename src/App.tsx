@@ -418,7 +418,6 @@ const AppContent: React.FC = () => {
             <Dashboard
               isAdmin={isAdmin}
               userName={loggedInUser.userName}
-              onOpenChatbot={() => setIsCopilotOpen(true)}
             />
           )}
         </main>

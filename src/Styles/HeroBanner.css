@@ -190,13 +190,9 @@
   place-items: center;
   width: 84px;
   height: 84px;
-  cursor: pointer;
   border-radius: 50%;
-  transition: transform 200ms ease;
-}
-
-.hero-ai-orbit-container:hover {
-  transform: scale(1.05);
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Orbital rings */

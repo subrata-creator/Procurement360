@@ -13,10 +13,9 @@ import "../Styles/HeroBanner.css";
 interface DashboardProps {
   isAdmin?: boolean;
   userName?: string;
-  onOpenChatbot?: () => void;
 }
 
-export default function Dashboard({ isAdmin = false, userName, onOpenChatbot }: DashboardProps) {
+export default function Dashboard({ isAdmin = false, userName }: DashboardProps) {
   const navigate = useNavigate();
   const [isCreatePROpen, setIsCreatePROpen] = useState(false);
   const greeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening";
@@ -67,13 +66,7 @@ export default function Dashboard({ isAdmin = false, userName, onOpenChatbot }: 
 
         <div className="hero-content-right">
           {/* AI Revolving Circular Motion Graphic */}
-          <div
-            className="hero-ai-orbit-container"
-            onClick={onOpenChatbot}
-            title="Open PR Assistant"
-            role="button"
-            tabIndex={0}
-          >
+          <div className="hero-ai-orbit-container" aria-hidden="true">
             {/* Concentric rotating orbital rings */}
             <div className="hero-orbit-ring ring-outer">
               <span className="hero-orbit-node node-1" />
