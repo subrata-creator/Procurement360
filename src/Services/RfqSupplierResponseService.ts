@@ -1289,6 +1289,9 @@ export async function submitSupplierResponse(
     deliveryDate?: string;
     paymentTerms?: string;
     warranty?: string;
+    rfqId?: string;
+    supplierId?: string;
+    supplierCode?: string;
   }
 ): Promise<{ success: boolean; totalAmount: number; submittedDate: string }> {
   // Validation: mandatory fields
@@ -1358,6 +1361,72 @@ export async function submitSupplierResponse(
     } catch (parentErr) {
       console.warn(`[RfqSupplierResponseService] Failed to finalize parent response ${cleanRespId}:`, parentErr);
     }
+  }
+
+  // 3. In cr49f_selectedsuppliers table, set cr49f_responded: true
+  try {
+    let targetSelectedSupplierId = "";
+    let parentRfqValue = cleanGuid(meta?.rfqId);
+
+    // If parent response exists in Dataverse, check its supplier and RFQ lookups
+    if (cleanRespId && !cleanRespId.startsWith("mock-")) {
+      try {
+        const parentRes = await Cr49f_rfqsupplierresponsesService.get(cleanRespId);
+        if (parentRes.success && parentRes.data) {
+          const supLookup = cleanGuid(parentRes.data._cr49f_supplier_value);
+          const rfqLookup = cleanGuid(parentRes.data._cr49f_rfq_value);
+          if (supLookup) targetSelectedSupplierId = supLookup;
+          if (rfqLookup) parentRfqValue = rfqLookup;
+        }
+      } catch (err) {
+        console.warn("[RfqSupplierResponseService] Could not retrieve parent response lookup:", err);
+      }
+    }
+
+    // Query all selected suppliers to find the matching record
+    const allSelRes = await Cr49f_selectedsuppliersesService.getAll();
+    if (allSelRes.success && allSelRes.data) {
+      const allSel = allSelRes.data;
+
+      // Find by direct ID match
+      let matchedSel = allSel.find(
+        (s) => cleanGuid(s.cr49f_selectedsuppliersid) === targetSelectedSupplierId
+      );
+
+      // If not found by direct ID match, match by RFQ and supplier code / ID
+      if (!matchedSel) {
+        const supCode = (meta?.supplierCode || "").toLowerCase();
+        const supId = cleanGuid(meta?.supplierId);
+
+        matchedSel = allSel.find((s) => {
+          const sRfq = cleanGuid(s._cr49f_rfq_value);
+          const sNum = (s.cr49f_selectedsuppliernumber || "").toLowerCase();
+          const sId = cleanGuid(s.cr49f_selectedsuppliersid);
+
+          const rfqMatch = !parentRfqValue || sRfq === parentRfqValue;
+          const supMatch =
+            (supCode && sNum === supCode) ||
+            (supId && (sNum === supId || sId === supId)) ||
+            (targetSelectedSupplierId && (sId === targetSelectedSupplierId || sNum === targetSelectedSupplierId));
+
+          return rfqMatch && supMatch;
+        });
+      }
+
+      if (matchedSel) {
+        targetSelectedSupplierId = cleanGuid(matchedSel.cr49f_selectedsuppliersid);
+      }
+    }
+
+    // Update cr49f_responded: true on the selected supplier record
+    if (targetSelectedSupplierId && !targetSelectedSupplierId.startsWith("mock-")) {
+      await Cr49f_selectedsuppliersesService.update(targetSelectedSupplierId, {
+        cr49f_responded: true,
+      });
+      console.log(`[RfqSupplierResponseService] Marked cr49f_responded: true on selected supplier ${targetSelectedSupplierId}`);
+    }
+  } catch (selErr) {
+    console.warn("[RfqSupplierResponseService] Failed to update cr49f_responded on selected supplier:", selErr);
   }
 
   return { success: true, totalAmount, submittedDate };

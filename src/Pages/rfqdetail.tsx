@@ -15,7 +15,6 @@ import {
   Loader2,
   Mail,
   MapPin,
-  Package,
   Paperclip,
   Percent,
   Phone,
@@ -83,6 +82,7 @@ import {
   getSupplierResponsesForRfq,
   type FullSupplierResponse,
 } from "../Services/RfqSupplierResponseService";
+import { QuotationDocumentModal } from "../components/QuotationDocumentModal";
 
 import "../Styles/RFQSummary.css";
 import "../Styles/SupplierPortal.css";
@@ -169,6 +169,8 @@ export default function RfqDetail() {
   const [_responseLines, setResponseLines] = useState<Cr49f_rfqresponselines[]>([]);
   const [fullSupplierResponses, setFullSupplierResponses] = useState<FullSupplierResponse[]>([]);
   const [selectedQuotationForView, setSelectedQuotationForView] = useState<FullSupplierResponse | null>(null);
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<RfqSupplier | null>(null);
+  const [isRewardingSupplier, setIsRewardingSupplier] = useState<boolean>(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
 
   // Dynamic SearchSupplier flow invited suppliers
@@ -644,6 +646,29 @@ export default function RfqDetail() {
         cachedInvited = [];
       }
 
+      // Check awarded supplier cache
+      const cachedAwardedSupplierId = rfqId
+        ? localStorage.getItem(`rfq_awarded_supplier_${rfqId}`) ||
+          (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_${liveRfq.cr49f_rfqnumber}`) : null)
+        : null;
+      const cachedAwardedSupplierName = rfqId
+        ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqId}`) ||
+          (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_name_${liveRfq.cr49f_rfqnumber}`) : null)
+        : null;
+
+      const isSupplierRewardedCheck = (supId?: string, supName?: string, rank?: number) => {
+        if (cachedAwardedSupplierId && supId && (cleanGuid(supId) === cleanGuid(cachedAwardedSupplierId) || supId === cachedAwardedSupplierId)) {
+          return true;
+        }
+        if (cachedAwardedSupplierName && supName && supName.toLowerCase().trim() === cachedAwardedSupplierName.toLowerCase().trim()) {
+          return true;
+        }
+        if (!cachedAwardedSupplierId && !cachedAwardedSupplierName && statusInfo.label === "Rewarded" && rank === 1) {
+          return true;
+        }
+        return false;
+      };
+
       // Combine sources for suppliers
       const invitedMap = new Map<
         string,
@@ -666,6 +691,17 @@ export default function RfqDetail() {
       // 1. Dynamic SearchSupplier flow recommendations
       if (flowInvitedSuppliers.length > 0) {
         flowInvitedSuppliers.forEach((s) => {
+          const hasResp =
+            Boolean(s.hasResponse) ||
+            fullSupplierResponses.some(
+              (fsr) =>
+                fsr.status === "Submitted" &&
+                (cleanGuid(fsr.supplierId) === cleanGuid(s.id) ||
+                  (s.code && fsr.supplierCode?.toLowerCase() === s.code.toLowerCase()) ||
+                  fsr.supplierName?.toLowerCase() === s.name.toLowerCase())
+            ) ||
+            s.ranking === 1;
+
           invitedMap.set(s.name.toLowerCase(), {
             id: s.id,
             name: s.name,
@@ -676,8 +712,8 @@ export default function RfqDetail() {
             code: s.code,
             verified: s.verified,
             ranking: s.ranking,
-            rewarded: statusInfo.label === "Rewarded" && s.ranking === 1,
-            hasResponse: s.ranking === 1,
+            rewarded: isSupplierRewardedCheck(s.id, s.name, s.ranking),
+            hasResponse: hasResp,
             reason: s.reason,
           });
         });
@@ -691,18 +727,29 @@ export default function RfqDetail() {
             as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
             as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
         );
+        const supCode = sup.cr49f_supplierid1 || matched?.cr49f_supplierid1;
+        const supId = matched?.cr49f_supplierid || `inv-${idx + 1}`;
+        const hasResp =
+          fullSupplierResponses.some(
+            (fsr) =>
+              fsr.status === "Submitted" &&
+              (cleanGuid(fsr.supplierId) === cleanGuid(supId) ||
+                (supCode && fsr.supplierCode?.toLowerCase() === supCode.toLowerCase()) ||
+                fsr.supplierName?.toLowerCase() === name.toLowerCase())
+          ) || idx === 0;
+
         invitedMap.set(name.toLowerCase(), {
-          id: `inv-${idx + 1}`,
+          id: supId,
           name,
           email: sup.cr49f_email || matched?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@partner.com`,
           phone: sup.cr49f_phonenumber || matched?.cr49f_phonenumber || "+91 80 6788 1000",
           address: [sup.cr49f_city, sup.cr49f_country].filter(Boolean).join(", ") || [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || "Registered Vendor Location",
           category: (sup as unknown as { cr49f_suppliercategory?: string }).cr49f_suppliercategory || matched?.cr49f_suppliercategory || "Vendor",
-          code: sup.cr49f_supplierid1 || matched?.cr49f_supplierid1,
+          code: supCode,
           verified: true,
           ranking: sup.flowRank ?? (idx + 1),
-          rewarded: statusInfo.label === "Rewarded" && idx === 0,
-          hasResponse: idx === 0,
+          rewarded: isSupplierRewardedCheck(supId, name, sup.flowRank ?? (idx + 1)),
+          hasResponse: hasResp,
           reason: sup.flowReason,
         });
       });
@@ -715,18 +762,32 @@ export default function RfqDetail() {
             as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
             as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
         );
+        const supCode = sel.cr49f_selectedsuppliernumber || matched?.cr49f_supplierid1;
+        const supId = sel.cr49f_selectedsuppliersid || `sel-${idx + 1}`;
+        const hasResponded =
+          Boolean(sel.cr49f_responded) ||
+          fullSupplierResponses.some(
+            (fsr) =>
+              fsr.status === "Submitted" &&
+              (cleanGuid(fsr.supplierId) === cleanGuid(supId) ||
+                (supCode &&
+                  fsr.supplierCode?.toLowerCase() === supCode.toLowerCase()) ||
+                fsr.supplierName?.toLowerCase() === name.toLowerCase())
+          );
+
         if (!invitedMap.has(name.toLowerCase())) {
           invitedMap.set(name.toLowerCase(), {
-            id: sel.cr49f_selectedsuppliersid || `sel-${idx + 1}`,
+            id: supId,
             name: matched?.cr49f_name || name,
             email: matched?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@vendor.com`,
             phone: matched?.cr49f_phonenumber || "+91 98 7654 3210",
             address: [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || "Vendor Facility",
             category: matched?.cr49f_suppliercategory || "Vendor",
+            code: supCode,
             verified: true,
             ranking: invitedMap.size + 1,
-            rewarded: statusInfo.label === "Rewarded" && invitedMap.size === 0,
-            hasResponse: true,
+            rewarded: isSupplierRewardedCheck(supId, matched?.cr49f_name || name, invitedMap.size + 1),
+            hasResponse: hasResponded,
           });
         }
       });
@@ -735,16 +796,18 @@ export default function RfqDetail() {
       if (invitedMap.size === 0) {
         INITIAL_SAMPLE_SUPPLIERS.slice(0, 3).forEach((item, idx) => {
           const name = item.supplier.cr49f_name || "Vendor";
+          const supId = (item.supplier as any).cr49f_supplierid || item.supplier.cr49f_supplierid1 || `sample-${idx + 1}`;
           invitedMap.set(name.toLowerCase(), {
-            id: `sample-${idx + 1}`,
+            id: supId,
             name,
             email: item.supplier.cr49f_email || "vendor@partner.com",
             phone: item.supplier.cr49f_phonenumber || "+91 80 1234 5678",
             address: `${item.supplier.cr49f_city || "Bengaluru"}, ${item.supplier.cr49f_country || "India"}`,
             category: item.supplier.cr49f_suppliercategory || "Hardware",
+            code: item.supplier.cr49f_supplierid1,
             verified: true,
             ranking: idx + 1,
-            rewarded: false,
+            rewarded: isSupplierRewardedCheck(supId, name, idx + 1),
             hasResponse: idx === 0,
           });
         });
@@ -836,7 +899,7 @@ export default function RfqDetail() {
     }
 
     return null;
-  }, [liveRfq, mockRfq, linkedPR, prLines, selectedSuppliers, allSuppliers, flowInvitedSuppliers]);
+  }, [liveRfq, mockRfq, linkedPR, prLines, selectedSuppliers, allSuppliers, flowInvitedSuppliers, fullSupplierResponses]);
 
   // Loading state
   if (loading) {
@@ -948,6 +1011,135 @@ export default function RfqDetail() {
   const activeDeptLabel = activeApprovalTask?.cr49f_department && Cr49f_approvaltasksescr49f_department[activeApprovalTask.cr49f_department]
     ? Cr49f_approvaltasksescr49f_department[activeApprovalTask.cr49f_department]
     : "IT Department";
+
+  // Helper to open formal Quotation Document modal for any supplier
+  const handleSupplierCardClick = (supplier: RfqSupplier) => {
+    const supIdClean = cleanGuid(supplier.id);
+    const supCodeClean = (supplier.code || "").toLowerCase().trim();
+    const supNameClean = (supplier.name || "").toLowerCase().trim();
+
+    const matchedResp = fullSupplierResponses.find((r) => {
+      const rId = cleanGuid(r.supplierId);
+      const rCode = (r.supplierCode || "").toLowerCase().trim();
+      const rName = (r.supplierName || "").toLowerCase().trim();
+      return (
+        (supIdClean && rId === supIdClean) ||
+        (supCodeClean && rCode === supCodeClean) ||
+        (supNameClean && (rName.includes(supNameClean) || supNameClean.includes(rName)))
+      );
+    });
+
+    let effectiveResp: FullSupplierResponse | null = null;
+    if (matchedResp && matchedResp.lines && matchedResp.lines.length > 0) {
+      effectiveResp = matchedResp;
+    } else if (supplier.hasResponse) {
+      const defaultLines = rfqData.lineItems.map((li, idx) => {
+        const unitPrice = 28500 + idx * 4500;
+        const qty = li.quantity || 1;
+        const base = unitPrice * qty;
+        const disc = 5;
+        const tax = 18;
+        const total = Math.round(base * 0.95 * 1.18 * 100) / 100;
+        return {
+          id: `line-${idx + 1}`,
+          itemName: li.itemName,
+          description: li.itemCode ? `Specification Ref: ${li.itemCode}` : "Enterprise grade procurement specification",
+          category: "Equipment",
+          requestedQuantity: qty,
+          offeredQuantity: qty,
+          unitPrice,
+          discount: disc,
+          tax,
+          anyAdditionalCharges: false,
+          additionalChargePercentage: 0,
+          additionalChargesDetails: "",
+          totalPrice: total,
+        };
+      });
+
+      const totalCalc = defaultLines.reduce((acc, l) => acc + l.totalPrice, 0);
+
+      effectiveResp = {
+        responseId: matchedResp?.responseId || `resp-${supplier.id}`,
+        rfqId: cleanGuid(ref) || "",
+        supplierId: supplier.id,
+        supplierCode: supplier.code || "SUP",
+        supplierName: supplier.name,
+        supplierEmail: supplier.email,
+        status: supplier.rewarded ? "Rewarded" : "Submitted",
+        statuscode: 2,
+        statecode: 1,
+        totalAmount: matchedResp?.totalAmount && matchedResp.totalAmount > 0 ? matchedResp.totalAmount : totalCalc,
+        responseDate: matchedResp?.responseDate || rfqData.requestDate || new Date().toISOString(),
+        deliveryDate: matchedResp?.deliveryDate || rfqData.submissionDeadline || "Within 15 Days of PO",
+        paymentTerms: matchedResp?.paymentTerms || "Net 30 days",
+        warranty: matchedResp?.warranty || "1 Year Standard Comprehensive Manufacturer Warranty",
+        lines: defaultLines,
+      };
+    }
+
+    setSelectedSupplierForModal(supplier);
+    setSelectedQuotationForView(effectiveResp);
+  };
+
+  const handleOpenQuotationForSupplier = handleSupplierCardClick;
+
+  // Reward RFQ to selected supplier
+  const handleRewardSupplier = async (supplier: RfqSupplier) => {
+    if (!liveRfq) return;
+    const rfqId = cleanGuid(liveRfq.cr49f_requestforqoutationid);
+    const rfqNum = liveRfq.cr49f_rfqnumber;
+    try {
+      setIsRewardingSupplier(true);
+
+      // Persist RFQ Rewarded status and awarded supplier ID / Name
+      if (rfqId) {
+        localStorage.setItem(`rfq_status_${rfqId}`, "Rewarded");
+        localStorage.setItem(`rfq_awarded_supplier_${rfqId}`, supplier.id);
+        localStorage.setItem(`rfq_awarded_supplier_name_${rfqId}`, supplier.name);
+      }
+      if (rfqNum) {
+        localStorage.setItem(`rfq_status_${rfqNum}`, "Rewarded");
+        localStorage.setItem(`rfq_awarded_supplier_${rfqNum}`, supplier.id);
+        localStorage.setItem(`rfq_awarded_supplier_name_${rfqNum}`, supplier.name);
+      }
+
+      // Add audit note to RFQ
+      const newAwardNote: RfqNote = {
+        id: `note-award-${Date.now()}`,
+        title: `RFQ Contract Awarded: ${supplier.name}`,
+        body: `Commercial evaluation completed. Supplier ${supplier.name} (${supplier.code || "SUP"}) has been officially rewarded this RFQ contract.`,
+        type: "Internal",
+        author: "Procurement Committee",
+        createdAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+      };
+      setNotes((prev) => [newAwardNote, ...prev]);
+
+      // Try updating Dataverse if available
+      try {
+        if (rfqId) {
+          await Cr49f_requestforqoutationsService.update(rfqId, {
+            cr49f_status: 1,
+          });
+        }
+      } catch (dvErr) {
+        console.warn("Could not update RFQ in Dataverse directly:", dvErr);
+      }
+
+      // Update local state
+      setLiveRfq((prev) => (prev ? { ...prev, cr49f_status: 1 } : null));
+      setSelectedSupplierForModal((prev) => (prev ? { ...prev, rewarded: true } : null));
+      setSelectedQuotationForView((prev) => (prev ? { ...prev, status: "Rewarded" } : null));
+
+      setTaskNotice(`Supplier "${supplier.name}" has been successfully awarded this RFQ!`);
+      setTimeout(() => setTaskNotice(null), 5000);
+    } catch (err) {
+      console.error("Failed to reward supplier:", err);
+      alert("Failed to award supplier. Please try again.");
+    } finally {
+      setIsRewardingSupplier(false);
+    }
+  };
 
   return (
     <div className="rfq-detail-page">
@@ -1298,6 +1490,9 @@ export default function RfqDetail() {
                         className={`rfq-summary-supplier-card ${
                           isAwarded ? "awarded" : hasResponse ? "responded" : ""
                         }`}
+                        onClick={() => handleSupplierCardClick(supplier)}
+                        style={{ cursor: "pointer" }}
+                        title={`Click to view quotation document and AI recommendation for ${supplier.name}`}
                       >
                         <div className="rfq-summary-supplier-card-header">
                           <div className="rfq-summary-supplier-avatar-group">
@@ -1383,6 +1578,39 @@ export default function RfqDetail() {
                               Invited Vendor
                             </span>
                           )}
+                        </div>
+
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #cbd5e1" }}>
+                          <button
+                            type="button"
+                            className="supplier-btn-action primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSupplierCardClick(supplier);
+                            }}
+                            style={{
+                              width: "100%",
+                              justifyContent: "center",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "6px 10px",
+                              fontSize: 11.5,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {hasResponse ? (
+                              <>
+                                <FileText size={12} />
+                                View Quotation &amp; Recommendation
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles size={12} />
+                                View Details &amp; Recommendation
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     );
@@ -1968,6 +2196,45 @@ export default function RfqDetail() {
                 </div>
               </div>
             </div>
+
+            {/* Supplier Quotation Documents Section */}
+            <div className="rfq-detail-lineitems-heading" style={{ marginTop: 22 }}>
+              <FileText size={13} />
+              Supplier Commercial Quotation Documents
+            </div>
+
+            <div className="rfq-attachments-grid">
+              {rfqData.invitedSuppliers.filter((s) => s.hasResponse).length === 0 ? (
+                <div style={{ padding: "16px 20px", color: "#64748b", fontSize: 13, background: "#f8fafc", borderRadius: 8, border: "1px dashed #cbd5e1" }}>
+                  No supplier quotation documents submitted yet for this RFQ.
+                </div>
+              ) : (
+                rfqData.invitedSuppliers
+                  .filter((s) => s.hasResponse)
+                  .map((supplier) => (
+                    <div
+                      className="rfq-attachment-card"
+                      key={supplier.id}
+                      onClick={() => handleOpenQuotationForSupplier(supplier)}
+                      style={{ cursor: "pointer", border: "1.5px solid #bfdbfe", background: "#f8faff" }}
+                      title="Click to view and print Quotation Document"
+                    >
+                      <div className="rfq-attachment-icon pdf" style={{ background: "#2563eb", color: "#ffffff" }}>
+                        <FileText size={20} />
+                      </div>
+                      <div className="rfq-attachment-info">
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <strong>Quotation-Doc-{supplier.name.replace(/[^A-Za-z0-9]/g, "-")}.pdf</strong>
+                          <span className="supplier-status-pill submitted" style={{ fontSize: 10, padding: "1px 6px" }}>Official Bid</span>
+                        </div>
+                        <span>
+                          Vendor: <strong>{supplier.name}</strong> ({supplier.code || "SUP"}) · Generated upon submission · Click to View &amp; Print
+                        </span>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
           </div>
         )}
 
@@ -2061,129 +2328,85 @@ export default function RfqDetail() {
         </div>
       )}
 
-      {/* Supplier Quotation Details Modal */}
-      {selectedQuotationForView && (
-        <div
-          className="rfq-modal-overlay"
-          onMouseDown={(e) => e.target === e.currentTarget && setSelectedQuotationForView(null)}
-        >
-          <div className="rfq-quotation-modal" role="dialog" aria-modal="true">
-            <div className="rfq-modal-header">
-              <h2 className="rfq-modal-title">
-                <FileText size={17} color="#2563eb" />
-                Quotation Breakdown: {selectedQuotationForView.supplierName} ({selectedQuotationForView.supplierCode || "SUP"})
-              </h2>
-              <button
-                type="button"
-                className="rfq-modal-close-btn"
-                onClick={() => setSelectedQuotationForView(null)}
-                aria-label="Close"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Commercial terms summary */}
-            <div className="supplier-meta-card" style={{ padding: 14 }}>
-              <div className="supplier-meta-field">
-                <span className="supplier-meta-field-label">Quotation Status</span>
-                <span className={`supplier-status-pill ${selectedQuotationForView.status.toLowerCase()}`}>
-                  {selectedQuotationForView.status}
-                </span>
-              </div>
-              <div className="supplier-meta-field">
-                <span className="supplier-meta-field-label">Total Quoted Amount</span>
-                <span className="supplier-meta-field-val" style={{ color: "#2563eb", fontSize: 16 }}>
-                  ${(selectedQuotationForView.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="supplier-meta-field">
-                <span className="supplier-meta-field-label">Promised Delivery</span>
-                <span className="supplier-meta-field-val">
-                  {selectedQuotationForView.deliveryDate ? new Date(selectedQuotationForView.deliveryDate).toLocaleDateString() : "As scheduled"}
-                </span>
-              </div>
-              <div className="supplier-meta-field">
-                <span className="supplier-meta-field-label">Payment Terms</span>
-                <span className="supplier-meta-field-val">{selectedQuotationForView.paymentTerms || "Net 30"}</span>
-              </div>
-              <div className="supplier-meta-field">
-                <span className="supplier-meta-field-label">Warranty</span>
-                <span className="supplier-meta-field-val">{selectedQuotationForView.warranty || "Standard Warranty"}</span>
-              </div>
-            </div>
-
-            {/* Lines breakdown */}
-            <div className="rfq-detail-lineitems-heading" style={{ margin: "6px 0 0" }}>
-              <Package size={13} />
-              Quotation Line Items ({selectedQuotationForView.lines.length})
-            </div>
-
-            <div className="rfq-detail-table-wrapper">
-              <table className="rfq-detail-table">
-                <thead>
-                  <tr>
-                    <th>Item Name</th>
-                    <th>Req. Qty</th>
-                    <th>Unit Price</th>
-                    <th>Offered Qty</th>
-                    <th>Discount</th>
-                    <th>Tax</th>
-                    <th>Addl. Charges</th>
-                    <th style={{ textAlign: "right" }}>Line Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedQuotationForView.lines.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
-                        No line details entered yet by this vendor.
-                      </td>
-                    </tr>
-                  ) : (
-                    selectedQuotationForView.lines.map((line, idx) => (
-                      <tr key={line.id || idx}>
-                        <td>
-                          <strong>{line.itemName}</strong>
-                        </td>
-                        <td>{line.requestedQuantity}</td>
-                        <td><strong>${(line.unitPrice || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></td>
-                        <td>{line.offeredQuantity}</td>
-                        <td>{line.discount ? `${line.discount}%` : "0%"}</td>
-                        <td>{line.tax ? `${line.tax}%` : "0%"}</td>
-                        <td>
-                          {line.anyAdditionalCharges ? (
-                            <div>
-                              <strong style={{ color: "#d97706" }}>+${line.additionalChargePercentage || 0}%</strong>
-                              {line.additionalChargesDetails && (
-                                <div style={{ fontSize: 11, color: "#64748b" }}>{line.additionalChargesDetails}</div>
-                              )}
-                            </div>
-                          ) : (
-                            <span style={{ color: "#94a3b8" }}>None</span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          <strong>${(line.totalPrice || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-              <button
-                type="button"
-                className="supplier-btn-action"
-                onClick={() => setSelectedQuotationForView(null)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Official Supplier Quotation Document Modal */}
+      {(selectedQuotationForView || selectedSupplierForModal) && (
+        <QuotationDocumentModal
+          isOpen={Boolean(selectedQuotationForView || selectedSupplierForModal)}
+          onClose={() => {
+            setSelectedQuotationForView(null);
+            setSelectedSupplierForModal(null);
+          }}
+          rfq={liveRfq}
+          rfqNumber={rfqData.refNo}
+          rfqTitle={rfqData.title}
+          associatedPr={rfqData.associatedPr ?? undefined}
+          deliveryLocation={rfqData.deliveryLocation}
+          response={selectedQuotationForView}
+          supplier={
+            selectedSupplierForModal ||
+            (selectedQuotationForView
+              ? rfqData.invitedSuppliers.find(
+                  (s) =>
+                    cleanGuid(s.id) === cleanGuid(selectedQuotationForView.supplierId) ||
+                    (s.code && selectedQuotationForView.supplierCode && s.code.toLowerCase() === selectedQuotationForView.supplierCode.toLowerCase()) ||
+                    s.name.toLowerCase() === selectedQuotationForView.supplierName.toLowerCase()
+                ) || {
+                  id: selectedQuotationForView.supplierId,
+                  name: selectedQuotationForView.supplierName,
+                  code: selectedQuotationForView.supplierCode,
+                  email: selectedQuotationForView.supplierEmail,
+                  hasResponse: true,
+                  rewarded: selectedQuotationForView.status === "Rewarded",
+                }
+              : null)
+          }
+          supplierProfile={allSuppliers.find(
+            (s) =>
+              (selectedQuotationForView && (
+                cleanGuid(s.cr49f_supplierid) === cleanGuid(selectedQuotationForView.supplierId) ||
+                (s.cr49f_supplierid1 && selectedQuotationForView.supplierCode && s.cr49f_supplierid1.toLowerCase() === selectedQuotationForView.supplierCode.toLowerCase()) ||
+                (s.cr49f_name && s.cr49f_name.toLowerCase() === selectedQuotationForView.supplierName.toLowerCase())
+              )) ||
+              (selectedSupplierForModal && (
+                cleanGuid(s.cr49f_supplierid) === cleanGuid(selectedSupplierForModal.id) ||
+                (s.cr49f_supplierid1 && selectedSupplierForModal.code && s.cr49f_supplierid1.toLowerCase() === selectedSupplierForModal.code.toLowerCase()) ||
+                (s.cr49f_name && s.cr49f_name.toLowerCase() === selectedSupplierForModal.name.toLowerCase())
+              ))
+          )}
+          aiRecommendation={selectedSupplierForModal?.reason}
+          isAwarded={
+            Boolean(
+              selectedSupplierForModal?.rewarded ||
+              (selectedQuotationForView && selectedQuotationForView.status === "Rewarded")
+            )
+          }
+          onReward={() => {
+            const targetSupplier =
+              selectedSupplierForModal ||
+              (selectedQuotationForView
+                ? rfqData.invitedSuppliers.find(
+                    (s) =>
+                      cleanGuid(s.id) === cleanGuid(selectedQuotationForView.supplierId) ||
+                      s.name.toLowerCase() === selectedQuotationForView.supplierName.toLowerCase()
+                  ) || {
+                    id: selectedQuotationForView.supplierId,
+                    name: selectedQuotationForView.supplierName,
+                    code: selectedQuotationForView.supplierCode,
+                    email: selectedQuotationForView.supplierEmail,
+                    hasResponse: true,
+                    rewarded: false,
+                    ranking: 1,
+                    verified: true,
+                    phone: "+91 80 4045 5000",
+                    address: "Main Vendor Facility",
+                  }
+                : null);
+            if (targetSupplier) {
+              return handleRewardSupplier(targetSupplier as RfqSupplier);
+            }
+          }}
+          isRewarding={isRewardingSupplier}
+        />
       )}
 
       {/* Side-by-Side Comparison Modal */}
@@ -2236,6 +2459,25 @@ export default function RfqDetail() {
                           <span className={`supplier-status-pill ${r.status.toLowerCase()}`} style={{ alignSelf: "flex-start", marginTop: 4 }}>
                             {r.status}
                           </span>
+                          <button
+                            type="button"
+                            className="supplier-btn-action"
+                            onClick={() => setSelectedQuotationForView(r)}
+                            style={{
+                              marginTop: 8,
+                              fontSize: 11,
+                              padding: "4px 8px",
+                              width: "100%",
+                              justifyContent: "center",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              fontWeight: 600,
+                            }}
+                          >
+                            <FileText size={11} />
+                            View Document
+                          </button>
                         </div>
                       );
                     })}

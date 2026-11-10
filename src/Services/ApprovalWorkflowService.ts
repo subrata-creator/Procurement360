@@ -1544,6 +1544,7 @@ export async function submitChangesNeededUpdate(params: {
                 "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${cleanRFQId})`,
                 cr49f_selectedsuppliernumber: sup.cr49f_supplierid1 || sup.cr49f_supplierid || "SUP",
                 cr49f_supplierquotation: sup.cr49f_name || "Invited Supplier",
+                cr49f_responded: false,
                 statecode: 0,
                 statuscode: 1,
               });

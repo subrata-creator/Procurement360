@@ -1228,6 +1228,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
               "cr49f_RFQ@odata.bind": `/cr49f_requestforqoutations(${createdRfqId})`,
               cr49f_selectedsuppliernumber: sup.cr49f_supplierid1 || `SUP-${idx + 1}`,
               cr49f_supplierquotation: sup.cr49f_name || "Invited Supplier",
+              cr49f_responded: false,
               statecode: 0,
               statuscode: 1,
             })
