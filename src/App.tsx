@@ -55,6 +55,7 @@ const getInitials = (name: string): string => {
 
 const AppContent: React.FC = () => {
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [hasOpenedCopilot, setHasOpenedCopilot] = useState(false);
   const [fallbackNavigation, setFallbackNavigation] =
     useState("Dashboard");
 
@@ -428,20 +429,25 @@ const AppContent: React.FC = () => {
       ===================================================== */}
       <button
         type="button"
-        className="dashboard-chatbot-button global-chatbot-button"
+        className={`dashboard-chatbot-button global-chatbot-button${isCopilotOpen ? " launcher-hidden" : ""}`}
         aria-label="Open PR Assistant"
         aria-expanded={isCopilotOpen}
+        aria-hidden={isCopilotOpen}
+        tabIndex={isCopilotOpen ? -1 : 0}
         title="Open PR Assistant"
-        onClick={() => setIsCopilotOpen(true)}
+        onClick={() => {
+          setHasOpenedCopilot(true);
+          setIsCopilotOpen(true);
+        }}
       >
         <Bot size={24} strokeWidth={1.9} />
       </button>
 
-      {isCopilotOpen && (
-        <ProcurementCopilot
-          onClose={() => setIsCopilotOpen(false)}
-        />
-      )}
+      <ProcurementCopilot
+        isOpen={isCopilotOpen}
+        mountFrame={hasOpenedCopilot}
+        onClose={() => setIsCopilotOpen(false)}
+      />
     </div>
   );
 };
