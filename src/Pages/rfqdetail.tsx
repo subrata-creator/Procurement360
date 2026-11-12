@@ -20,6 +20,7 @@ import {
   Phone,
   Plus,
   ShieldCheck,
+  ShoppingCart,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
@@ -172,6 +173,13 @@ export default function RfqDetail() {
   const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<RfqSupplier | null>(null);
   const [isRewardingSupplier, setIsRewardingSupplier] = useState<boolean>(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
+  const [proceedPoModal, setProceedPoModal] = useState<{
+    open: boolean;
+    rfqId?: string;
+    rfqNumber?: string;
+    supplierId?: string;
+    supplierName?: string;
+  } | null>(null);
 
   // Dynamic SearchSupplier flow invited suppliers
   const [flowInvitedSuppliers, setFlowInvitedSuppliers] = useState<RfqSupplier[]>([]);
@@ -1329,6 +1337,17 @@ export default function RfqDetail() {
 
       setTaskNotice(`Supplier "${supplier.name}" has been successfully awarded this RFQ!`);
       setTimeout(() => setTaskNotice(null), 5000);
+
+      // Close quotation document modal and prompt user for Purchase Order creation
+      setSelectedQuotationForView(null);
+      setSelectedSupplierForModal(null);
+      setProceedPoModal({
+        open: true,
+        rfqId: rfqId,
+        rfqNumber: rfqNum || rfqData.refNo,
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+      });
     } catch (err) {
       console.error("Failed to reward supplier:", err);
       alert("Failed to award supplier. Please try again.");
@@ -2827,6 +2846,83 @@ export default function RfqDetail() {
                 onClick={() => setIsCompareModalOpen(false)}
               >
                 Close Comparison
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Proceed to Purchase Order Confirmation Modal */}
+      {proceedPoModal && (
+        <div
+          className="rfq-modal-overlay"
+          style={{ zIndex: 12000 }}
+          onMouseDown={(e) => e.target === e.currentTarget && setProceedPoModal(null)}
+        >
+          <div className="rfq-po-prompt-modal" role="dialog" aria-modal="true">
+            <div className="rfq-po-prompt-header">
+              <div className="rfq-po-prompt-header-left">
+                <div className="rfq-po-prompt-icon-badge">
+                  <Trophy size={18} />
+                </div>
+                <div>
+                  <h3 className="rfq-po-prompt-title">Supplier Awarded Successfully</h3>
+                  <p className="rfq-po-prompt-subtitle">
+                    {proceedPoModal.rfqNumber} • Evaluation Complete
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rfq-modal-close-btn"
+                onClick={() => setProceedPoModal(null)}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="rfq-po-prompt-body">
+              <div className="rfq-po-prompt-success-banner">
+                <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+                <span>
+                  Supplier <strong>{proceedPoModal.supplierName}</strong> has been officially awarded this RFQ.
+                </span>
+              </div>
+
+              <h4 className="rfq-po-prompt-question">
+                Do you want to proceed for Purchase order creation?
+              </h4>
+              <p className="rfq-po-prompt-desc">
+                You can generate a formal Purchase Order now based on this awarded RFQ and the approved commercial quote, or return to review the RFQ summary.
+              </p>
+            </div>
+
+            <div className="rfq-po-prompt-footer">
+              <button
+                type="button"
+                className="rfq-po-prompt-btn-secondary"
+                onClick={() => setProceedPoModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rfq-po-prompt-btn-primary"
+                onClick={() => {
+                  const stateToPass = {
+                    rfqNumber: proceedPoModal.rfqNumber,
+                    rfqId: proceedPoModal.rfqId,
+                    supplierName: proceedPoModal.supplierName,
+                    supplierId: proceedPoModal.supplierId,
+                    fromAward: true,
+                  };
+                  setProceedPoModal(null);
+                  navigate("/orders", { state: stateToPass });
+                }}
+              >
+                <ShoppingCart size={15} />
+                <span>Proceed to Purchase Order</span>
               </button>
             </div>
           </div>

@@ -17,8 +17,9 @@ import {
   Search,
   ShoppingCart,
   Sparkles,
+  X,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { getAvatarUrl } from "../assets/utils/avatars";
 import { getInitials } from "../data/Purchaserequestsdata";
@@ -83,6 +84,17 @@ function Avatar({ name }: { name: string }) {
 
 const OrdersPage: FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = location.state as {
+    rfqNumber?: string;
+    rfqId?: string;
+    supplierName?: string;
+    supplierId?: string;
+    fromAward?: boolean;
+  } | null;
+  const [awardedRfqBanner, setAwardedRfqBanner] = useState<typeof navState>(
+    navState?.fromAward ? navState : null
+  );
   const [search, setSearch] = useState("");
   const [supplierQuery, setSupplierQuery] = useState("All Suppliers");
   const [createdOnQuery, setCreatedOnQuery] = useState("");
@@ -316,6 +328,65 @@ const OrdersPage: FC = () => {
             </button>
           </div>
         </div>
+
+        {awardedRfqBanner && (
+          <div
+            style={{
+              margin: "0 20px 16px",
+              padding: "14px 18px",
+              borderRadius: "12px",
+              background: "linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(59,130,246,0.04) 100%)",
+              border: "1px solid rgba(37,99,235,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "8px",
+                  background: "#2563eb",
+                  color: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <ShoppingCart size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground-hex, #0f172a)" }}>
+                  Create Purchase Order for Awarded RFQ: {awardedRfqBanner.rfqNumber}
+                </div>
+                <div style={{ fontSize: "12.5px", color: "var(--muted-foreground-hex, #64748b)" }}>
+                  Awarded Supplier: <strong>{awardedRfqBanner.supplierName}</strong>. Ready to initiate PO procurement record.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAwardedRfqBanner(null)}
+              style={{
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--muted-foreground-hex, #94a3b8)",
+                padding: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              aria-label="Dismiss banner"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
         <div className="orders-filters">
           <div className="orders-filter-field orders-search-filter">

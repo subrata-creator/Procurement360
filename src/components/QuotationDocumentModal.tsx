@@ -675,14 +675,6 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
             ) : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              type="button"
-              className="quotation-btn-footer-close"
-              onClick={onClose}
-            >
-              <X size={14} />
-              <span>Close</span>
-            </button>
             {onReward && (
               <button
                 type="button"
