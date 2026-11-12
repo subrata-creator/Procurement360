@@ -17,6 +17,7 @@ import {
   Send,
   ShieldCheck,
   Tag,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -66,7 +67,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
   // RFQ filtering & search
   const [rfqSearch, setRfqSearch] = useState<string>("");
-  const [rfqStatusFilter, setRfqStatusFilter] = useState<"All" | "Pending" | "Submitted" | "Rewarded">("All");
+  const [rfqStatusFilter, setRfqStatusFilter] = useState<"All" | "Pending" | "Submitted" | "Rewarded" | "Not Rewarded">("All");
 
   // Products filtering & search
   const [productSearch, setProductSearch] = useState<string>("");
@@ -197,10 +198,11 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
   const totalRfqs = invitations.length;
   const totalProducts = products.length;
   const rewardedRfqs = invitations.filter((i) => i.status === "Rewarded" || i.isRewarded).length;
+  const notRewardedRfqs = invitations.filter((i) => i.status === "Not Rewarded").length;
   const pendingRfqs = invitations.filter(
-    (i) => i.status !== "Rewarded" && !i.isRewarded && (i.status === "Invited" || i.status === "Draft")
+    (i) => i.status !== "Rewarded" && !i.isRewarded && i.status !== "Not Rewarded" && (i.status === "Invited" || i.status === "Draft")
   ).length;
-  const submittedRfqs = invitations.filter((i) => i.status === "Submitted").length;
+  const submittedRfqs = invitations.filter((i) => i.status === "Submitted" && !i.isRewarded).length;
 
   // Filtered RFQs list
   const filteredInvitations = useMemo(() => {
@@ -216,8 +218,10 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           ? true
           : rfqStatusFilter === "Rewarded"
           ? inv.status === "Rewarded" || inv.isRewarded
+          : rfqStatusFilter === "Not Rewarded"
+          ? inv.status === "Not Rewarded"
           : rfqStatusFilter === "Pending"
-          ? inv.status !== "Rewarded" && !inv.isRewarded && (inv.status === "Invited" || inv.status === "Draft")
+          ? inv.status !== "Rewarded" && !inv.isRewarded && inv.status !== "Not Rewarded" && (inv.status === "Invited" || inv.status === "Draft")
           : inv.status === rfqStatusFilter;
 
       return matchesSearch && matchesStatus;
@@ -485,6 +489,13 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               >
                 Rewarded ({rewardedRfqs})
               </button>
+              <button
+                type="button"
+                className={`supplier-filter-tab ${rfqStatusFilter === "Not Rewarded" ? "active" : ""}`}
+                onClick={() => setRfqStatusFilter("Not Rewarded")}
+              >
+                Not Rewarded ({notRewardedRfqs})
+              </button>
             </div>
           </div>
 
@@ -572,13 +583,22 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                         <td>
                           <span
                             className={`supplier-status-pill ${
-                              isRewarded ? "rewarded" : inv.status.toLowerCase()
+                              isRewarded
+                                ? "rewarded"
+                                : inv.status === "Not Rewarded"
+                                ? "not-rewarded"
+                                : inv.status.toLowerCase()
                             }`}
                           >
                             {isRewarded ? (
                               <>
                                 <Award size={12} />
                                 Rewarded
+                              </>
+                            ) : inv.status === "Not Rewarded" ? (
+                              <>
+                                <XCircle size={12} />
+                                Not Rewarded
                               </>
                             ) : inv.status === "Submitted" ? (
                               <>
@@ -612,7 +632,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                           <button
                             type="button"
                             className={`supplier-btn-action ${
-                              isRewarded || inv.status === "Submitted" ? "" : "primary"
+                              isRewarded || inv.status === "Submitted" || inv.status === "Not Rewarded" ? "" : "primary"
                             }`}
                             onClick={() => navigate(`/supplier-rfqs/${inv.rfqId}`)}
                           >
@@ -620,6 +640,11 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                               <>
                                 <Award size={13} />
                                 View Award
+                              </>
+                            ) : inv.status === "Not Rewarded" ? (
+                              <>
+                                <FileText size={13} />
+                                View Details
                               </>
                             ) : inv.status === "Submitted" ? (
                               inv.isRfqApproved ? (

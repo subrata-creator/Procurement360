@@ -17,7 +17,7 @@ import type { Cr49f_selectedsupplierses } from "../generated/models/Cr49f_select
 import type { Cr49f_supplierproducts } from "../generated/models/Cr49f_supplierproductsModel";
 import type { SampleSupplierItem } from "../data/SampleSuppliersData";
 
-export type SupplierResponseStatus = "Invited" | "Draft" | "Submitted" | "Rewarded";
+export type SupplierResponseStatus = "Invited" | "Draft" | "Submitted" | "Rewarded" | "Not Rewarded";
 
 export interface SupplierRfqInvitation {
   rfqId: string;
@@ -660,6 +660,19 @@ export async function getSupplierResponsesForRfq(
     return r.cr49f_responseid?.includes(`RFQ:${cleanRfqId}`);
   });
 
+  const cachedAwardedSupplierId = typeof window !== "undefined" && window.localStorage
+    ? localStorage.getItem(`rfq_awarded_supplier_${cleanRfqId}`)
+    : null;
+  const cachedAwardedSupplierName = typeof window !== "undefined" && window.localStorage
+    ? localStorage.getItem(`rfq_awarded_supplier_name_${cleanRfqId}`)
+    : null;
+  const isAnyAwarded = Boolean(
+    cachedAwardedSupplierId ||
+    cachedAwardedSupplierName ||
+    allSelectedSuppliers.some((s) => isRecordRewarded(s)) ||
+    rfqResponses.some((r) => isRecordRewarded(r))
+  );
+
   const results: FullSupplierResponse[] = [];
 
   // Process responses
@@ -780,9 +793,20 @@ export async function getSupplierResponsesForRfq(
       };
     });
 
-    // Determine status: 2 = Submitted, or check draft vs invited
+    const isThisRewarded = Boolean(
+      isRecordRewarded(selSupp) ||
+      isRecordRewarded(resp) ||
+      (cachedAwardedSupplierId && (cleanGuid(supplierId) === cleanGuid(cachedAwardedSupplierId) || (supplierCode && supplierCode.toLowerCase() === cachedAwardedSupplierId.toLowerCase()))) ||
+      (cachedAwardedSupplierName && supplierName && supplierName.toLowerCase() === cachedAwardedSupplierName.toLowerCase())
+    );
+
+    // Determine status: Rewarded, Not Rewarded (if other awarded), Submitted, Draft, or Invited
     let status: SupplierResponseStatus = "Invited";
-    if (resp.statuscode === 2 || resp.statecode === 1 || resp.cr49f_responsedate) {
+    if (isThisRewarded) {
+      status = "Rewarded";
+    } else if (isAnyAwarded) {
+      status = "Not Rewarded";
+    } else if (resp.statuscode === 2 || resp.statecode === 1 || resp.cr49f_responsedate) {
       status = "Submitted";
     } else if (
       (resp.cr49f_totalamount && resp.cr49f_totalamount > 0) ||
@@ -1026,9 +1050,19 @@ export async function getSupplierInvitations(
       isRewarded = Boolean(parentResp && (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate));
     }
 
+    const isAnySupplierRewarded = Boolean(
+      isRewarded ||
+      anotherSupplierRewarded ||
+      isCachedAwardedToOther ||
+      rfqSelectedSuppliers.some((s) => isRecordRewarded(s)) ||
+      isRfqDirectlyRewarded
+    );
+
     let status: SupplierResponseStatus = "Invited";
     if (isRewarded) {
       status = "Rewarded";
+    } else if (isAnySupplierRewarded) {
+      status = "Not Rewarded";
     } else if (parentResp) {
       if (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate) {
         status = "Submitted";
@@ -1258,14 +1292,61 @@ export async function getSupplierRfqDetails(
   });
 
   // Determine status
-  let status: SupplierResponseStatus = "Invited";
-  const isReward =
+  const cachedAwardedSup =
+    (typeof window !== "undefined" && window.localStorage
+      ? localStorage.getItem(`rfq_awarded_supplier_${cleanRfqId}`) ||
+        (rfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_${rfq.cr49f_rfqnumber}`) : null)
+      : null);
+
+  const isRfqDirectlyRewarded =
+    isRecordRewarded(rfq) || rfq.cr49f_statusname?.toLowerCase() === "rewarded" ||
+    (typeof window !== "undefined" && window.localStorage && (
+      localStorage.getItem(`rfq_status_${cleanRfqId}`) === "Rewarded" ||
+      (rfq.cr49f_rfqnumber && localStorage.getItem(`rfq_status_${rfq.cr49f_rfqnumber}`) === "Rewarded")
+    ));
+
+  const anotherSupplierRewarded = selectedSupp.some(
+    (s) => s !== matchedSelSupp && cleanGuid(s.cr49f_selectedsuppliersid) !== cleanGuid(matchedSelSupp?.cr49f_selectedsuppliersid) && isRecordRewarded(s)
+  );
+
+  const isCachedAwardedToThisSupplier = Boolean(
+    cachedAwardedSup &&
+      (cleanGuid(cachedAwardedSup) === cleanSupId ||
+        cachedAwardedSup.toLowerCase() === supplierId.toLowerCase() ||
+        (matchedSelSupp && cleanGuid(matchedSelSupp.cr49f_selectedsuppliersid) === cleanGuid(cachedAwardedSup)) ||
+        (matchedSelSupp && matchedSelSupp.cr49f_selectedsuppliernumber?.toLowerCase() === cachedAwardedSup.toLowerCase()))
+  );
+
+  const isCachedAwardedToOther = Boolean(
+    cachedAwardedSup && !isCachedAwardedToThisSupplier
+  );
+
+  let isThisReward = false;
+  if (anotherSupplierRewarded || isCachedAwardedToOther) {
+    isThisReward = false;
+  } else if (
     isRecordRewarded(matchedSelSupp) ||
     isRecordRewarded(parentResp) ||
-    (isRecordRewarded(rfq) && !selectedSupp.some((s) => s !== matchedSelSupp && isRecordRewarded(s)));
+    isCachedAwardedToThisSupplier
+  ) {
+    isThisReward = true;
+  } else if (isRfqDirectlyRewarded && !selectedSupp.some((s) => isRecordRewarded(s))) {
+    isThisReward = Boolean(parentResp && (parentResp.statuscode === 2 || parentResp.statecode === 1 || parentResp.cr49f_responsedate));
+  }
 
-  if (isReward) {
+  const isAnyReward = Boolean(
+    isThisReward ||
+    anotherSupplierRewarded ||
+    isCachedAwardedToOther ||
+    selectedSupp.some((s) => isRecordRewarded(s)) ||
+    isRfqDirectlyRewarded
+  );
+
+  let status: SupplierResponseStatus = "Invited";
+  if (isThisReward) {
     status = "Rewarded";
+  } else if (isAnyReward) {
+    status = "Not Rewarded";
   } else if (parentResp?.statuscode === 2 || parentResp?.statecode === 1 || parentResp?.cr49f_responsedate) {
     status = "Submitted";
   } else if (

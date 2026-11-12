@@ -325,6 +325,14 @@
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
+.supplier-status-pill.not-rewarded,
+.supplier-status-pill[class*="not rewarded"] {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  font-weight: 600;
+}
+
 /* Action Buttons */
 .supplier-btn-action {
   display: inline-flex;
@@ -1959,6 +1967,15 @@
   background: rgba(16, 185, 129, 0.15);
   color: #34d399;
   border-color: rgba(16, 185, 129, 0.35);
+}
+
+.dark .supplier-status-pill.not-rewarded,
+.dark .supplier-status-pill[class*="not rewarded"],
+[data-theme="dark"] .supplier-status-pill.not-rewarded,
+[data-theme="dark"] .supplier-status-pill[class*="not rewarded"] {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.3);
 }
 
 .dark .supplier-loading-state,

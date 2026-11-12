@@ -12,6 +12,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -147,6 +148,9 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
       if (statusFilter === "Rewarded") {
         return item.status === "Rewarded" || Boolean(item.isRewarded);
       }
+      if (statusFilter === "Not Rewarded") {
+        return item.status === "Not Rewarded";
+      }
 
       return true;
     });
@@ -264,6 +268,13 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
           >
             Rewarded ({invitations.filter((i) => i.status === "Rewarded" || i.isRewarded).length})
           </button>
+          <button
+            type="button"
+            className={`supplier-filter-tab ${statusFilter === "Not Rewarded" ? "active" : ""}`}
+            onClick={() => setStatusFilter("Not Rewarded")}
+          >
+            Not Rewarded ({invitations.filter((i) => i.status === "Not Rewarded").length})
+          </button>
         </div>
       </div>
 
@@ -327,11 +338,15 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
                       className={`supplier-status-pill ${
                         inv.status === "Rewarded" || inv.isRewarded
                           ? "rewarded"
+                          : inv.status === "Not Rewarded"
+                          ? "not-rewarded"
                           : inv.status.toLowerCase()
                       }`}
                     >
                       {inv.status === "Rewarded" || inv.isRewarded ? (
                         <Award size={11} />
+                      ) : inv.status === "Not Rewarded" ? (
+                        <XCircle size={11} />
                       ) : inv.status === "Submitted" ? (
                         <CheckCircle2 size={11} />
                       ) : inv.status === "Draft" ? (
@@ -356,7 +371,7 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
                     <button
                       type="button"
                       className={`supplier-btn-action ${
-                        inv.status === "Rewarded" || inv.isRewarded || inv.status === "Submitted"
+                        inv.status === "Rewarded" || inv.isRewarded || inv.status === "Submitted" || inv.status === "Not Rewarded"
                           ? ""
                           : "primary"
                       }`}
@@ -366,6 +381,11 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
                         <>
                           <Award size={12} />
                           View Award
+                        </>
+                      ) : inv.status === "Not Rewarded" ? (
+                        <>
+                          <FileText size={12} />
+                          View Details
                         </>
                       ) : inv.status === "Submitted" ? (
                         inv.isRfqApproved ? (

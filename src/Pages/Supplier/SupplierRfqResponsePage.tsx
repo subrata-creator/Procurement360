@@ -24,6 +24,7 @@ import {
   ShieldAlert,
   Sparkles,
   Truck,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -291,6 +292,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
 
   const isSubmitted = response?.status === "Submitted";
   const isRewarded = response?.status === "Rewarded";
+  const isNotRewarded = response?.status === "Not Rewarded";
 
   const isRfqApproved = Boolean(
     rfq && (
@@ -313,7 +315,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
     field: keyof SupplierResponseLineItem,
     value: string | number | boolean
   ) => {
-    if (isSubmitted) return;
+    if (isSubmitted || isRewarded || isNotRewarded) return;
 
     // Quantity is read-only as per RFQ specifications
     if (field === "offeredQuantity") return;
@@ -663,9 +665,19 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
             {activeSupplier?.cr49f_supplierid1 ? ` (${activeSupplier.cr49f_supplierid1})` : ""}
           </span>
           {response && (
-            <span className={`supplier-status-pill ${response.status.toLowerCase()}`}>
+            <span
+              className={`supplier-status-pill ${
+                response.status === "Rewarded"
+                  ? "rewarded"
+                  : response.status === "Not Rewarded"
+                  ? "not-rewarded"
+                  : response.status.toLowerCase()
+              }`}
+            >
               {response.status === "Rewarded" ? (
                 <Award size={12} />
+              ) : response.status === "Not Rewarded" ? (
+                <XCircle size={12} />
               ) : response.status === "Submitted" ? (
                 <CheckCircle2 size={12} />
               ) : response.status === "Draft" ? (
@@ -707,7 +719,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
           )}
 
           {/* Submitted Banner */}
-          {isSubmitted && (
+          {isSubmitted && !isNotRewarded && !isRewarded && (
             <div className="supplier-submitted-banner">
               <div className="supplier-submitted-banner-left">
                 <div className="supplier-submitted-icon">
@@ -758,6 +770,44 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
             </div>
           )}
 
+          {/* Not Rewarded Banner */}
+          {isNotRewarded && (
+            <div
+              className="supplier-submitted-banner"
+              style={{ background: "linear-gradient(135deg, #475569 0%, #334155 100%)", borderColor: "#64748b" }}
+            >
+              <div className="supplier-submitted-banner-left">
+                <div className="supplier-submitted-icon" style={{ background: "rgba(255, 255, 255, 0.15)", color: "#cbd5e1" }}>
+                  <XCircle size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    RFQ Evaluation Complete — Quote Not Rewarded
+                  </div>
+                  <div style={{ fontSize: 12.5, opacity: 0.9 }}>
+                    This RFQ contract has been awarded to another participating supplier. Thank you for participating in this procurement cycle.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {isRfqApproved && (
+                  <button
+                    type="button"
+                    className="supplier-btn-banner-action"
+                    onClick={() => setIsQuotationDocOpen(true)}
+                  >
+                    <FileText size={13} />
+                    View Submitted Quotation
+                  </button>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600 }}>
+                  <Lock size={13} />
+                  Closed
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Hero Banner Card */}
           <div className="supplier-hero-card">
             <div className="supplier-hero-left">
@@ -768,7 +818,13 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                 </span>
                 <span className="supplier-hero-status-pill">
                   <span className="supplier-hero-dot" />
-                  {isSubmitted ? "RESPONSE SUBMITTED" : "RESPONSE REQUESTED"}
+                  {isRewarded
+                    ? "CONTRACT REWARDED"
+                    : isNotRewarded
+                    ? "NOT REWARDED"
+                    : isSubmitted
+                    ? "RESPONSE SUBMITTED"
+                    : "RESPONSE REQUESTED"}
                 </span>
               </div>
 
@@ -1350,7 +1406,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
 
                 {/* Action Buttons */}
                 <div className="supplier-summary-actions">
-                  {!isSubmitted ? (
+                  {!isSubmitted && !isRewarded && !isNotRewarded ? (
                     <>
                       <button
                         type="button"
@@ -1392,19 +1448,44 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                     </>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-                      <div className="supplier-submitted-status-box">
-                        <CheckCircle2 size={18} color="#059669" />
+                      <div
+                        className="supplier-submitted-status-box"
+                        style={
+                          isRewarded
+                            ? { background: "rgba(16, 185, 129, 0.1)", borderColor: "rgba(16, 185, 129, 0.3)" }
+                            : isNotRewarded
+                            ? { background: "#f8fafc", borderColor: "#cbd5e1" }
+                            : undefined
+                        }
+                      >
+                        {isRewarded ? (
+                          <Award size={18} color="#059669" />
+                        ) : isNotRewarded ? (
+                          <XCircle size={18} color="#64748b" />
+                        ) : (
+                          <CheckCircle2 size={18} color="#059669" />
+                        )}
                         <div>
-                          <strong>Quotation Submitted</strong>
-                          <p style={{ margin: "2px 0 0", fontSize: 11.5 }}>
-                            Locked in Dataverse for evaluation
+                          <strong style={{ color: isNotRewarded ? "#334155" : undefined }}>
+                            {isRewarded
+                              ? "Quotation Rewarded"
+                              : isNotRewarded
+                              ? "Contract Not Rewarded"
+                              : "Quotation Submitted"}
+                          </strong>
+                          <p style={{ margin: "2px 0 0", fontSize: 11.5, color: isNotRewarded ? "#64748b" : undefined }}>
+                            {isRewarded
+                              ? "Official procurement award winner"
+                              : isNotRewarded
+                              ? "Awarded to another participating supplier"
+                              : "Locked in Dataverse for evaluation"}
                           </p>
                         </div>
                       </div>
                       {isRfqApproved ? (
                         <button
                           type="button"
-                          className="supplier-btn-action primary"
+                          className={`supplier-btn-action ${isNotRewarded ? "" : "primary"}`}
                           onClick={() => setIsQuotationDocOpen(true)}
                           style={{
                             width: "100%",
@@ -1417,7 +1498,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                           }}
                         >
                           <FileText size={14} />
-                          View Quotation Document
+                          {isNotRewarded ? "View Submitted Quotation" : "View Quotation Document"}
                         </button>
                       ) : (
                         <div
