@@ -4,9 +4,9 @@
 ========================================================= */
 
 .task-page-container {
-  min-height: calc(100vh - 72px);
-  padding: 20px 24px 96px;
-  background: var(--background-hex, #f8fafc);
+  min-height: calc(100vh - 32px);
+  padding: 0 0 88px 0;
+  background: transparent;
   color: var(--foreground-hex, #0f172a);
   font-family: inherit;
   box-sizing: border-box;
@@ -17,14 +17,14 @@
 ========================================================= */
 
 .task-page-header {
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .task-nav-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .task-back-btn {
@@ -319,7 +319,7 @@
   border: 1px solid var(--border-hex, #e2e8f0);
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   overflow: hidden;
 }
 
@@ -512,7 +512,7 @@
 .task-grid-layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
-  gap: 20px;
+  gap: 16px;
   align-items: start;
 }
 
@@ -520,14 +520,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .task-side-col {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .task-card {

@@ -32,7 +32,7 @@ import SupplierRfqResponsePage from "./Pages/Supplier/SupplierRfqResponsePage";
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
 import ProcurementCopilot from "./components/ProcurementCopilot";
-import { Bot } from "lucide-react";
+import FloatingCopilotButton from "./components/FloatingCopilotButton";
 import "./Styles/Styles.css";
 
 interface LoggedInUser {
@@ -425,23 +425,15 @@ const AppContent: React.FC = () => {
       </div>
 
       {/* =====================================================
-          GLOBAL CHATBOT (Visible on all pages)
+          GLOBAL CHATBOT (Visible on all pages, draggable)
       ===================================================== */}
-      <button
-        type="button"
-        className={`dashboard-chatbot-button global-chatbot-button${isCopilotOpen ? " launcher-hidden" : ""}`}
-        aria-label="Open PR Assistant"
-        aria-expanded={isCopilotOpen}
-        aria-hidden={isCopilotOpen}
-        tabIndex={isCopilotOpen ? -1 : 0}
-        title="Open PR Assistant"
-        onClick={() => {
+      <FloatingCopilotButton
+        isOpen={isCopilotOpen}
+        onOpen={() => {
           setHasOpenedCopilot(true);
           setIsCopilotOpen(true);
         }}
-      >
-        <Bot size={24} strokeWidth={1.9} />
-      </button>
+      />
 
       <ProcurementCopilot
         isOpen={isCopilotOpen}

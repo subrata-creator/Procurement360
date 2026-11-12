@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Calendar,
   Check,
-  CheckCircle2,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -26,6 +24,7 @@ import { createApprovalTasksForObject } from "../Services/ApprovalWorkflowServic
 
 import type { Cr49f_productses } from "../generated/models/Cr49f_productsesModel";
 
+import SuccessCelebrationIcon from "./SuccessCelebrationIcon";
 import "../Styles/CreatePRModal.css";
 
 interface CreatePRModalProps {
@@ -39,9 +38,6 @@ interface CreatedPrSummary {
   prNumber: string;
   title: string;
   deliveryLocation: string;
-  requiredDeliveryDate: string;
-  itemsCount: number;
-  items: Array<{ name: string; quantity: number; category?: string }>;
 }
 
 interface RequestForm {
@@ -441,13 +437,6 @@ export default function CreatePRModal({
         prNumber: prNumber || "Generated",
         title: form.title.trim(),
         deliveryLocation: form.deliveryLocation.trim() || "Not specified",
-        requiredDeliveryDate: form.requiredDeliveryDate,
-        itemsCount: selectedItems.reduce((sum, item) => sum + item.quantity, 0),
-        items: selectedItems.map((item) => ({
-          name: item.product.cr49f_productname || "Item",
-          quantity: item.quantity,
-          category: item.product.cr49f_category,
-        })),
       };
 
       setCreatedPRSummary(summary);
@@ -511,23 +500,11 @@ export default function CreatePRModal({
               <X size={18} />
             </button>
 
-            <div className="create-pr-success-icon-wrap">
-              <CheckCircle2 size={40} className="create-pr-success-icon" />
-            </div>
+            <SuccessCelebrationIcon />
 
             <h2 id="create-pr-success-title" className="create-pr-success-title">
               Purchase Request Submitted!
             </h2>
-            <p className="create-pr-success-desc">
-              Your Purchase Request{" "}
-              <strong>{createdPRSummary?.prNumber || createdPRSummary?.title || "PR"}</strong>{" "}
-              has been submitted to Dataverse with status{" "}
-              <span className="create-pr-status-badge">
-                <span className="create-pr-status-dot" />
-                Pending Approval
-              </span>
-              .
-            </p>
 
             <div className="create-pr-success-details-card">
               <div className="create-pr-success-row">
@@ -562,59 +539,6 @@ export default function CreatePRModal({
                 <span className="create-pr-success-value">
                   {createdPRSummary?.deliveryLocation || "Not specified"}
                 </span>
-              </div>
-
-              <div className="create-pr-success-divider" />
-
-              <div className="create-pr-success-row">
-                <span className="create-pr-success-label">
-                  <Calendar size={14} className="create-pr-success-row-icon" />
-                  Required By Date
-                </span>
-                <span className="create-pr-success-value">
-                  {createdPRSummary?.requiredDeliveryDate
-                    ? new Date(createdPRSummary.requiredDeliveryDate).toLocaleDateString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : "Not specified"}
-                </span>
-              </div>
-
-              <div className="create-pr-success-divider" />
-
-              <div className="create-pr-success-row create-pr-success-items-row">
-                <span className="create-pr-success-label">
-                  <Package size={14} className="create-pr-success-row-icon" />
-                  Requested Items
-                </span>
-                <div className="create-pr-success-items-val">
-                  <div className="create-pr-items-chips-wrap">
-                    <span className="create-pr-items-count-badge">
-                      {createdPRSummary?.itemsCount || 0}{" "}
-                      {(createdPRSummary?.itemsCount || 0) === 1 ? "unit" : "units"} (
-                      {createdPRSummary?.items.length || 0}{" "}
-                      {(createdPRSummary?.items.length || 0) === 1 ? "item" : "items"})
-                    </span>
-                    <div className="create-pr-items-chips">
-                      {createdPRSummary?.items.slice(0, 3).map((item, idx) => (
-                        <span key={idx} className="create-pr-item-chip" title={`${item.name} (${item.quantity} qty)`}>
-                          <Package size={11} className="create-pr-chip-icon" />
-                          <span className="create-pr-chip-text">{item.name} × {item.quantity}</span>
-                        </span>
-                      ))}
-                      {(createdPRSummary?.items.length || 0) > 3 && (
-                        <span
-                          className="create-pr-item-chip create-pr-chip-more"
-                          title={createdPRSummary?.items.slice(3).map((i) => `${i.name} × ${i.quantity}`).join(", ")}
-                        >
-                          +{(createdPRSummary?.items.length || 0) - 3} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 

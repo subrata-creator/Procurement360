@@ -637,7 +637,7 @@ export default function CommandCenterPanels({
                   aria-label="View Score Calculation Breakdown"
                   aria-expanded={showScoreCalc}
                 >
-                  <Info size={13} />
+                  <Info size={14} />
                 </button>
               </div>
 
@@ -698,7 +698,7 @@ export default function CommandCenterPanels({
                   <b className={healthData.openTasks.count > 0 ? "attention" : ""}>
                     {healthData.openTasks.count}
                   </b>
-                  <small>pending <ArrowRight size={10} style={{ verticalAlign: "middle" }} /></small>
+                  <small>pending <ArrowRight size={12} style={{ verticalAlign: "middle" }} /></small>
                 </div>
               </div>
             </div>
@@ -778,7 +778,7 @@ export default function CommandCenterPanels({
         <div className="cc-section-heading">
           <div>
             <span className="cc-eyebrow cc-ai-eyebrow">
-              <Sparkles size={12} /> INTELLIGENCE LAYER
+              <Sparkles size={13} /> INTELLIGENCE LAYER
             </span>
             <h2>Procurement Intelligence</h2>
             <p>Recommendations based on current dashboard signals</p>
@@ -805,7 +805,7 @@ export default function CommandCenterPanels({
               title="Refresh AI Insights from Power Automate Flow"
               aria-label="Refresh AI Insights"
             >
-              <RefreshCw size={11} className={isAiGenerating ? "cc-spin" : ""} />
+              <RefreshCw size={13} className={isAiGenerating ? "cc-spin" : ""} />
               <span>{isAiGenerating ? "Generating AI..." : "Refresh AI Insights"}</span>
             </button>
             <span className="cc-ai-availability">
@@ -817,16 +817,15 @@ export default function CommandCenterPanels({
           {/* 1. Process Risk Card */}
           <article className={`cc-insight-card ${displayIntelligence.processRisk.toneClass}`}>
             <div className="cc-insight-card-heading">
-              <span>{displayIntelligence.processRisk.badgeText}</span>
+              <h3>{displayIntelligence.processRisk.badgeText}</h3>
               {displayIntelligence.processRisk.severity === "critical" ? (
-                <ShieldAlert size={15} />
+                <ShieldAlert size={17} />
               ) : displayIntelligence.processRisk.severity === "warning" ? (
-                <CircleAlert size={15} />
+                <CircleAlert size={17} />
               ) : (
-                <CircleCheck size={15} />
+                <CircleCheck size={17} />
               )}
             </div>
-            <h3>{displayIntelligence.processRisk.title}</h3>
             <p>
               {isLoadingHealth
                 ? "Evaluating purchase request approval queues..."
@@ -836,17 +835,16 @@ export default function CommandCenterPanels({
               Source <b>Purchase Requests ({intelligenceData.processRisk.pendingPRs} pending{intelligenceData.processRisk.agingPendingPRs > 0 ? `, ${intelligenceData.processRisk.agingPendingPRs} > 7d` : ""})</b>
             </div>
             <button type="button" onClick={onViewPRs}>
-              {displayIntelligence.processRisk.ctaText} <ArrowRight size={13} />
+              {displayIntelligence.processRisk.ctaText} <ArrowRight size={14} />
             </button>
           </article>
 
           {/* 2. Budget Watch Card */}
           <article className={`cc-insight-card ${displayIntelligence.budgetWatch.toneClass}`}>
             <div className="cc-insight-card-heading">
-              <span>{displayIntelligence.budgetWatch.badgeText}</span>
-              <Gauge size={15} />
+              <h3>{displayIntelligence.budgetWatch.badgeText}</h3>
+              <Gauge size={17} />
             </div>
-            <h3>{displayIntelligence.budgetWatch.title}</h3>
             <p>
               {isLoadingHealth
                 ? "Checking budget allocations and committed spend..."
@@ -866,17 +864,16 @@ export default function CommandCenterPanels({
                 }
               }}
             >
-              {displayIntelligence.budgetWatch.ctaText} <ArrowRight size={13} />
+              {displayIntelligence.budgetWatch.ctaText} <ArrowRight size={14} />
             </button>
           </article>
 
           {/* 3. Forecast Card */}
           <article className={`cc-insight-card ${displayIntelligence.forecast.toneClass}`}>
             <div className="cc-insight-card-heading">
-              <span>{displayIntelligence.forecast.badgeText}</span>
-              <TrendingUp size={15} />
+              <h3>{displayIntelligence.forecast.badgeText}</h3>
+              <TrendingUp size={17} />
             </div>
-            <h3>{displayIntelligence.forecast.title}</h3>
             <p>
               {isLoadingHealth
                 ? "Forecasting RFQ volume from historical trends..."
@@ -886,7 +883,7 @@ export default function CommandCenterPanels({
               Source <b>RFQ Response ({intelligenceData.forecast.responseCoveragePct !== null ? `${intelligenceData.forecast.responseCoveragePct}%` : "N/A"}{intelligenceData.forecast.forecastCount !== null ? ` • Proj: ${intelligenceData.forecast.forecastCount}` : ""})</b>
             </div>
             <button type="button" onClick={onViewForecast}>
-              {displayIntelligence.forecast.ctaText} <ArrowRight size={13} />
+              {displayIntelligence.forecast.ctaText} <ArrowRight size={14} />
             </button>
           </article>
         </div>
@@ -1110,7 +1107,7 @@ export default function CommandCenterPanels({
                 className="cc-supplier-view-all"
                 onClick={onViewSuppliers}
               >
-                View all suppliers <ArrowRight size={13} />
+                View all suppliers <ArrowRight size={14} />
               </button>
             )}
           </div>

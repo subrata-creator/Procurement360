@@ -243,7 +243,9 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
@@ -375,7 +377,9 @@
   box-shadow:
     0 10px 26px rgba(37, 99, 235, 0.38),
     0 0 0 4px rgba(37, 99, 235, 0.12);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   z-index: 5100;
   visibility: visible;
   opacity: 1;
@@ -399,17 +403,33 @@
   pointer-events: none;
 }
 
-.dashboard-chatbot-button:hover,
-.global-chatbot-button:hover {
+.dashboard-chatbot-button:not(.is-dragging):hover,
+.global-chatbot-button:not(.is-dragging):hover {
   transform: translateY(-3px) scale(1.06);
   box-shadow:
     0 14px 34px rgba(37, 99, 235, 0.5),
     0 0 0 6px rgba(37, 99, 235, 0.2);
 }
 
-.dashboard-chatbot-button:active,
-.global-chatbot-button:active {
+.dashboard-chatbot-button:not(.is-dragging):active,
+.global-chatbot-button:not(.is-dragging):active {
   transform: scale(0.95);
+}
+
+.dashboard-chatbot-button.is-dragging,
+.global-chatbot-button.is-dragging {
+  cursor: grabbing;
+  transform: scale(1.05);
+  box-shadow:
+    0 16px 36px rgba(37, 99, 235, 0.48),
+    0 0 0 6px rgba(37, 99, 235, 0.18);
+  transition: none;
+}
+
+.dashboard-chatbot-button.is-dragging::before,
+.global-chatbot-button.is-dragging::before {
+  animation: none;
+  opacity: 0;
 }
 
 .dashboard-chatbot-button:focus-visible,

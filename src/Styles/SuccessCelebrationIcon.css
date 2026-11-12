@@ -1,0 +1,311 @@
+/* =========================================================
+   CELEBRATORY SUCCESS CHECKMARK WITH BUBBLES & RIPPLE
+   Shared across PR Creation and RFQ Creation success modals
+   ========================================================= */
+
+.success-celebration-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 124px;
+  height: 96px;
+  margin-bottom: 14px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Concentric expanding ripple rings */
+.success-celebration-ring {
+  position: absolute;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid rgba(16, 185, 129, 0.45);
+  opacity: 0;
+  animation: successRippleExpand 2.4s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.success-celebration-ring.ring-2 {
+  animation-delay: 1.2s;
+}
+
+/* Main green tick circle */
+.success-celebration-circle {
+  position: relative;
+  z-index: 2;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #ffffff 0%, #ecfdf5 60%, #d1fae5 100%);
+  border: 2px solid #86efac;
+  box-shadow:
+    0 0 0 7px rgba(16, 185, 129, 0.12),
+    0 12px 22px -6px rgba(16, 185, 129, 0.28);
+  color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation:
+    successCirclePop 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.275) both,
+    successCircleFloat 3s ease-in-out 0.55s infinite;
+}
+
+.dark .success-celebration-circle,
+[data-theme="dark"] .success-celebration-circle {
+  background: radial-gradient(circle at 32% 28%, rgba(16, 185, 129, 0.28) 0%, rgba(6, 78, 59, 0.72) 100%);
+  border-color: rgba(52, 211, 153, 0.6);
+  color: #34d399;
+}
+
+.success-celebration-check {
+  animation: successCheckPop 0.6s cubic-bezier(0.22, 1.28, 0.36, 1) 0.1s both;
+}
+
+/* Floating celebratory bubbles */
+.success-bubble {
+  position: absolute;
+  z-index: 1;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.success-bubble.b1 {
+  width: 10px;
+  height: 10px;
+  background: radial-gradient(circle at 30% 30%, #a7f3d0, #10b981);
+  animation: successBubbleUp1 2.4s ease-out 0.15s infinite;
+}
+
+.success-bubble.b2 {
+  width: 7px;
+  height: 7px;
+  background: radial-gradient(circle at 30% 30%, #bae6fd, #38bdf8);
+  animation: successBubbleUp2 2.7s ease-out 0.45s infinite;
+}
+
+.success-bubble.b3 {
+  width: 9px;
+  height: 9px;
+  background: radial-gradient(circle at 30% 30%, #bbf7d0, #22c55e);
+  animation: successBubbleUp3 2.3s ease-out 0.75s infinite;
+}
+
+.success-bubble.b4 {
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle at 30% 30%, #99f6e4, #14b8a6);
+  animation: successBubbleUp4 2.6s ease-out 1.05s infinite;
+}
+
+.success-bubble.b5 {
+  width: 8px;
+  height: 8px;
+  background: radial-gradient(circle at 30% 30%, #d9f99d, #34d399);
+  animation: successBubbleUp5 2.5s ease-out 1.35s infinite;
+}
+
+.success-bubble.b6 {
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle at 30% 30%, #c7d2fe, #60a5fa);
+  animation: successBubbleUp6 2.8s ease-out 1.65s infinite;
+}
+
+.success-bubble.b7 {
+  width: 7px;
+  height: 7px;
+  background: radial-gradient(circle at 30% 30%, #a7f3d0, #059669);
+  animation: successBubbleUp7 2.4s ease-out 1.95s infinite;
+}
+
+@keyframes successCirclePop {
+  0% {
+    transform: scale(0.45);
+    opacity: 0;
+  }
+
+  70% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes successCircleFloat {
+
+  0%,
+  100% {
+    transform: translateY(0);
+    box-shadow:
+      0 0 0 7px rgba(16, 185, 129, 0.12),
+      0 12px 22px -6px rgba(16, 185, 129, 0.26);
+  }
+
+  50% {
+    transform: translateY(-4px);
+    box-shadow:
+      0 0 0 9px rgba(16, 185, 129, 0.16),
+      0 16px 26px -6px rgba(16, 185, 129, 0.34);
+  }
+}
+
+@keyframes successCheckPop {
+  0% {
+    transform: scale(0.5) rotate(-14deg);
+    opacity: 0;
+  }
+
+  65% {
+    transform: scale(1.12) rotate(4deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes successRippleExpand {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+@keyframes successBubbleUp1 {
+  0% {
+    transform: translate(-18px, 6px) scale(0.3);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.92;
+  }
+
+  100% {
+    transform: translate(-44px, -38px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes successBubbleUp2 {
+  0% {
+    transform: translate(18px, 4px) scale(0.3);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: translate(44px, -36px) scale(1.05);
+    opacity: 0;
+  }
+}
+
+@keyframes successBubbleUp3 {
+  0% {
+    transform: translate(-4px, -12px) scale(0.3);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.92;
+  }
+
+  100% {
+    transform: translate(-16px, -48px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes successBubbleUp4 {
+  0% {
+    transform: translate(24px, 14px) scale(0.3);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.85;
+  }
+
+  100% {
+    transform: translate(50px, -12px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes successBubbleUp5 {
+  0% {
+    transform: translate(-24px, 14px) scale(0.3);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.85;
+  }
+
+  100% {
+    transform: translate(-50px, -14px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes successBubbleUp6 {
+  0% {
+    transform: translate(8px, -14px) scale(0.3);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.88;
+  }
+
+  100% {
+    transform: translate(22px, -46px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes successBubbleUp7 {
+  0% {
+    transform: translate(-12px, 20px) scale(0.3);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: translate(-30px, 38px) scale(0.9);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .success-celebration-ring,
+  .success-celebration-circle,
+  .success-celebration-check,
+  .success-bubble {
+    animation: none;
+  }
+
+  .success-bubble,
+  .success-celebration-ring {
+    display: none;
+  }
+}

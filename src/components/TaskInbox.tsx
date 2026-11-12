@@ -716,7 +716,7 @@ const TaskInbox: React.FC = () => {
                     background: "none",
                     border: "none",
                     color: "var(--primary-hex, #2563eb)",
-                    fontSize: 10,
+                    fontSize: 12.5,
                     fontWeight: 600,
                     cursor: "pointer",
                     textDecoration: "underline",
