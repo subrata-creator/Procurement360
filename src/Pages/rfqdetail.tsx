@@ -234,10 +234,10 @@ export default function RfqDetail() {
 
         const foundLive = rfqRes.success && rfqRes.data
           ? rfqRes.data.find((r) => {
-              const id = cleanGuid(r.cr49f_requestforqoutationid);
-              const num = (r.cr49f_rfqnumber || "").toLowerCase().trim();
-              return id === cleanRef || num === searchRefLower;
-            })
+            const id = cleanGuid(r.cr49f_requestforqoutationid);
+            const num = (r.cr49f_rfqnumber || "").toLowerCase().trim();
+            return id === cleanRef || num === searchRefLower;
+          })
           : null;
 
         if (foundLive) {
@@ -692,11 +692,11 @@ export default function RfqDetail() {
 
       const cachedAwardedSupplierId = dvAwardedId || (rfqId
         ? localStorage.getItem(`rfq_awarded_supplier_${rfqId}`) ||
-          (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_${liveRfq.cr49f_rfqnumber}`) : null)
+        (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_${liveRfq.cr49f_rfqnumber}`) : null)
         : null);
       const cachedAwardedSupplierName = dvAwardedName || (rfqId
         ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqId}`) ||
-          (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_name_${liveRfq.cr49f_rfqnumber}`) : null)
+        (liveRfq.cr49f_rfqnumber ? localStorage.getItem(`rfq_awarded_supplier_name_${liveRfq.cr49f_rfqnumber}`) : null)
         : null);
 
       const isSupplierRewardedCheck = (supId?: string, supName?: string, _rank?: number) => {
@@ -875,25 +875,25 @@ export default function RfqDetail() {
       // Line items resolution (from PR lines or catalog)
       const mappedLines: RfqLineItem[] = prLines.length > 0
         ? prLines.map((l, idx) => ({
-            id: l.cr49f_purchaserequestlineid || `line-${idx + 1}`,
-            itemCode: l.cr49f_prlinenumber || `LINE-${idx + 1}`,
-            itemName: l.cr49f_itemname || l.cr49f_itemdescription || "Procurement Item",
-            quantity: Number(l.cr49f_quantity) || 1,
-            unitPrice: Number(l.cr49f_unitprice) || 0,
-            totalAmount: (Number(l.cr49f_quantity) || 1) * (Number(l.cr49f_unitprice) || 0),
-            deliveryAddress: liveRfq.cr49f_deliverylocation || "Main Tech Hub",
-          }))
+          id: l.cr49f_purchaserequestlineid || `line-${idx + 1}`,
+          itemCode: l.cr49f_prlinenumber || `LINE-${idx + 1}`,
+          itemName: l.cr49f_itemname || l.cr49f_itemdescription || "Procurement Item",
+          quantity: Number(l.cr49f_quantity) || 1,
+          unitPrice: Number(l.cr49f_unitprice) || 0,
+          totalAmount: (Number(l.cr49f_quantity) || 1) * (Number(l.cr49f_unitprice) || 0),
+          deliveryAddress: liveRfq.cr49f_deliverylocation || "Main Tech Hub",
+        }))
         : [
-            {
-              id: "item-1",
-              itemCode: "PDT-2026-IT",
-              itemName: liveRfq.cr49f_rfqtitle || "IT Equipment & Services",
-              quantity: 1,
-              unitPrice: 0,
-              totalAmount: 0,
-              deliveryAddress: liveRfq.cr49f_deliverylocation || "Main Delivery Location",
-            },
-          ];
+          {
+            id: "item-1",
+            itemCode: "PDT-2026-IT",
+            itemName: liveRfq.cr49f_rfqtitle || "IT Equipment & Services",
+            quantity: 1,
+            unitPrice: 0,
+            totalAmount: 0,
+            deliveryAddress: liveRfq.cr49f_deliverylocation || "Main Delivery Location",
+          },
+        ];
 
       const raw = liveRfq as unknown as Record<string, unknown>;
       const prRef =
@@ -926,15 +926,15 @@ export default function RfqDetail() {
       const invited =
         flowInvitedSuppliers.length > 0
           ? flowInvitedSuppliers.map((s) => ({
-              ...s,
-              rewarded: Boolean(s.rewarded),
-              hasResponse: Boolean(s.hasResponse),
-            }))
+            ...s,
+            rewarded: Boolean(s.rewarded),
+            hasResponse: Boolean(s.hasResponse),
+          }))
           : mockRfq.invitedSuppliers.map((s) => ({
-              ...s,
-              category: "Hardware",
-              hasResponse: s.rewarded || s.ranking <= 2,
-            }));
+            ...s,
+            category: "Hardware",
+            hasResponse: s.rewarded || s.ranking <= 2,
+          }));
 
       return {
         refNo: mockRfq.refNo,
@@ -1003,8 +1003,8 @@ export default function RfqDetail() {
     rfqData.status === "Approved" || rfqData.status === "Rewarded"
       ? "Quotation review is approved and ready for purchase order generation."
       : rfqData.status === "Rejected"
-      ? "This RFQ has been rejected during the evaluation cycle."
-      : "Active in review sequence with designated approvers.",
+        ? "This RFQ has been rejected during the evaluation cycle."
+        : "Active in review sequence with designated approvers.",
   ].join(" ");
 
   // Dynamic Journey Milestones & Award Evaluation State
@@ -1014,11 +1014,11 @@ export default function RfqDetail() {
   const awardedSupplier = rfqData.invitedSuppliers.find((s) => s.rewarded) || null;
   const cachedAwardedId = rfqIdStr
     ? localStorage.getItem(`rfq_awarded_supplier_${rfqIdStr}`) ||
-      (rfqNumStr ? localStorage.getItem(`rfq_awarded_supplier_${rfqNumStr}`) : null)
+    (rfqNumStr ? localStorage.getItem(`rfq_awarded_supplier_${rfqNumStr}`) : null)
     : null;
   const cachedAwardedName = rfqIdStr
     ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqIdStr}`) ||
-      (rfqNumStr ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqNumStr}`) : null)
+    (rfqNumStr ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqNumStr}`) : null)
     : null;
 
   const isAnySupplierAwarded = Boolean(
@@ -1059,8 +1059,8 @@ export default function RfqDetail() {
       status: isApprovedOrRewarded || isRejected
         ? "Completed"
         : rfqData.invitedSuppliers.some((s) => s.hasResponse)
-        ? "Current"
-        : "Pending",
+          ? "Current"
+          : "Pending",
       date: rfqData.submissionDeadline,
     },
     {
@@ -1069,8 +1069,8 @@ export default function RfqDetail() {
       status: isApprovedOrRewarded || isRejected
         ? "Completed"
         : approvalTasks.some((t) => t.statecode === 0)
-        ? "Current"
-        : "Pending",
+          ? "Current"
+          : "Pending",
       by: "Evaluation Committee",
       date: rfqData.awardDate !== "Pending Award" ? rfqData.awardDate : undefined,
     },
@@ -1177,8 +1177,7 @@ export default function RfqDetail() {
     if (!liveRfq) return;
     if (isAnySupplierAwarded) {
       alert(
-        `This RFQ has already been awarded${
-          awardedSupplierName ? ` to "${awardedSupplierName}"` : ""
+        `This RFQ has already been awarded${awardedSupplierName ? ` to "${awardedSupplierName}"` : ""
         }. Another supplier cannot be rewarded.`
       );
       return;
@@ -1319,21 +1318,21 @@ export default function RfqDetail() {
             prev.map((item) =>
               cleanGuid(item.cr49f_selectedsuppliersid) === targetSelId
                 ? {
-                    ...item,
-                    cr49f_selectedsuppliers: true,
-                    cr49f_selectedsupplier: true,
-                    cr49f_isrewarded: true,
-                    isrewarded: true,
-                    IsRewarded: true,
-                  }
+                  ...item,
+                  cr49f_selectedsuppliers: true,
+                  cr49f_selectedsupplier: true,
+                  cr49f_isrewarded: true,
+                  isrewarded: true,
+                  IsRewarded: true,
+                }
                 : {
-                    ...item,
-                    cr49f_selectedsuppliers: false,
-                    cr49f_selectedsupplier: false,
-                    cr49f_isrewarded: false,
-                    isrewarded: false,
-                    IsRewarded: false,
-                  }
+                  ...item,
+                  cr49f_selectedsuppliers: false,
+                  cr49f_selectedsupplier: false,
+                  cr49f_isrewarded: false,
+                  isrewarded: false,
+                  IsRewarded: false,
+                }
             )
           );
         }
@@ -1454,13 +1453,12 @@ export default function RfqDetail() {
       {/* Action Notice (Approve/Reject Feedback) */}
       {taskNotice && (
         <div
-          className={`rfq-action-notice ${
-            taskNotice.toLowerCase().includes("fail") ||
-            taskNotice.toLowerCase().includes("reject") ||
-            taskNotice.toLowerCase().includes("error")
+          className={`rfq-action-notice ${taskNotice.toLowerCase().includes("fail") ||
+              taskNotice.toLowerCase().includes("reject") ||
+              taskNotice.toLowerCase().includes("error")
               ? "error"
               : "success"
-          }`}
+            }`}
           role="status"
         >
           <div className="rfq-notice-content">
@@ -1495,35 +1493,32 @@ export default function RfqDetail() {
           {journeySteps.map((step, index) => (
             <div className="rfq-approval-step" key={step.step}>
               <div
-                className={`rfq-approval-step-line ${
-                  step.status === "Completed" ? "done" : ""
-                }`}
+                className={`rfq-approval-step-line ${step.status === "Completed" ? "done" : ""
+                  }`}
               />
               <div
-                className={`rfq-approval-step-circle ${
-                  step.status === "Completed"
+                className={`rfq-approval-step-circle ${step.status === "Completed"
                     ? "completed"
                     : step.status === "Current"
-                    ? "current"
-                    : step.status === "Rejected"
-                    ? "rejected"
-                    : "pending"
-                }`}
+                      ? "current"
+                      : step.status === "Rejected"
+                        ? "rejected"
+                        : "pending"
+                  }`}
               >
                 {step.status === "Completed" ? <CircleCheck size={14} /> : index + 1}
               </div>
               <div className="rfq-approval-step-label">
                 <strong>{step.title}</strong>
                 <span
-                  className={`rfq-approval-step-status ${
-                    step.status === "Completed"
+                  className={`rfq-approval-step-status ${step.status === "Completed"
                       ? "completed"
                       : step.status === "Current"
-                      ? "current"
-                      : step.status === "Rejected"
-                      ? "rejected"
-                      : "pending"
-                  }`}
+                        ? "current"
+                        : step.status === "Rejected"
+                          ? "rejected"
+                          : "pending"
+                    }`}
                 >
                   {step.status === "Current" ? "In Progress" : step.status}
                 </span>
@@ -1744,9 +1739,8 @@ export default function RfqDetail() {
                     return (
                       <div
                         key={supplier.id}
-                        className={`rfq-summary-supplier-card ${
-                          isAwarded ? "awarded" : hasResponse ? "responded" : ""
-                        }`}
+                        className={`rfq-summary-supplier-card ${isAwarded ? "awarded" : hasResponse ? "responded" : ""
+                          }`}
                         onClick={() => {
                           if (isApprovedOrRewarded) {
                             handleSupplierCardClick(supplier);
@@ -1762,9 +1756,8 @@ export default function RfqDetail() {
                         <div className="rfq-summary-supplier-card-header">
                           <div className="rfq-summary-supplier-avatar-group">
                             <span
-                              className={`rfq-summary-supplier-avatar ${
-                                isAwarded ? "tone-gold" : "tone-blue"
-                              }`}
+                              className={`rfq-summary-supplier-avatar ${isAwarded ? "tone-gold" : "tone-blue"
+                                }`}
                             >
                               {initials}
                             </span>
@@ -1797,9 +1790,8 @@ export default function RfqDetail() {
                           </div>
 
                           <span
-                            className={`rfq-supplier-rewarded-pill ${
-                              isAwarded ? "rewarded" : isAnySupplierAwarded ? "not-selected" : hasResponse ? "submitted" : "pending"
-                            }`}
+                            className={`rfq-supplier-rewarded-pill ${isAwarded ? "rewarded" : isAnySupplierAwarded ? "not-selected" : hasResponse ? "submitted" : "pending"
+                              }`}
                           >
                             {isAwarded ? "Awarded" : isAnySupplierAwarded ? "Not Selected" : hasResponse ? "Submitted" : "Pending Bid"}
                           </span>
@@ -1967,15 +1959,14 @@ export default function RfqDetail() {
 
                       return (
                         <div
-                          className={`rfq-summary-approval-step ${
-                            isApproved
+                          className={`rfq-summary-approval-step ${isApproved
                               ? "completed"
                               : isRejected
-                              ? "rejected"
-                              : isActive
-                              ? "current"
-                              : "pending"
-                          }`}
+                                ? "rejected"
+                                : isActive
+                                  ? "current"
+                                  : "pending"
+                            }`}
                           key={t.cr49f_approvaltasksid}
                         >
                           <span className="rfq-summary-approval-rail">
@@ -1992,15 +1983,14 @@ export default function RfqDetail() {
                               {t.cr49f_task}
                             </strong>
                             <span
-                              className={`rfq-summary-approval-badge ${
-                                isApproved
+                              className={`rfq-summary-approval-badge ${isApproved
                                   ? "completed"
                                   : isRejected
-                                  ? "rejected"
-                                  : isActive
-                                  ? "current"
-                                  : "pending"
-                              }`}
+                                    ? "rejected"
+                                    : isActive
+                                      ? "current"
+                                      : "pending"
+                                }`}
                             >
                               {isApproved ? "Approved" : isRejected ? "Rejected" : isActive ? "Active" : "Pending"}
                             </span>
@@ -2201,9 +2191,8 @@ export default function RfqDetail() {
                           <td>{slaLabel}</td>
                           <td>
                             <span
-                              className={`rfq-task-status-pill ${
-                                isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"
-                              }`}
+                              className={`rfq-task-status-pill ${isApproved ? "approved" : isRejected ? "rejected" : isActive ? "active" : "pending"
+                                }`}
                             >
                               {isApproved ? "Approved" : isRejected ? "Rejected" : isActive ? "Active" : "Pending"}
                             </span>
@@ -2261,18 +2250,18 @@ export default function RfqDetail() {
             fullSupplierResponses.length > 0
               ? fullSupplierResponses
               : rfqData.invitedSuppliers.map((s) => ({
-                  responseId: s.id,
-                  rfqId: cleanGuid(ref) || "",
-                  supplierId: s.id,
-                  supplierCode: s.id,
-                  supplierName: s.name,
-                  supplierEmail: s.email,
-                  status: (s.hasResponse ? "Submitted" : "Invited") as "Invited" | "Draft" | "Submitted",
-                  statuscode: s.hasResponse ? 2 : 1,
-                  statecode: s.hasResponse ? 1 : 0,
-                  totalAmount: 0,
-                  lines: [],
-                }));
+                responseId: s.id,
+                rfqId: cleanGuid(ref) || "",
+                supplierId: s.id,
+                supplierCode: s.id,
+                supplierName: s.name,
+                supplierEmail: s.email,
+                status: (s.hasResponse ? "Submitted" : "Invited") as "Invited" | "Draft" | "Submitted",
+                statuscode: s.hasResponse ? 2 : 1,
+                statecode: s.hasResponse ? 1 : 0,
+                totalAmount: 0,
+                lines: [],
+              }));
 
           const submittedCount = displayResponses.filter((r) => r.status === "Submitted").length;
           const draftCount = displayResponses.filter((r) => r.status === "Draft").length;
@@ -2360,8 +2349,8 @@ export default function RfqDetail() {
                             {resp.totalAmount && resp.totalAmount > 0
                               ? `$${resp.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
                               : resp.status === "Invited"
-                              ? "Awaiting Quote"
-                              : "—"}
+                                ? "Awaiting Quote"
+                                : "—"}
                           </strong>
                         </td>
                         <td>{resp.deliveryDate ? new Date(resp.deliveryDate).toLocaleDateString() : "—"}</td>
@@ -2656,18 +2645,18 @@ export default function RfqDetail() {
             selectedSupplierForModal ||
             (selectedQuotationForView
               ? rfqData.invitedSuppliers.find(
-                  (s) =>
-                    cleanGuid(s.id) === cleanGuid(selectedQuotationForView.supplierId) ||
-                    (s.code && selectedQuotationForView.supplierCode && s.code.toLowerCase() === selectedQuotationForView.supplierCode.toLowerCase()) ||
-                    s.name.toLowerCase() === selectedQuotationForView.supplierName.toLowerCase()
-                ) || {
-                  id: selectedQuotationForView.supplierId,
-                  name: selectedQuotationForView.supplierName,
-                  code: selectedQuotationForView.supplierCode,
-                  email: selectedQuotationForView.supplierEmail,
-                  hasResponse: true,
-                  rewarded: selectedQuotationForView.status === "Rewarded",
-                }
+                (s) =>
+                  cleanGuid(s.id) === cleanGuid(selectedQuotationForView.supplierId) ||
+                  (s.code && selectedQuotationForView.supplierCode && s.code.toLowerCase() === selectedQuotationForView.supplierCode.toLowerCase()) ||
+                  s.name.toLowerCase() === selectedQuotationForView.supplierName.toLowerCase()
+              ) || {
+                id: selectedQuotationForView.supplierId,
+                name: selectedQuotationForView.supplierName,
+                code: selectedQuotationForView.supplierCode,
+                email: selectedQuotationForView.supplierEmail,
+                hasResponse: true,
+                rewarded: selectedQuotationForView.status === "Rewarded",
+              }
               : null)
           }
           supplierProfile={allSuppliers.find(
@@ -2703,8 +2692,7 @@ export default function RfqDetail() {
           onReward={() => {
             if (isAnySupplierAwarded) {
               alert(
-                `This RFQ has already been awarded${
-                  awardedSupplierName ? ` to "${awardedSupplierName}"` : ""
+                `This RFQ has already been awarded${awardedSupplierName ? ` to "${awardedSupplierName}"` : ""
                 }. Another supplier cannot be awarded.`
               );
               return;
@@ -2713,21 +2701,21 @@ export default function RfqDetail() {
               selectedSupplierForModal ||
               (selectedQuotationForView
                 ? rfqData.invitedSuppliers.find(
-                    (s) =>
-                      cleanGuid(s.id) === cleanGuid(selectedQuotationForView.supplierId) ||
-                      s.name.toLowerCase() === selectedQuotationForView.supplierName.toLowerCase()
-                  ) || {
-                    id: selectedQuotationForView.supplierId,
-                    name: selectedQuotationForView.supplierName,
-                    code: selectedQuotationForView.supplierCode,
-                    email: selectedQuotationForView.supplierEmail,
-                    hasResponse: true,
-                    rewarded: false,
-                    ranking: 1,
-                    verified: true,
-                    phone: "+91 80 4045 5000",
-                    address: "Main Vendor Facility",
-                  }
+                  (s) =>
+                    cleanGuid(s.id) === cleanGuid(selectedQuotationForView.supplierId) ||
+                    s.name.toLowerCase() === selectedQuotationForView.supplierName.toLowerCase()
+                ) || {
+                  id: selectedQuotationForView.supplierId,
+                  name: selectedQuotationForView.supplierName,
+                  code: selectedQuotationForView.supplierCode,
+                  email: selectedQuotationForView.supplierEmail,
+                  hasResponse: true,
+                  rewarded: false,
+                  ranking: 1,
+                  verified: true,
+                  phone: "+91 80 4045 5000",
+                  address: "Main Vendor Facility",
+                }
                 : null);
             if (targetSupplier) {
               return handleRewardSupplier(targetSupplier as RfqSupplier);

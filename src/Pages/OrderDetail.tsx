@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FC } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -10,6 +10,7 @@ import {
   Flag,
   Home,
   Info,
+  Loader2,
   Mail,
   MapPin,
   Phone,
@@ -18,7 +19,8 @@ import {
   Users,
 } from "lucide-react";
 
-import { getOrderByRef } from "../data/OrdersData";
+import { getOrderByRef, type OrderRecord } from "../data/OrdersData";
+import { getDynamicPurchaseOrderDetails } from "../Services/PurchaseOrderService";
 import "../Styles/Styles.css";
 import "../Styles/OrderSummary.css";
 
@@ -45,8 +47,50 @@ const OrderDetail: FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Summary");
   const [comment, setComment] = useState("");
+  const [record, setRecord] = useState<OrderRecord | undefined>(() =>
+    ref ? getOrderByRef(ref) : undefined
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(!record);
 
-  const record = ref ? getOrderByRef(ref) : undefined;
+  useEffect(() => {
+    if (!ref) return;
+    getDynamicPurchaseOrderDetails(ref)
+      .then((detail) => {
+        if (detail) {
+          setRecord(detail);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load dynamic PO detail:", err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [ref]);
+
+  if (isLoading) {
+    return (
+      <main
+        className="order-detail-page order-detail-notfound"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "60px 20px",
+          textAlign: "center",
+        }}
+      >
+        <Loader2
+          size={32}
+          className="quotation-spin-icon"
+          style={{ color: "#2563eb", marginBottom: "16px" }}
+        />
+        <h2>Loading Purchase Order...</h2>
+        <p>Fetching purchase order and line items from Dataverse cr49f_purchaseorders...</p>
+      </main>
+    );
+  }
 
   if (!record) {
     return (

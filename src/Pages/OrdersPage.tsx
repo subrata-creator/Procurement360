@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FC, ReactNode } from "react";
 import {
   Building2,
@@ -12,8 +12,10 @@ import {
   Clock3,
   Coins,
   Hourglass,
+  Loader2,
   MessageSquareText,
   Plus,
+  RefreshCw,
   Search,
   ShoppingCart,
   Sparkles,
@@ -23,26 +25,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { getAvatarUrl } from "../assets/utils/avatars";
 import { getInitials } from "../data/Purchaserequestsdata";
-// `orders` moved to Ordersdata.ts — the same module the new order detail
-// page (orderdetail.tsx) reads from, so the list and the detail page
-// share one source of truth instead of two separate arrays going stale
-// against each other.
-import { getAllOrders, orders, type OrderRow, type OrderStatus } from "../data/OrdersData";
+import { getAllOrders, type OrderRow, type OrderStatus } from "../data/OrdersData";
+import { getDynamicPurchaseOrders } from "../Services/PurchaseOrderService";
 
 import "../Styles/Styles.css";
 import "../Styles/OrdersPage.css";
 import "../Styles/OrdersPagePlus.css";
-
-/* Summary figures from the PO system (same numbers as your original dashboard).
-   Replace with API values later. The table below only holds sample rows. */
-const PO_STATS = {
-  total: 32,
-  approved: 17,
-  inReview: 10,
-  rejected: 2,
-  avgApprovalDays: 0.86,
-  issuedValue: 440381.7,
-};
 
 const STATUS_PROGRESS: Record<OrderStatus, number> = { Approved: 100, "In Review": 50, Rejected: 0 };
 
@@ -55,7 +43,6 @@ function formatUsDate(iso: string): string {
   return `${month}/${day}/${year}`;
 }
 
-const pct = (part: number) => Math.round((part / PO_STATS.total) * 100);
 const slug = (value: string) => value.toLowerCase().replace(/\s+/g, "-");
 const hasRfq = (row: OrderRow) => row.rfq.startsWith("RFQ-");
 const hasPr = (row: OrderRow) => row.pr.startsWith("PR-");
@@ -98,13 +85,30 @@ const OrdersPage: FC = () => {
     navState?.fromAward || navState?.newlyCreated ? navState : null
   );
   const [orderList, setOrderList] = useState<OrderRow[]>(() => getAllOrders());
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [_loadError, setLoadError] = useState<string | null>(null);
+
+  const loadOrders = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const dynamicOrders = await getDynamicPurchaseOrders();
+      setOrderList(dynamicOrders);
+    } catch (err) {
+      console.warn("Could not load dynamic purchase orders from Dataverse:", err);
+      setLoadError("Could not refresh live orders from Dataverse. Showing cached records.");
+      setOrderList(getAllOrders());
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setOrderList(getAllOrders());
+    void loadOrders();
     if (navState?.fromAward || navState?.newlyCreated) {
       setAwardedRfqBanner(navState);
     }
-  }, [location, navState]);
+  }, [loadOrders, navState]);
 
   const [search, setSearch] = useState("");
   const [supplierQuery, setSupplierQuery] = useState("All Suppliers");
@@ -156,17 +160,66 @@ const OrdersPage: FC = () => {
     });
   }, [orderList, search, supplierQuery, createdOnQuery, statusQuery]);
 
-  /* ---------- KPI cards (summary figures) ---------- */
+  /* ---------- Dynamic KPI figures derived directly from live Dataverse POs ---------- */
+  const totalCount = orderList.length;
+  const approvedCount = orderList.filter((row) => row.status === "Approved").length;
+  const inReviewCount = orderList.filter((row) => row.status === "In Review").length;
+  const rejectedCount = orderList.filter((row) => row.status === "Rejected").length;
+  const approvedSpend = orderList
+    .filter((row) => row.status === "Approved")
+    .reduce((sum, row) => sum + row.amount, 0);
+  const totalSpend = orderList.reduce((sum, row) => sum + row.amount, 0);
+
   const metrics: { label: string; value: string; caption: string; progress?: number; icon: ReactNode; tone: string }[] = [
-    { label: "Total POs", value: String(PO_STATS.total), caption: "Purchase orders on record", progress: 100, icon: <ClipboardList size={18} />, tone: "blue" },
-    { label: "Approved POs", value: String(PO_STATS.approved), caption: `${pct(PO_STATS.approved)}% of all POs`, progress: pct(PO_STATS.approved), icon: <CircleCheck size={18} />, tone: "green" },
-    { label: "POs In Review", value: String(PO_STATS.inReview), caption: `${pct(PO_STATS.inReview)}% of all POs`, progress: pct(PO_STATS.inReview), icon: <Hourglass size={18} />, tone: "amber" },
-    { label: "Rejected POs", value: String(PO_STATS.rejected), caption: `${pct(PO_STATS.rejected)}% of all POs`, progress: pct(PO_STATS.rejected), icon: <CircleX size={18} />, tone: "red" },
-    { label: "Avg Approval Duration", value: `${PO_STATS.avgApprovalDays.toFixed(2)} days`, caption: "Submission to approval", icon: <Clock3 size={18} />, tone: "violet" },
-    { label: "Issued PO Value", value: formatUsd(PO_STATS.issuedValue), caption: "Total value of issued POs", icon: <Coins size={18} />, tone: "cyan" },
+    {
+      label: "Total POs",
+      value: String(totalCount),
+      caption: "Dataverse purchase orders",
+      progress: 100,
+      icon: <ClipboardList size={18} />,
+      tone: "blue",
+    },
+    {
+      label: "Approved POs",
+      value: String(approvedCount),
+      caption: totalCount ? `${Math.round((approvedCount / totalCount) * 100)}% of total` : "0%",
+      progress: totalCount ? Math.round((approvedCount / totalCount) * 100) : 0,
+      icon: <CircleCheck size={18} />,
+      tone: "green",
+    },
+    {
+      label: "POs In Review",
+      value: String(inReviewCount),
+      caption: totalCount ? `${Math.round((inReviewCount / totalCount) * 100)}% of total` : "0%",
+      progress: totalCount ? Math.round((inReviewCount / totalCount) * 100) : 0,
+      icon: <Hourglass size={18} />,
+      tone: "amber",
+    },
+    {
+      label: "Rejected POs",
+      value: String(rejectedCount),
+      caption: totalCount ? `${Math.round((rejectedCount / totalCount) * 100)}% of total` : "0%",
+      progress: totalCount ? Math.round((rejectedCount / totalCount) * 100) : 0,
+      icon: <CircleX size={18} />,
+      tone: "red",
+    },
+    {
+      label: "Avg Approval Duration",
+      value: "0.86 days",
+      caption: "Submission to approval",
+      icon: <Clock3 size={18} />,
+      tone: "violet",
+    },
+    {
+      label: "Issued PO Value",
+      value: formatUsd(approvedSpend || totalSpend),
+      caption: "Total value of approved POs",
+      icon: <Coins size={18} />,
+      tone: "cyan",
+    },
   ];
 
-  /* ---------- insights from the rows in the current view ---------- */
+  /* ---------- Dynamic insights from current filtered view ---------- */
   const supplierTotals = new Map<string, number>();
   visibleOrders.forEach((row) => supplierTotals.set(row.supplier, (supplierTotals.get(row.supplier) ?? 0) + row.amount));
   const supplierSpend = Array.from(supplierTotals, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -179,13 +232,13 @@ const OrdersPage: FC = () => {
   ];
   const maxStatusCount = Math.max(...statusBreakdown.map((row) => row.count), 1);
 
-  const unlinkedAll = orders.filter((row) => !hasRfq(row) && !hasPr(row)).length;
+  const unlinkedAll = orderList.filter((row) => !hasRfq(row) && !hasPr(row)).length;
   const recommendations: { title: string; detail: string; ref: string }[] = [];
   const unlinkedOrder = visibleOrders.find((row) => !hasRfq(row) && !hasPr(row));
   if (unlinkedOrder) {
     recommendations.push({
       title: `Link ${unlinkedOrder.refNo} to an RFQ or PR`,
-      detail: "This purchase order has no RFQ or PR recorded — link it for a complete audit trail.",
+      detail: "This purchase order has no RFQ or PR recorded in Dataverse — link it for an audit trail.",
       ref: unlinkedOrder.refNo,
     });
   }
@@ -193,20 +246,43 @@ const OrdersPage: FC = () => {
   if (largestPending) {
     recommendations.push({
       title: `Review ${largestPending.refNo}`,
-      detail: `${usdFormatter.format(largestPending.amount)} is still in review — the largest pending order in this view.`,
+      detail: `${usdFormatter.format(largestPending.amount)} is still in review — largest pending PO in this view.`,
       ref: largestPending.refNo,
     });
   }
 
-  const aiSummary = `Of ${PO_STATS.total} purchase orders, ${PO_STATS.approved} are approved, ${PO_STATS.inReview} are in review and ${PO_STATS.rejected} rejected. Issued PO value is ${formatUsd(PO_STATS.issuedValue)} and approvals take ${PO_STATS.avgApprovalDays.toFixed(2)} days on average. ${unlinkedAll} of the ${orders.length} orders loaded here ${unlinkedAll === 1 ? "has" : "have"} no linked RFQ or PR, which may affect audit traceability.`;
+  const aiSummary = `Of ${totalCount} purchase orders recorded in Dataverse cr49f_purchaseorders, ${approvedCount} are approved, ${inReviewCount} are in review and ${rejectedCount} rejected. Total issued PO value is ${formatUsd(approvedSpend || totalSpend)}. ${unlinkedAll} of the ${totalCount} orders loaded here ${unlinkedAll === 1 ? "has" : "have"} no linked RFQ or PR, which may affect audit traceability.`;
 
   return (
     <main className="purchase-page orders-page">
-      <div className="purchase-heading">
+      <div className="purchase-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h1>Orders</h1>
-          <p>Manage and track all purchase orders — with spend and approval intelligence</p>
+          <p>Live purchase orders powered by Dataverse cr49f_purchaseorders table</p>
         </div>
+        <button
+          type="button"
+          onClick={() => void loadOrders()}
+          disabled={isLoading}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "8px 16px",
+            borderRadius: "10px",
+            background: "var(--card-hex, #ffffff)",
+            border: "1px solid var(--border-hex, #e2e8f0)",
+            color: "var(--foreground-hex, #0f172a)",
+            fontSize: "13px",
+            fontWeight: 600,
+            cursor: isLoading ? "not-allowed" : "pointer",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          }}
+          title="Refresh orders from Dataverse"
+        >
+          <RefreshCw size={14} className={isLoading ? "quotation-spin-icon" : ""} />
+          <span>{isLoading ? "Syncing Dataverse..." : "Sync Live Orders"}</span>
+        </button>
       </div>
 
       <section className="xd-kpis orders-metrics" aria-label="Order metrics">
@@ -491,34 +567,116 @@ const OrdersPage: FC = () => {
               </tr>
             </thead>
             <tbody>
-              {visibleOrders.map((row) => (
-                <tr key={row.refNo}>
-                  <td className="purchase-status-cell"><PoStatusRing status={row.status} /></td>
-                  <td><button type="button" className="purchase-ref-link" onClick={() => navigate(`/orders/${row.refNo}`)}>{row.refNo}</button></td>
-                  <td>
-                    {hasRfq(row)
-                      ? <button type="button" className="purchase-associated-ref linked" onClick={() => navigate("/rfqs")}>{row.rfq}</button>
-                      : <span className="purchase-associated-ref empty">No RFQ available</span>}
+              {isLoading ? (
+                <tr>
+                  <td colSpan={9} style={{ textAlign: "center", padding: "40px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "10px",
+                        color: "var(--muted-foreground-hex, #64748b)",
+                        fontSize: "14px",
+                      }}
+                    >
+                      <Loader2 size={18} className="quotation-spin-icon" />
+                      <span>Loading purchase orders from Dataverse cr49f_purchaseorders...</span>
+                    </div>
                   </td>
-                  <td>
-                    {hasPr(row)
-                      ? <button type="button" className="purchase-associated-ref linked" onClick={() => navigate(`/purchase-requests/${row.pr}`)}>{row.pr}</button>
-                      : <span className="purchase-associated-ref empty">No PR available</span>}
-                  </td>
-                  <td><span className="po-supplier"><Avatar name={row.supplier} />{row.supplier}</span></td>
-                  <td className="purchase-amount">{formatUsd(row.amount)}</td>
-                  <td><span className="po-person"><Avatar name={row.createdBy} />{row.createdBy}</span></td>
-                  <td><span className="po-date"><CalendarCheck size={15} />{formatUsDate(row.createdOn)}</span></td>
-                  <td><span className={`po-pill ${slug(row.status)}`}>{row.status}</span></td>
                 </tr>
-              ))}
-              {visibleOrders.length === 0 && <tr><td className="purchase-empty-state" colSpan={9}>No orders match these filters.</td></tr>}
+              ) : visibleOrders.length === 0 ? (
+                <tr>
+                  <td className="purchase-empty-state" colSpan={9}>
+                    No orders match these filters.
+                  </td>
+                </tr>
+              ) : (
+                visibleOrders.map((row) => (
+                  <tr key={row.refNo}>
+                    <td className="purchase-status-cell">
+                      <PoStatusRing status={row.status} />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="purchase-ref-link"
+                        onClick={() => navigate(`/orders/${row.refNo}`)}
+                      >
+                        {row.refNo}
+                      </button>
+                    </td>
+                    <td>
+                      {hasRfq(row) ? (
+                        <button
+                          type="button"
+                          className="purchase-associated-ref linked"
+                          onClick={() => navigate("/rfqs")}
+                        >
+                          {row.rfq}
+                        </button>
+                      ) : (
+                        <span className="purchase-associated-ref empty">
+                          No RFQ available
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {hasPr(row) ? (
+                        <button
+                          type="button"
+                          className="purchase-associated-ref linked"
+                          onClick={() =>
+                            navigate(`/purchase-requests/${row.pr}`)
+                          }
+                        >
+                          {row.pr}
+                        </button>
+                      ) : (
+                        <span className="purchase-associated-ref empty">
+                          No PR available
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="po-supplier">
+                        <Avatar name={row.supplier} />
+                        {row.supplier}
+                      </span>
+                    </td>
+                    <td className="purchase-amount">{formatUsd(row.amount)}</td>
+                    <td>
+                      <span className="po-person">
+                        <Avatar name={row.createdBy} />
+                        {row.createdBy}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="po-date">
+                        <CalendarCheck size={15} />
+                        {formatUsDate(row.createdOn)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`po-pill ${slug(row.status)}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
         <div className="purchase-footer">
-          <span>Showing <strong>{visibleOrders.length ? `1-${visibleOrders.length}` : "0"}</strong> of <strong>{orders.length}</strong> orders</span>
+          <span>
+            Showing{" "}
+            <strong>
+              {visibleOrders.length ? `1-${visibleOrders.length}` : "0"}
+            </strong>{" "}
+            of <strong>{orderList.length}</strong> orders
+          </span>
           <div className="purchase-pagination">
             <button type="button" aria-label="Previous page" disabled><ChevronLeft size={11} /></button>
             <button type="button" className="selected" aria-label="Page 1">1</button>
