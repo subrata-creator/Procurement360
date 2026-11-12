@@ -17,7 +17,8 @@ import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purch
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
 import type { Cr49f_purchaserequests } from "../generated/models/Cr49f_purchaserequestsModel";
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
-import { orders } from "../data/OrdersData";
+import { getDynamicPurchaseOrders } from "../Services/PurchaseOrderService";
+import type { OrderRow } from "../data/OrdersData";
 import "../Styles/PRJourney.css";
 
 type Props = {
@@ -45,14 +46,16 @@ export default function PRJourney({ onViewPending }: Props) {
   // Dataverse state
   const [prs, setPrs] = useState<Cr49f_purchaserequests[]>([]);
   const [rfqs, setRfqs] = useState<Cr49f_requestforqoutations[]>([]);
+  const [dynamicOrders, setDynamicOrders] = useState<OrderRow[]>([]);
 
   useEffect(() => {
     let active = true;
     async function loadData() {
       try {
-        const [prsRes, rfqsRes] = await Promise.allSettled([
+        const [prsRes, rfqsRes, posRes] = await Promise.allSettled([
           Cr49f_purchaserequestsService.getAll(),
           Cr49f_requestforqoutationsService.getAll(),
+          getDynamicPurchaseOrders(),
         ]);
         if (!active) return;
         if (prsRes.status === "fulfilled" && prsRes.value.success && prsRes.value.data) {
@@ -60,6 +63,9 @@ export default function PRJourney({ onViewPending }: Props) {
         }
         if (rfqsRes.status === "fulfilled" && rfqsRes.value.success && rfqsRes.value.data) {
           setRfqs(rfqsRes.value.data);
+        }
+        if (posRes.status === "fulfilled") {
+          setDynamicOrders(posRes.value);
         }
       } catch (err) {
         console.warn("[PRJourney] Error loading Dataverse records:", err);
@@ -107,52 +113,48 @@ export default function PRJourney({ onViewPending }: Props) {
 
   // Filtered Orders
   const filteredOrders = useMemo(() => {
-    return (orders || []).filter((o) => isWithinRange(o.createdOn));
-  }, [range]);
+    return (dynamicOrders || []).filter((o) => isWithinRange(o.createdOn));
+  }, [dynamicOrders, range]);
 
-  // Lifecycle Stage Counts (completely dynamic from real Dataverse records)
+  // Lifecycle Stage Counts (completely dynamic from real Dataverse records - NO fake static fallbacks)
   // 1. Created: Total PRs initiated in period
-  const createdCount = filteredPrs.length > 0 ? filteredPrs.length : (activePrs.length > 0 ? activePrs.length : 42);
+  const createdCount = filteredPrs.length;
 
   // 2. Under Review: PRs awaiting approval (status 0: Pending, 2: ChangesNeeded)
   const underReviewCount = useMemo(() => {
-    const list = filteredPrs.filter(
+    return filteredPrs.filter(
       (p) => p.cr49f_status === 0 || p.cr49f_status === 2 || p.statuscode === 1
-    );
-    return filteredPrs.length > 0 ? list.length : 8;
+    ).length;
   }, [filteredPrs]);
 
   // 3. Approved: PRs approved
   const approvedCount = useMemo(() => {
-    const list = filteredPrs.filter(
+    return filteredPrs.filter(
       (p) => p.cr49f_status === 1 || p.statuscode === 2
-    );
-    return filteredPrs.length > 0 ? list.length : 28;
+    ).length;
   }, [filteredPrs]);
 
   // 4. RFQ Initiated: RFQs entering sourcing
-  const rfqCount = filteredRfqs.length > 0 ? filteredRfqs.length : (activeRfqs.length > 0 ? activeRfqs.length : 20);
+  const rfqCount = filteredRfqs.length;
 
   // 5. PO Created: Purchase orders generated
-  const poCount = filteredOrders.length > 0 ? filteredOrders.length : 16;
+  const poCount = filteredOrders.length;
 
   // 6. Invoice Created: Orders with completed / invoice stage
   const invoiceCount = useMemo(() => {
-    const invOrders = filteredOrders.filter((o) => o.status === "Approved");
-    return filteredOrders.length > 0 ? invOrders.length : 12;
+    return filteredOrders.filter((o) => o.status === "Approved").length;
   }, [filteredOrders]);
 
   // Aging PRs for AI insight (pending > 7 days)
   const agingPrsCount = useMemo(() => {
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const aging = filteredPrs.filter((p) => {
+    return filteredPrs.filter((p) => {
       const isPending = p.cr49f_status === 0 || p.cr49f_status === 2 || p.statuscode === 1;
       if (!isPending) return false;
       const t = parseDateMs(p.createdon || p.overriddencreatedon);
       if (!t) return false;
       return (now - t) > sevenDaysMs;
-    });
-    return aging.length > 0 ? aging.length : 3;
+    }).length;
   }, [filteredPrs, now]);
 
   // Stage configurations (compact & clickable)

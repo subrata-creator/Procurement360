@@ -212,7 +212,7 @@ const OrdersPage: FC = () => {
     navState?.fromAward || navState?.newlyCreated ? navState : null
   );
 
-  const [orderList, setOrderList] = useState<OrderRow[]>(() => getAllOrders());
+  const [orderList, setOrderList] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [_loadError, setLoadError] = useState<string | null>(null);
 
@@ -399,8 +399,8 @@ const OrdersPage: FC = () => {
     },
     {
       label: "Avg Approval Duration",
-      value: "0.86 days",
-      caption: "Submission to approval",
+      value: totalCount > 0 ? "0.86 days" : "—",
+      caption: totalCount > 0 ? "Submission to approval" : "No orders recorded",
       icon: <Clock3 size={18} />,
       tone: "violet",
       filter: "All Status",
@@ -469,11 +469,13 @@ const OrdersPage: FC = () => {
     });
   }
 
-  const aiSummary = `Of ${totalCount} purchase orders recorded in Dataverse cr49f_purchaseorders, ${approvedCount} are approved, ${inReviewCount} are in review and ${rejectedCount} rejected. Total issued PO value is ${formatUsd(
-    approvedSpend || totalSpend
-  )}. ${unlinkedAll} of the ${totalCount} orders loaded here ${
-    unlinkedAll === 1 ? "has" : "have"
-  } no linked RFQ or PR, which may affect audit traceability.`;
+  const aiSummary = totalCount > 0
+    ? `Of ${totalCount} purchase orders recorded in Dataverse cr49f_purchaseorders, ${approvedCount} are approved, ${inReviewCount} are in review and ${rejectedCount} rejected. Total issued PO value is ${formatUsd(
+        approvedSpend || totalSpend
+      )}. ${unlinkedAll} of the ${totalCount} orders loaded here ${
+        unlinkedAll === 1 ? "has" : "have"
+      } no linked RFQ or PR, which may affect audit traceability.`
+    : "No purchase orders recorded yet in Dataverse cr49f_purchaseorders table. You can create a direct purchase order or award an approved quotation from the RFQ management section to dynamically generate PO records.";
 
   const exportCsv = () => {
     const csvRows = [
@@ -1061,60 +1063,75 @@ const OrdersPage: FC = () => {
 
         {/* Content: Grid View or Modern Table View */}
         {viewMode === "grid" ? (
-          <div className="pr-modern-grid-wrap">
-            {paginatedOrders.map((row) => {
-              const isApproved = row.status === "Approved";
-              const isRejected = row.status === "Rejected";
-              const progressPct = isApproved ? 100 : row.status === "In Review" ? 50 : 0;
+          paginatedOrders.length ? (
+            <div className="pr-modern-grid-wrap">
+              {paginatedOrders.map((row) => {
+                const isApproved = row.status === "Approved";
+                const isRejected = row.status === "Rejected";
+                const progressPct = isApproved ? 100 : row.status === "In Review" ? 50 : 0;
 
-              return (
-                <div className="pr-grid-card" key={row.refNo}>
-                  <div className="pr-grid-card-header">
-                    <ProgressCircle
-                      percentage={progressPct}
-                      isApproved={isApproved}
-                      isRejected={isRejected}
-                    />
-                    <div className="pr-grid-badges">
-                      <span
-                        className={`pr-status-badge ${
-                          isApproved ? "approved" : isRejected ? "rejected" : "pending"
-                        }`}
+                return (
+                  <div className="pr-grid-card" key={row.refNo}>
+                    <div className="pr-grid-card-header">
+                      <ProgressCircle
+                        percentage={progressPct}
+                        isApproved={isApproved}
+                        isRejected={isRejected}
+                      />
+                      <div className="pr-grid-badges">
+                        <span
+                          className={`pr-status-badge ${
+                            isApproved ? "approved" : isRejected ? "rejected" : "pending"
+                          }`}
+                        >
+                          {row.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pr-grid-card-body">
+                      <strong
+                        className="pr-grid-card-title"
+                        onClick={() => navigate(`/orders/${row.refNo}`)}
+                        title={row.refNo}
                       >
-                        {row.status}
-                      </span>
+                        {row.refNo}
+                      </strong>
+                      <span className="pr-grid-card-ref">{row.supplier}</span>
+                      <div className="pr-grid-amount">{formatUsd(row.amount)}</div>
+                      <div className="pr-grid-meta-row">
+                        <span>Created: {formatUsDate(row.createdOn)}</span>
+                        <span>By: {row.createdBy}</span>
+                      </div>
+                    </div>
+
+                    <div className="pr-grid-card-footer">
+                      <button
+                        type="button"
+                        className="pr-grid-btn"
+                        onClick={() => navigate(`/orders/${row.refNo}`)}
+                      >
+                        View Order Details
+                      </button>
                     </div>
                   </div>
-
-                  <div className="pr-grid-card-body">
-                    <strong
-                      className="pr-grid-card-title"
-                      onClick={() => navigate(`/orders/${row.refNo}`)}
-                      title={row.refNo}
-                    >
-                      {row.refNo}
-                    </strong>
-                    <span className="pr-grid-card-ref">{row.supplier}</span>
-                    <div className="pr-grid-amount">{formatUsd(row.amount)}</div>
-                    <div className="pr-grid-meta-row">
-                      <span>Created: {formatUsDate(row.createdOn)}</span>
-                      <span>By: {row.createdBy}</span>
-                    </div>
-                  </div>
-
-                  <div className="pr-grid-card-footer">
-                    <button
-                      type="button"
-                      className="pr-grid-btn"
-                      onClick={() => navigate(`/orders/${row.refNo}`)}
-                    >
-                      View Order Details
-                    </button>
-                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="purchase-empty-state" style={{ padding: "48px 20px" }}>
+              {isLoading ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                  <Loader2 size={18} className="quotation-spin-icon" />
+                  <span>Loading purchase orders from Dataverse cr49f_purchaseorders...</span>
                 </div>
-              );
-            })}
-          </div>
+              ) : orderList.length === 0 ? (
+                "No purchase orders found in Dataverse cr49f_purchaseorders table. When an RFQ is awarded or an order is created, it will appear here dynamically."
+              ) : (
+                "No purchase orders match these filters."
+              )}
+            </div>
+          )
         ) : (
           <div className="pr-modern-table-wrap">
             <table className="pr-modern-table">
@@ -1620,8 +1637,10 @@ const OrdersPage: FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10}>
-                      No purchase orders match these filters.
+                    <td className="purchase-empty-state" colSpan={10} style={{ padding: "48px 20px" }}>
+                      {orderList.length === 0
+                        ? "No purchase orders found in Dataverse cr49f_purchaseorders table. When an RFQ is awarded or an order is created, it will appear here dynamically."
+                        : "No purchase orders match these filters."}
                     </td>
                   </tr>
                 )}

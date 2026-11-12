@@ -38,15 +38,7 @@ export interface OrderRow {
   status: OrderStatus;
 }
 
-export const INITIAL_ORDERS: OrderRow[] = [
-  { refNo: "PO-2026-032", rfq: "RFQ-2026-052", pr: "PR-2026-088", supplier: "Logitech", amount: 17171, createdBy: "Ashish Bhatia", createdOn: "2026-04-03", status: "Approved" },
-  { refNo: "PO-2026-031", rfq: "No RFQ available", pr: "No PR available", supplier: "Logitech", amount: 187, createdBy: "Ashish Bhatia", createdOn: "2026-03-22", status: "Approved" },
-  { refNo: "PO-2026-030", rfq: "No RFQ available", pr: "No PR available", supplier: "Classmate", amount: 209, createdBy: "Ashish Bhatia", createdOn: "2026-03-22", status: "In Review" },
-  { refNo: "PO-2026-029", rfq: "No RFQ available", pr: "No PR available", supplier: "ITC", amount: 71500, createdBy: "Ashish Bhatia", createdOn: "2026-03-19", status: "In Review" },
-  { refNo: "PO-2026-028", rfq: "RFQ-2026-047", pr: "PR-2026-085", supplier: "ITC", amount: 495, createdBy: "Ashish Bhatia", createdOn: "2026-02-03", status: "Approved" },
-  { refNo: "PO-2026-027", rfq: "RFQ-2026-042", pr: "PR-2026-083", supplier: "Logitech", amount: 6600, createdBy: "Ashish Bhatia", createdOn: "2026-01-28", status: "Approved" },
-  { refNo: "PO-2026-026", rfq: "RFQ-2026-041", pr: "PR-2026-081", supplier: "Dell Inc.", amount: 5500, createdBy: "Ashish Bhatia", createdOn: "2026-01-27", status: "Approved" },
-];
+export const INITIAL_ORDERS: OrderRow[] = [];
 
 export function getCustomStoredOrders(): OrderRow[] {
   try {
@@ -60,9 +52,7 @@ export function getCustomStoredOrders(): OrderRow[] {
 }
 
 export function getAllOrders(): OrderRow[] {
-  const custom = getCustomStoredOrders();
-  const customRefs = new Set(custom.map((c) => c.refNo));
-  return [...custom, ...INITIAL_ORDERS.filter((o) => !customRefs.has(o.refNo))];
+  return getCustomStoredOrders();
 }
 
 export const orders: OrderRow[] = getAllOrders();

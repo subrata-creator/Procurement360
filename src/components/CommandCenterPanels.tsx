@@ -15,7 +15,8 @@ import type { Cr49f_supplierproducts } from "../generated/models/Cr49f_supplierp
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import type { Cr49f_purchaserequestlines } from "../generated/models/Cr49f_purchaserequestlinesModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
-import { orders } from "../data/OrdersData";
+import { getDynamicPurchaseOrders } from "../Services/PurchaseOrderService";
+import type { OrderRow } from "../data/OrdersData";
 import { PROCUREMENT_BUDGET_USD } from "../data/procurementBudget";
 import {
   calculateProcurementIntelligence,
@@ -113,6 +114,7 @@ export default function CommandCenterPanels({
   const [suppliersList, setSuppliersList] = useState<Cr49f_suppliers[]>([]);
   const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
   const [prLines, setPrLines] = useState<Cr49f_purchaserequestlines[]>([]);
+  const [dynamicOrders, setDynamicOrders] = useState<OrderRow[]>([]);
   const [aiFlowResult, setAiFlowResult] = useState<AiFlowResponseParsed | null>(null);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -192,7 +194,7 @@ export default function CommandCenterPanels({
 
     async function loadHealthData() {
       try {
-        const [prsRes, rfqsRes, respsRes, prodsRes, tasksRes, linesRes, suppsRes] = await Promise.allSettled([
+        const [prsRes, rfqsRes, respsRes, prodsRes, tasksRes, linesRes, suppsRes, posRes] = await Promise.allSettled([
           Cr49f_purchaserequestsService.getAll(),
           Cr49f_requestforqoutationsService.getAll(),
           Cr49f_rfqsupplierresponsesService.getAll(),
@@ -200,6 +202,7 @@ export default function CommandCenterPanels({
           Cr49f_approvaltasksesService.getAll(),
           Cr49f_purchaserequestlinesService.getAll(),
           Cr49f_suppliersService.getAll(),
+          getDynamicPurchaseOrders(),
         ]);
 
         if (!active) return;
@@ -224,6 +227,9 @@ export default function CommandCenterPanels({
         }
         if (suppsRes.status === "fulfilled" && suppsRes.value.success && suppsRes.value.data) {
           setSuppliersList(suppsRes.value.data);
+        }
+        if (posRes.status === "fulfilled") {
+          setDynamicOrders(posRes.value);
         }
 
         setIsLoadingHealth(false);
@@ -383,12 +389,12 @@ export default function CommandCenterPanels({
       if (prTotal > 0) return prTotal;
     }
 
-    if (spendCategory === "ALL" && orders.length > 0) {
-      return orders.reduce((acc, o) => acc + (Number(o.amount) || 0), 0);
+    if (spendCategory === "ALL" && dynamicOrders.length > 0) {
+      return dynamicOrders.reduce((acc, o) => acc + (Number(o.amount) || 0), 0);
     }
 
     return lineTotal;
-  }, [filteredLines, spendCategory, prs]);
+  }, [filteredLines, spendCategory, prs, dynamicOrders]);
 
   const allocatedBudget = PROCUREMENT_BUDGET_USD;
   const utilizationPct = allocatedBudget > 0
@@ -510,7 +516,7 @@ export default function CommandCenterPanels({
     }
 
     // 4. Correlate Orders
-    for (const o of orders) {
+    for (const o of dynamicOrders) {
       const orderSupp = (o.supplier || "").toLowerCase().trim();
       if (!orderSupp) continue;
       let matched = false;
@@ -535,35 +541,13 @@ export default function CommandCenterPanels({
       }
     }
 
-    // Fallback baseline
-    if (map.size === 0) {
-      const fallbacks = [
-        { name: "ITC", orders: 100, spend: 71500, category: "Distributor", prods: 14 },
-        { name: "Logitech", orders: 92, spend: 23958, category: "Manufacturer", prods: 22 },
-        { name: "TechScan", orders: 70, spend: 18500, category: "IT Hardware", prods: 9 },
-        { name: "Pidilite", orders: 40, spend: 11200, category: "Industrial", prods: 6 },
-        { name: "Dell Inc.", orders: 25, spend: 5500, category: "Manufacturer", prods: 12 },
-      ];
-      for (const fb of fallbacks) {
-        map.set(fb.name.toLowerCase(), {
-          id: fb.name,
-          name: fb.name,
-          category: fb.category,
-          ordersCount: fb.orders,
-          ordersSpend: fb.spend,
-          productsCount: fb.prods,
-          rfqResponsesCount: 0,
-        });
-      }
-    }
-
     return Array.from(map.values()).sort((a, b) => {
       if (b.ordersCount !== a.ordersCount) return b.ordersCount - a.ordersCount;
       if (b.ordersSpend !== a.ordersSpend) return b.ordersSpend - a.ordersSpend;
       if (b.productsCount !== a.productsCount) return b.productsCount - a.productsCount;
       return a.name.localeCompare(b.name);
     });
-  }, [suppliersList, supplierProducts, rfqResponses]);
+  }, [suppliersList, supplierProducts, rfqResponses, dynamicOrders]);
 
   const totalSupplierOrders = useMemo(() => {
     return dynamicSuppliers.reduce((sum, s) => sum + s.ordersCount, 0);
@@ -1070,32 +1054,38 @@ export default function CommandCenterPanels({
               <span className="cc-breakdown-subtitle">Aggregated from orders &amp; Dataverse</span>
             </div>
             <div className="cc-supplier-rank-list" aria-label="Suppliers by order volume">
-              {dynamicSuppliers.slice(0, 5).map((supplier, idx) => {
-                const fillPct = Math.max(6, Math.min(100, Math.round((supplier.ordersCount / maxOrdersAcrossSuppliers) * 100)));
-                return (
-                  <div
-                    className="cc-supplier-rank-row"
-                    key={supplier.id || supplier.name}
-                    title={`${supplier.name}: ${supplier.ordersCount} orders, ${formatCurrency(supplier.ordersSpend)} spend, ${supplier.productsCount} catalog items`}
-                  >
-                    <span className="cc-supplier-rank-num">#{idx + 1}</span>
-                    <div className="cc-supplier-name-col">
-                      <strong className="cc-supplier-name-text">{supplier.name}</strong>
-                      <span className="cc-supplier-category-tag">{supplier.category}</span>
+              {dynamicSuppliers.length === 0 ? (
+                <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--muted-foreground-hex, #64748b)", fontSize: "12.5px" }}>
+                  No suppliers recorded yet in Dataverse.
+                </div>
+              ) : (
+                dynamicSuppliers.slice(0, 5).map((supplier, idx) => {
+                  const fillPct = Math.max(6, Math.min(100, Math.round((supplier.ordersCount / maxOrdersAcrossSuppliers) * 100)));
+                  return (
+                    <div
+                      className="cc-supplier-rank-row"
+                      key={supplier.id || supplier.name}
+                      title={`${supplier.name}: ${supplier.ordersCount} orders, ${formatCurrency(supplier.ordersSpend)} spend, ${supplier.productsCount} catalog items`}
+                    >
+                      <span className="cc-supplier-rank-num">#{idx + 1}</span>
+                      <div className="cc-supplier-name-col">
+                        <strong className="cc-supplier-name-text">{supplier.name}</strong>
+                        <span className="cc-supplier-category-tag">{supplier.category}</span>
+                      </div>
+                      <div className="cc-supplier-bar-track">
+                        <div
+                          className="cc-supplier-bar-fill"
+                          style={{ width: `${fillPct}%` }}
+                        />
+                      </div>
+                      <div className="cc-supplier-rank-stat">
+                        <b>{supplier.ordersCount}</b>
+                        <small>orders</small>
+                      </div>
                     </div>
-                    <div className="cc-supplier-bar-track">
-                      <div
-                        className="cc-supplier-bar-fill"
-                        style={{ width: `${fillPct}%` }}
-                      />
-                    </div>
-                    <div className="cc-supplier-rank-stat">
-                      <b>{supplier.ordersCount}</b>
-                      <small>orders</small>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 

@@ -15,7 +15,6 @@ import {
   type OrderStatus,
   saveCreatedOrder,
   generateNextPoNumber,
-  getAllOrders,
   getCustomStoredOrders,
   getOrderByRef,
 } from "../data/OrdersData";
@@ -486,15 +485,7 @@ export async function getDynamicPurchaseOrders(): Promise<OrderRow[]> {
       (c) => !dvPoRefs.has(c.refNo.toLowerCase())
     );
 
-    const allDynamic = [...dataverseRows, ...remainingCustom];
-
-    // Deduplicate against base mock orders and prioritize dynamic records
-    const allRefs = new Set(allDynamic.map((r) => r.refNo.toLowerCase()));
-    const initialRemaining = getAllOrders().filter(
-      (o) => !allRefs.has(o.refNo.toLowerCase())
-    );
-
-    const combined = [...allDynamic, ...initialRemaining];
+    const combined = [...dataverseRows, ...remainingCustom];
 
     // Sort by created date descending (newest first)
     combined.sort((a, b) => {
@@ -506,7 +497,7 @@ export async function getDynamicPurchaseOrders(): Promise<OrderRow[]> {
     return combined;
   } catch (err) {
     console.warn("Could not load dynamic purchase orders from Dataverse:", err);
-    return getAllOrders();
+    return getCustomStoredOrders();
   }
 }
 
