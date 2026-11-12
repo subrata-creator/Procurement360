@@ -43,6 +43,7 @@ import {
   rejectTask,
   cleanGuid,
   parseTaskComments,
+  resolveRecordCreatedBy,
 } from "../Services/ApprovalWorkflowService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
 import {
@@ -322,10 +323,10 @@ export default function PurchaseRequestDetail() {
       title: liveRecord.cr49f_prtitle || "Untitled Purchase Request",
       rfq: "No RFQ available",
       po: "No PO available",
-      createdBy: liveRecord.createdbyname || "Unknown",
+      createdBy: resolveRecordCreatedBy(liveRecord, "Unknown"),
       date: toUsDate(liveRecord.createdon),
       status: mapToPRStatus(liveRecord.cr49f_status, liveRecord.cr49f_purchaserequestid),
-      requester: liveRecord.createdbyname,
+      requester: resolveRecordCreatedBy(liveRecord, "") || undefined,
       requiredDate: toUsDate(liveRecord.cr49f_requireddeliverydate),
       totalAmount: liveRecord.cr49f_totalamount != null ? currencyFormatter.format(liveRecord.cr49f_totalamount) : undefined,
       justification: liveRecord.cr49f_businessjustification,

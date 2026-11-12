@@ -75,6 +75,7 @@ import {
   getTaskApprovalStatusLabel,
   approveTask,
   rejectTask,
+  resolveRecordCreatedBy,
 } from "../Services/ApprovalWorkflowService";
 
 import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
@@ -877,7 +878,7 @@ export default function RfqDetail() {
         awardDate: liveRfq.cr49f_awarddate ? toUsDate(liveRfq.cr49f_awarddate) : "Pending Award",
         closedDate: liveRfq.cr49f_closeddate ? toUsDate(liveRfq.cr49f_closeddate) : "—",
         deliveryLocation: liveRfq.cr49f_deliverylocation || "Not specified",
-        createdBy: liveRfq.createdbyname || "Procurement Admin",
+        createdBy: resolveRecordCreatedBy(liveRfq, "Procurement Admin"),
         associatedPr: prRef,
         invitedSuppliers: invitedList,
         lineItems: mappedLines,
@@ -1940,7 +1941,7 @@ export default function RfqDetail() {
                     <div className="rfq-detail-grid">
                       <div className="rfq-detail-field">
                         <div className="rfq-detail-field-icon"><User size={12} /></div>
-                        <div><span>Requester</span><strong>{linkedPR.createdbyname || "Sakshi Paliwal"}</strong></div>
+                        <div><span>Requester</span><strong>{resolveRecordCreatedBy(linkedPR, "Unknown")}</strong></div>
                       </div>
                       <div className="rfq-detail-field">
                         <div className="rfq-detail-field-icon"><CalendarDays size={12} /></div>

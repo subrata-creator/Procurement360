@@ -21,50 +21,50 @@ function clampPosition(x: number, y: number, width: number, height: number): Pos
   };
 }
 
-function loadSavedPosition(): Position | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Position>;
-    if (typeof parsed?.x === "number" && Number.isFinite(parsed.x) && typeof parsed?.y === "number" && Number.isFinite(parsed.y)) {
-      return clampPosition(parsed.x, parsed.y, DEFAULT_BUTTON_SIZE, DEFAULT_BUTTON_SIZE);
-    }
-  } catch {
-    // Ignore storage read errors and fall back to CSS default position.
-  }
-  return null;
-}
-
 interface FloatingCopilotButtonProps {
   isOpen: boolean;
   onOpen: () => void;
+  /** Route or view key; changing it resets the launcher to its default bottom-right anchor. */
+  resetKey?: string;
 }
 
 /**
  * Draggable floating launcher for the PR Assistant Copilot panel.
- * Distinguishes short clicks (opens panel) from pointer drags (repositions within viewport).
+ * Defaults to the bottom-right corner (`right: 24px; bottom: 24px`) and resets
+ * there on navigation, while remaining freely draggable within the viewport.
  */
-export default function FloatingCopilotButton({ isOpen, onOpen }: FloatingCopilotButtonProps) {
+export default function FloatingCopilotButton({ isOpen, onOpen, resetKey }: FloatingCopilotButtonProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState<Position | null>(loadSavedPosition);
+  const [dragState, setDragState] = useState<{ key: string | undefined; pos: Position | null }>({
+    key: resetKey,
+    pos: null,
+  });
   const [isDragging, setIsDragging] = useState(false);
 
   const didDragRef = useRef(false);
+  const position = dragState.key === resetKey ? dragState.pos : null;
+
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage cleanup errors.
+    }
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
-      setPosition((prev) => {
-        if (!prev) return null;
+      setDragState((prev) => {
+        if (prev.key !== resetKey || !prev.pos) return prev;
         const w = buttonRef.current?.offsetWidth || DEFAULT_BUTTON_SIZE;
         const h = buttonRef.current?.offsetHeight || DEFAULT_BUTTON_SIZE;
-        return clampPosition(prev.x, prev.y, w, h);
+        return { key: resetKey, pos: clampPosition(prev.pos.x, prev.pos.y, w, h) };
       });
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [resetKey]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (isOpen) return;
@@ -82,7 +82,6 @@ export default function FloatingCopilotButton({ isOpen, onOpen }: FloatingCopilo
     const width = rect.width || DEFAULT_BUTTON_SIZE;
     const height = rect.height || DEFAULT_BUTTON_SIZE;
     let moved = false;
-    let lastClamped: Position | null = null;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
@@ -98,8 +97,7 @@ export default function FloatingCopilotButton({ isOpen, onOpen }: FloatingCopilo
       }
 
       const clamped = clampPosition(startX + dx, startY + dy, width, height);
-      lastClamped = clamped;
-      setPosition(clamped);
+      setDragState({ key: resetKey, pos: clamped });
     };
 
     const cleanup = (endEvent: PointerEvent) => {
@@ -110,13 +108,6 @@ export default function FloatingCopilotButton({ isOpen, onOpen }: FloatingCopilo
 
       if (moved) {
         setIsDragging(false);
-        if (lastClamped) {
-          try {
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(lastClamped));
-          } catch {
-            // Ignore storage write errors.
-          }
-        }
         window.setTimeout(() => {
           didDragRef.current = false;
         }, 0);

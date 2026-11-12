@@ -219,7 +219,7 @@ export function buildApprovalSteps(record: PurchaseRequestRecord): ApprovalStep[
   if (record.status === "Rejected") {
     return STEP_LABELS.map((title, index) => {
       const step = index + 1;
-      if (step === 1) return { step, title, status: "Completed" };
+      if (step === 1) return { step, title, date: record.date, by: record.createdBy, status: "Completed" };
       if (step === 2) return { step, title: "Rejected", date: record.date, status: "Rejected" };
       return { step, title, status: "Skipped" };
     });
@@ -228,6 +228,7 @@ export function buildApprovalSteps(record: PurchaseRequestRecord): ApprovalStep[
   if (record.status === "Approved") {
     return STEP_LABELS.map((title, index) => {
       const step = index + 1;
+      if (step === 1) return { step, title, date: record.date, by: record.createdBy, status: "Completed" };
       if (step <= 3) return { step, title, status: "Completed" };
       if (step === 4) return { step, title, status: hasRFQ ? "Completed" : "Pending" };
       if (step === 5) return { step, title, status: hasPO ? "Completed" : "Pending" };
