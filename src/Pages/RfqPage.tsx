@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertCircle,
   ArrowRight,
+  Award,
   Building2,
   Calendar,
   Check,
@@ -33,6 +34,11 @@ import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_r
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import type { Cr49f_approvaltaskses } from "../generated/models/Cr49f_approvaltasksesModel";
+import { Cr49f_selectedsuppliersesService } from "../generated/services/Cr49f_selectedsuppliersesService";
+import type { Cr49f_selectedsupplierses } from "../generated/models/Cr49f_selectedsuppliersesModel";
+import { getDynamicPurchaseOrders } from "../Services/PurchaseOrderService";
+import type { OrderRow } from "../data/OrdersData";
+import { isRecordRewarded } from "../Services/RfqSupplierResponseService";
 import { cleanGuid, getTaskApprovalStatusLabel } from "../Services/ApprovalWorkflowService";
 import CreateRFQModal from "../components/CreateRFQModal";
 import { getInitials } from "../data/Purchaserequestsdata";
@@ -46,8 +52,9 @@ const PAGE_SIZE = 10;
 
 const STATUS_FILTER_OPTIONS = [
   "All Status",
-  "Pending",
+  "Rewarded",
   "Approved",
+  "Pending",
   "ChangesNeeded",
   "Rejected",
 ] as const;
@@ -143,7 +150,74 @@ function formatFilterDate(iso: string): string {
   return iso;
 }
 
-function getStatusLabel(row: RawRfq): string {
+export interface RfqRewardInfo {
+  isRewarded: boolean;
+  rewardedSupplierName?: string;
+  associatedPo?: string;
+  awardDate?: string;
+}
+
+export function getRfqRewardInfo(
+  row: RawRfq,
+  selectedSuppliers: Cr49f_selectedsupplierses[] = [],
+  orders: OrderRow[] = []
+): RfqRewardInfo {
+  const rfqId = cleanGuid(row.cr49f_requestforqoutationid);
+  const rfqNum = (row.cr49f_rfqnumber || "").toLowerCase().trim();
+
+  // 1. Check associated purchase orders
+  const matchedPo = orders.find((o) => {
+    const oRfq = (o.rfq || "").toLowerCase().trim();
+    return (rfqNum && oRfq === rfqNum) || (rfqId && oRfq.includes(rfqId));
+  });
+
+  // 2. Check selected suppliers table in Dataverse
+  const matchedSelected = selectedSuppliers.find((s) => {
+    const sRfq = cleanGuid(s._cr49f_rfq_value || (s as any).cr49f_rfq);
+    if (!sRfq || sRfq !== rfqId) return false;
+    return isRecordRewarded(s);
+  });
+
+  // 3. Check RFQ entity itself or localStorage award markers
+  const rfqRewarded =
+    isRecordRewarded(row) ||
+    Boolean(row.cr49f_awarddate) ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem(`rfq_status_${rfqId}`) === "Rewarded" ||
+       localStorage.getItem(`rfq_awarded_supplier_${rfqId}`) !== null ||
+       (rfqNum && localStorage.getItem(`rfq_awarded_supplier_${rfqNum}`) !== null)));
+
+  const isRewarded = Boolean(matchedPo || matchedSelected || rfqRewarded);
+
+  // 4. Resolve Rewarded Supplier Name
+  let rewardedSupplierName: string | undefined = undefined;
+  if (matchedPo?.supplier && matchedPo.supplier !== "Supplier") {
+    rewardedSupplierName = matchedPo.supplier;
+  } else if (typeof window !== "undefined") {
+    rewardedSupplierName =
+      localStorage.getItem(`rfq_awarded_supplier_name_${rfqId}`) ||
+      (rfqNum ? localStorage.getItem(`rfq_awarded_supplier_name_${rfqNum}`) : null) ||
+      undefined;
+  }
+  if (!rewardedSupplierName && matchedSelected) {
+    rewardedSupplierName =
+      matchedSelected.cr49f_supplierquotation ||
+      (matchedSelected.cr49f_selectedsuppliernumber
+        ? `Supplier ${matchedSelected.cr49f_selectedsuppliernumber}`
+        : undefined);
+  }
+
+  return {
+    isRewarded,
+    rewardedSupplierName,
+    associatedPo: matchedPo?.refNo,
+    awardDate: row.cr49f_awarddate || undefined,
+  };
+}
+
+function getStatusLabel(row: RawRfq, isRewarded?: boolean): string {
+  if (isRewarded) return "Rewarded";
+
   const rfqId = cleanGuid(row.cr49f_requestforqoutationid);
   if (rfqId && typeof window !== "undefined") {
     const cached = localStorage.getItem(`rfq_status_${rfqId}`);
@@ -152,6 +226,7 @@ function getStatusLabel(row: RawRfq): string {
   const formatted = row.cr49f_statusname?.trim();
   if (formatted) {
     const normalized = formatted.replace(/\s+/g, "").toLowerCase();
+    if (normalized === "rewarded") return "Rewarded";
     if (normalized === "changesneeded") return "Changes Needed";
     if (normalized === "pending") return "Pending";
     if (normalized === "approved") return "Approved";
@@ -172,8 +247,8 @@ function getStatusLabel(row: RawRfq): string {
   }
 }
 
-function getStatusFilterValue(row: RawRfq): string {
-  return getStatusLabel(row).replace(/\s+/g, "").toLowerCase();
+function getStatusFilterValue(row: RawRfq, isRewarded?: boolean): string {
+  return getStatusLabel(row, isRewarded).replace(/\s+/g, "").toLowerCase();
 }
 
 function getCreatedBy(row: RawRfq): string {
@@ -193,6 +268,7 @@ function getAssociatedPr(row: RawRfq): string {
 }
 
 const STATUS_PROGRESS: Record<string, number> = {
+  Rewarded: 100,
   Pending: 50,
   "Changes Needed": 70,
   Approved: 100,
@@ -428,6 +504,8 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
   const navigate = useNavigate();
   const [records, setRecords] = useState<RawRfq[]>([]);
   const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
+  const [selectedSuppliers, setSelectedSuppliers] = useState<Cr49f_selectedsupplierses[]>([]);
+  const [dynamicOrders, setDynamicOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -465,9 +543,11 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
     setLoadError(null);
 
     try {
-      const [rfqRes, tasksRes] = await Promise.allSettled([
+      const [rfqRes, tasksRes, selSupRes, ordersRes] = await Promise.allSettled([
         Cr49f_requestforqoutationsService.getAll(),
         Cr49f_approvaltasksesService.getAll(),
+        Cr49f_selectedsuppliersesService.getAll(),
+        getDynamicPurchaseOrders(),
       ]);
 
       if (rfqRes.status === "fulfilled" && rfqRes.value.success) {
@@ -478,6 +558,14 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
 
       if (tasksRes.status === "fulfilled" && tasksRes.value.success && tasksRes.value.data) {
         setApprovalTasks(tasksRes.value.data);
+      }
+
+      if (selSupRes.status === "fulfilled" && selSupRes.value.success && selSupRes.value.data) {
+        setSelectedSuppliers(selSupRes.value.data);
+      }
+
+      if (ordersRes.status === "fulfilled" && ordersRes.value) {
+        setDynamicOrders(ordersRes.value);
       }
     } catch (error) {
       console.error("Failed to load RFQs from Dataverse:", error);
@@ -499,9 +587,11 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
     const query = search.trim().toLowerCase();
 
     const list = records.filter((row) => {
+      const rewardInfo = getRfqRewardInfo(row, selectedSuppliers, dynamicOrders);
+      const isRewarded = rewardInfo.isRewarded;
       const createdBy = getCreatedBy(row);
       const associatedPr = getAssociatedPr(row);
-      const statusLabel = getStatusLabel(row);
+      const statusLabel = getStatusLabel(row, isRewarded);
 
       const haystack = [
         row.cr49f_rfqnumber,
@@ -511,6 +601,8 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
         statusLabel,
         associatedPr,
         row.cr49f_deliverylocation,
+        rewardInfo.rewardedSupplierName,
+        rewardInfo.associatedPo,
       ]
         .filter(Boolean)
         .join(" ")
@@ -523,7 +615,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       );
       const matchesStatus =
         statusQuery === "All Status" ||
-        getStatusFilterValue(row) === statusQuery.replace(/\s+/g, "").toLowerCase();
+        getStatusFilterValue(row, isRewarded) === statusQuery.replace(/\s+/g, "").toLowerCase();
 
       return matchesSearch && matchesCreatedOn && matchesStatus;
     });
@@ -541,24 +633,40 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       }
       return (b.cr49f_rfqnumber || "").localeCompare(a.cr49f_rfqnumber || "");
     });
-  }, [records, search, createdOnQuery, statusQuery, dateSortOrder]);
+  }, [records, search, createdOnQuery, statusQuery, dateSortOrder, selectedSuppliers, dynamicOrders]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [search, createdOnQuery, statusQuery, dateSortOrder]);
 
-  const counts = useMemo(
-    () => ({
+  const counts = useMemo(() => {
+    const rewardedList = records.filter(
+      (row) => getRfqRewardInfo(row, selectedSuppliers, dynamicOrders).isRewarded
+    );
+    const approvedList = records.filter((row) => {
+      const info = getRfqRewardInfo(row, selectedSuppliers, dynamicOrders);
+      return !info.isRewarded && getStatusLabel(row) === "Approved";
+    });
+    const pendingList = records.filter((row) => {
+      const info = getRfqRewardInfo(row, selectedSuppliers, dynamicOrders);
+      if (info.isRewarded) return false;
+      const label = getStatusLabel(row);
+      return label === "Pending" || label === "Changes Needed";
+    });
+    const rejectedList = records.filter((row) => {
+      const info = getRfqRewardInfo(row, selectedSuppliers, dynamicOrders);
+      if (info.isRewarded) return false;
+      return getStatusLabel(row) === "Rejected";
+    });
+
+    return {
       total: records.length,
-      approved: records.filter((row) => getStatusLabel(row) === "Approved").length,
-      pending: records.filter((row) => {
-        const label = getStatusLabel(row);
-        return label === "Pending" || label === "Changes Needed";
-      }).length,
-      rejected: records.filter((row) => getStatusLabel(row) === "Rejected").length,
-    }),
-    [records]
-  );
+      rewarded: rewardedList.length,
+      approved: approvedList.length,
+      pending: pendingList.length,
+      rejected: rejectedList.length,
+    };
+  }, [records, selectedSuppliers, dynamicOrders]);
 
   const percentOf = (count: number) =>
     counts.total ? Math.round((count / counts.total) * 100) : 0;
@@ -574,12 +682,21 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       filter: "All Status" as const,
     },
     {
+      label: "Rewarded RFQs",
+      value: counts.rewarded,
+      caption: `${percentOf(counts.rewarded)}% of RFQs`,
+      progress: percentOf(counts.rewarded),
+      icon: <Award size={18} />,
+      tone: "green",
+      filter: "Rewarded" as const,
+    },
+    {
       label: "Approved RFQs",
       value: counts.approved,
       caption: `${percentOf(counts.approved)}% of RFQs`,
       progress: percentOf(counts.approved),
       icon: <CircleCheck size={18} />,
-      tone: "green",
+      tone: "blue",
       filter: "Approved" as const,
     },
     {
@@ -617,6 +734,8 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
     const csvRows = [
       [
         "Status",
+        "Reward Status",
+        "Awarded Supplier",
         "RFQ ID",
         "Title",
         "Associated PR",
@@ -627,18 +746,23 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
         "Created By",
         "Created On",
       ],
-      ...visibleRows.map((row) => [
-        getStatusLabel(row),
-        row.cr49f_rfqnumber || row.cr49f_requestforqoutationid,
-        row.cr49f_rfqtitle || "Untitled",
-        getAssociatedPr(row) || "Not linked",
-        "Not linked",
-        formatShortDate(row.cr49f_requestdate),
-        formatShortDate(row.cr49f_submissiondeadline),
-        row.cr49f_deliverylocation || "—",
-        getCreatedBy(row),
-        formatShortDate(row.createdon),
-      ]),
+      ...visibleRows.map((row) => {
+        const rewardInfo = getRfqRewardInfo(row, selectedSuppliers, dynamicOrders);
+        return [
+          getStatusLabel(row, rewardInfo.isRewarded),
+          rewardInfo.isRewarded ? "Rewarded" : "Not Rewarded",
+          rewardInfo.rewardedSupplierName || "—",
+          row.cr49f_rfqnumber || row.cr49f_requestforqoutationid,
+          row.cr49f_rfqtitle || "Untitled",
+          getAssociatedPr(row) || "Not linked",
+          rewardInfo.associatedPo || "Not linked",
+          formatShortDate(row.cr49f_requestdate),
+          formatShortDate(row.cr49f_submissiondeadline),
+          row.cr49f_deliverylocation || "—",
+          getCreatedBy(row),
+          formatShortDate(row.createdon),
+        ];
+      }),
     ];
 
     const csv = csvRows
@@ -967,10 +1091,12 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
           /* Grid View Mode */
           <div className="pr-modern-grid-wrap">
             {paginatedRows.map((row) => {
-              const statusLabel = getStatusLabel(row);
+              const rewardInfo = getRfqRewardInfo(row, selectedSuppliers, dynamicOrders);
+              const isRewarded = rewardInfo.isRewarded;
+              const statusLabel = getStatusLabel(row, isRewarded);
               const isApproved = statusLabel === "Approved";
               const isRejected = statusLabel === "Rejected";
-              const progressPct = STATUS_PROGRESS[statusLabel] ?? (isApproved ? 100 : 50);
+              const progressPct = STATUS_PROGRESS[statusLabel] ?? (isRewarded || isApproved ? 100 : 50);
               const createdBy = getCreatedBy(row);
               const rfqIdentifier = row.cr49f_rfqnumber?.trim() || row.cr49f_requestforqoutationid;
 
@@ -979,12 +1105,22 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                   <div className="pr-grid-card-header">
                     <ProgressCircle
                       percentage={progressPct}
-                      isApproved={isApproved}
+                      isApproved={isApproved || isRewarded}
                       isRejected={isRejected}
                     />
                     <div className="pr-grid-badges">
-                      <span className={`pr-status-badge ${isApproved ? "approved" : isRejected ? "rejected" : "pending"}`}>
-                        {isApproved ? "Approved" : isRejected ? "Rejected" : statusLabel}
+                      <span className={`pr-status-badge ${isRewarded ? "rewarded" : isApproved ? "approved" : isRejected ? "rejected" : "pending"}`}>
+                        {isRewarded ? (
+                          <>
+                            <Award size={11} style={{ marginRight: 3 }} /> Rewarded
+                          </>
+                        ) : isApproved ? (
+                          "Approved"
+                        ) : isRejected ? (
+                          "Rejected"
+                        ) : (
+                          statusLabel
+                        )}
                       </span>
                     </div>
                   </div>
@@ -997,13 +1133,21 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                       {row.cr49f_rfqtitle?.trim() || "Untitled RFQ"}
                     </strong>
                     <span className="pr-grid-card-ref">{rfqIdentifier}</span>
+
+                    {isRewarded && (
+                      <div className="rfq-rewarded-tag" style={{ marginBottom: 6 }}>
+                        <Award size={11} />
+                        <span>Awarded: {rewardInfo.rewardedSupplierName || "Supplier"}</span>
+                      </div>
+                    )}
+
                     <div className="pr-grid-meta-row">
                       <span>Deadline: {row.cr49f_submissiondeadline ? formatShortDate(row.cr49f_submissiondeadline) : "—"}</span>
                       <span>By: {createdBy}</span>
                     </div>
                   </div>
 
-                  <div className="pr-grid-card-footer">
+                  <div className="pr-grid-card-footer" style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
                       className="pr-grid-btn"
@@ -1011,6 +1155,17 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                     >
                       View Details
                     </button>
+                    {rewardInfo.associatedPo && (
+                      <button
+                        type="button"
+                        className="pr-grid-btn"
+                        style={{ background: "#ecfdf5", color: "#047857", borderColor: "#a7f3d0", fontWeight: 600 }}
+                        onClick={() => navigate(`/orders/${rewardInfo.associatedPo}`)}
+                        title={`View Purchase Order ${rewardInfo.associatedPo}`}
+                      >
+                        PO: {rewardInfo.associatedPo}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1035,20 +1190,20 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                     </span>
                   </th>
                   <th style={{ width: "11%" }}>ASSOCIATED PR</th>
-                  <th style={{ width: "9%" }}>ASSOCIATED PO</th>
+                  <th style={{ width: "10%" }}>ASSOCIATED PO</th>
                   <th style={{ width: "12%" }}>
                     SUBMISSION DEADLINE <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "13%" }}>
+                  <th style={{ width: "12%" }}>
                     DELIVERY LOCATION <span className="sort-diamond">◊</span>
                   </th>
                   <th style={{ width: "11%" }}>
                     CREATED BY <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "8%" }}>
+                  <th style={{ width: "11%" }}>
                     STATUS <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "9%" }}>PROGRESS</th>
+                  <th style={{ width: "8%" }}>PROGRESS</th>
                 </tr>
               </thead>
               <tbody>
@@ -1060,11 +1215,13 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                   </tr>
                 ) : loadError ? null : paginatedRows.length ? (
                   paginatedRows.map((row, index) => {
-                    const statusLabel = getStatusLabel(row);
+                    const rewardInfo = getRfqRewardInfo(row, selectedSuppliers, dynamicOrders);
+                    const isRewarded = rewardInfo.isRewarded;
+                    const statusLabel = getStatusLabel(row, isRewarded);
                     const isApproved = statusLabel === "Approved";
                     const isRejected = statusLabel === "Rejected";
                     const isChangesNeeded = statusLabel === "Changes Needed";
-                    const progressPct = STATUS_PROGRESS[statusLabel] ?? (isApproved ? 100 : 50);
+                    const progressPct = STATUS_PROGRESS[statusLabel] ?? (isRewarded || isApproved ? 100 : 50);
                     const createdBy = getCreatedBy(row);
                     const associatedPr = getAssociatedPr(row);
                     const isExpanded = expandedRowId === row.cr49f_requestforqoutationid;
@@ -1119,7 +1276,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                             <div className="pr-details-flex">
                               <ProgressCircle
                                 percentage={progressPct}
-                                isApproved={isApproved}
+                                isApproved={isApproved || isRewarded}
                                 isRejected={isRejected}
                               />
                               <div className="pr-details-text">
@@ -1146,6 +1303,21 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                                     Created {formatShortDate(row.createdon || row.cr49f_requestdate)}
                                   </span>
                                 </div>
+                                {isRewarded && (
+                                  <div
+                                    className="rfq-rewarded-tag"
+                                    title={
+                                      rewardInfo.rewardedSupplierName
+                                        ? `Quotation awarded to ${rewardInfo.rewardedSupplierName}`
+                                        : "Quotation Awarded"
+                                    }
+                                  >
+                                    <Award size={10} />
+                                    <span>
+                                      Awarded{rewardInfo.rewardedSupplierName ? `: ${rewardInfo.rewardedSupplierName}` : ""}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -1172,10 +1344,22 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
 
                           {/* 5. Associated PO */}
                           <td className="pr-cell-rfq">
-                            <span className="pr-rfq-pill empty">
-                              <FileText size={12} />
-                              <span>Not linked</span>
-                            </span>
+                            {rewardInfo.associatedPo ? (
+                              <button
+                                type="button"
+                                className="pr-rfq-pill linked"
+                                onClick={() => navigate(`/orders/${rewardInfo.associatedPo}`)}
+                                title={`View Purchase Order ${rewardInfo.associatedPo}`}
+                              >
+                                <FileText size={12} />
+                                <span>{rewardInfo.associatedPo}</span>
+                              </button>
+                            ) : (
+                              <span className="pr-rfq-pill empty">
+                                <FileText size={12} />
+                                <span>Not linked</span>
+                              </span>
+                            )}
                           </td>
 
                           {/* 6. Submission Deadline */}
@@ -1220,32 +1404,66 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
 
                           {/* 9. Status */}
                           <td className="pr-cell-status">
-                            <span className={`pr-status-badge ${isApproved ? "approved" : isRejected ? "rejected" : isChangesNeeded ? "changes-needed" : "pending"}`}>
-                              {isApproved ? (
-                                <>
-                                  <Check size={11} className="badge-icon" /> Approved
-                                </>
-                              ) : isRejected ? (
-                                <>
-                                  <X size={11} className="badge-icon" /> Rejected
-                                </>
-                              ) : isChangesNeeded ? (
-                                <>
-                                  <AlertCircle size={11} className="badge-icon" /> Changes Needed
-                                </>
-                              ) : (
-                                <>
-                                  <Clock size={11} className="badge-icon" /> {statusLabel}
-                                </>
-                              )}
-                            </span>
+                            {isRewarded ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+                                <span className="pr-status-badge rewarded">
+                                  <Award size={11} className="badge-icon" /> Rewarded
+                                </span>
+                                {rewardInfo.rewardedSupplierName && (
+                                  <span
+                                    style={{
+                                      fontSize: "10.5px",
+                                      color: "#64748b",
+                                      fontWeight: 500,
+                                      maxWidth: 130,
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                    title={rewardInfo.rewardedSupplierName}
+                                  >
+                                    {rewardInfo.rewardedSupplierName}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span
+                                className={`pr-status-badge ${
+                                  isApproved
+                                    ? "approved"
+                                    : isRejected
+                                    ? "rejected"
+                                    : isChangesNeeded
+                                    ? "changes-needed"
+                                    : "pending"
+                                }`}
+                              >
+                                {isApproved ? (
+                                  <>
+                                    <Check size={11} className="badge-icon" /> Approved
+                                  </>
+                                ) : isRejected ? (
+                                  <>
+                                    <X size={11} className="badge-icon" /> Rejected
+                                  </>
+                                ) : isChangesNeeded ? (
+                                  <>
+                                    <AlertCircle size={11} className="badge-icon" /> Changes Needed
+                                  </>
+                                ) : (
+                                  <>
+                                    <Clock size={11} className="badge-icon" /> {statusLabel}
+                                  </>
+                                )}
+                              </span>
+                            )}
                           </td>
 
                           {/* 10. Progress Stepper */}
                           <td className="pr-cell-progress">
                             <MiniProgressStepper
                               status={statusLabel}
-                              isApproved={isApproved}
+                              isApproved={isApproved || isRewarded}
                               progressPercentage={progressPct}
                             />
                           </td>
@@ -1304,6 +1522,76 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                                   </button>
                                 </div>
 
+                                {/* Awarded Highlight Banner */}
+                                {isRewarded && (
+                                  <div
+                                    className="rfq-awarded-drawer-banner"
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "space-between",
+                                      padding: "10px 16px",
+                                      margin: "12px 16px 0",
+                                      borderRadius: 8,
+                                      background:
+                                        "linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.08) 100%)",
+                                      border: "1px solid rgba(16, 185, 129, 0.35)",
+                                    }}
+                                  >
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                      <div
+                                        style={{
+                                          width: 32,
+                                          height: 32,
+                                          borderRadius: 8,
+                                          background: "#10b981",
+                                          color: "#ffffff",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          flexShrink: 0,
+                                        }}
+                                      >
+                                        <Award size={18} />
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: "#047857" }}>
+                                          Quotation Awarded to {rewardInfo.rewardedSupplierName || "Supplier"}
+                                        </div>
+                                        <div style={{ fontSize: 11.5, color: "#065f46" }}>
+                                          {rewardInfo.associatedPo
+                                            ? `Purchase Order ${rewardInfo.associatedPo} created and linked to this RFQ.`
+                                            : "Supplier quotation successfully rewarded."}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {rewardInfo.associatedPo && (
+                                      <button
+                                        type="button"
+                                        className="pr-inline-link"
+                                        onClick={() => navigate(`/orders/${rewardInfo.associatedPo}`)}
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 5,
+                                          fontSize: 12,
+                                          fontWeight: 700,
+                                          color: "#047857",
+                                          background: "#ffffff",
+                                          padding: "6px 12px",
+                                          borderRadius: 6,
+                                          border: "1px solid rgba(16, 185, 129, 0.4)",
+                                          boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <span>Open PO {rewardInfo.associatedPo}</span>
+                                        <ArrowRight size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+
                                 {/* Tab 1: Invited Suppliers in Cards */}
                                 {activeDrawerTab === "suppliers" && (
                                   <div className="rfq-drawer-suppliers-view">
@@ -1356,6 +1644,37 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                                               </button>
                                             ) : (
                                               "Not linked"
+                                            )}
+                                          </strong>
+                                        </div>
+
+                                        <div className="pr-meta-row">
+                                          <span className="label">Associated PO</span>
+                                          <strong className="val">
+                                            {rewardInfo.associatedPo ? (
+                                              <button
+                                                type="button"
+                                                className="pr-inline-link"
+                                                onClick={() => navigate(`/orders/${rewardInfo.associatedPo}`)}
+                                              >
+                                                {rewardInfo.associatedPo}
+                                              </button>
+                                            ) : (
+                                              "Not linked"
+                                            )}
+                                          </strong>
+                                        </div>
+
+                                        <div className="pr-meta-row">
+                                          <span className="label">Award Status</span>
+                                          <strong className="val" style={{ color: isRewarded ? "#047857" : undefined }}>
+                                            {isRewarded ? (
+                                              <>
+                                                <Award size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
+                                                Awarded{rewardInfo.rewardedSupplierName ? ` (${rewardInfo.rewardedSupplierName})` : ""}
+                                              </>
+                                            ) : (
+                                              "Not Awarded"
                                             )}
                                           </strong>
                                         </div>

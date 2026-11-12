@@ -920,3 +920,41 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* =========================================================
+   REWARD STATUS BADGES & TAGS
+========================================================= */
+
+.pr-status-badge.rewarded {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid rgba(16, 185, 129, 0.45) !important;
+  font-weight: 700 !important;
+}
+
+.rfq-rewarded-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+[data-theme="dark"] .pr-status-badge.rewarded {
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+[data-theme="dark"] .rfq-rewarded-tag {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+

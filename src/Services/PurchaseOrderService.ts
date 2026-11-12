@@ -95,9 +95,9 @@ export async function createPurchaseOrderFromQuotation(
         Number(l.lineTotal) ||
         Math.round(
           Math.max(1, Number(l.quantity) || 1) *
-            Math.max(0, Number(l.unitPrice) || 0) *
-            (1 + Math.max(0, Number(l.vatPercent) || 10) / 100) *
-            100
+          Math.max(0, Number(l.unitPrice) || 0) *
+          (1 + Math.max(0, Number(l.vatPercent) || 10) / 100) *
+          100
         ) / 100,
     }));
   } else if (
@@ -387,7 +387,7 @@ export function mapDataversePoToOrderRow(
       try {
         const parsed = JSON.parse(cachedOrder);
         if (parsed.supplier) supplier = parsed.supplier;
-      } catch {}
+      } catch { }
     }
   }
 
@@ -470,8 +470,8 @@ export async function getDynamicPurchaseOrders(): Promise<OrderRow[]> {
         : [];
     const selSups =
       selSupRes.status === "fulfilled" &&
-      selSupRes.value.success &&
-      selSupRes.value.data
+        selSupRes.value.success &&
+        selSupRes.value.data
         ? selSupRes.value.data
         : [];
 
@@ -526,7 +526,7 @@ export async function getDynamicPurchaseOrderDetails(
           return parsed;
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // 2. Query Dataverse
@@ -544,8 +544,8 @@ export async function getDynamicPurchaseOrderDetails(
         : [];
     const allLines =
       linesRes.status === "fulfilled" &&
-      linesRes.value.success &&
-      linesRes.value.data
+        linesRes.value.success &&
+        linesRes.value.data
         ? linesRes.value.data
         : [];
     const rfqs =
@@ -596,20 +596,20 @@ export async function getDynamicPurchaseOrderDetails(
         mappedLines.length > 0
           ? mappedLines
           : [
-              {
-                id: "li-1",
-                itemCode: "PDT-2026-01",
-                itemName:
-                  matchedPo.cr49f_potitle || "Commercial Goods & Services",
-                quantity: 1,
-                unitPrice: baseRow.amount,
-                vatPercent: 10,
-                amount: baseRow.amount,
-                deliveryAddress:
-                  matchedPo.cr49f_deliveryaddress ||
-                  "Corporate Delivery Facility",
-              },
-            ];
+            {
+              id: "li-1",
+              itemCode: "PDT-2026-01",
+              itemName:
+                matchedPo.cr49f_potitle || "Commercial Goods & Services",
+              quantity: 1,
+              unitPrice: baseRow.amount,
+              vatPercent: 10,
+              amount: baseRow.amount,
+              deliveryAddress:
+                matchedPo.cr49f_deliveryaddress ||
+                "Corporate Delivery Facility",
+            },
+          ];
 
       const createdDate = new Date(baseRow.createdOn);
       const formatUsDate = (d: Date) =>
