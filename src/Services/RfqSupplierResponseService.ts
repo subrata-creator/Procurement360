@@ -36,6 +36,7 @@ export interface SupplierRfqInvitation {
   warranty?: string;
   itemCount: number;
   isRewarded?: boolean;
+  isRfqApproved?: boolean;
 }
 
 export interface SupplierResponseLineItem {
@@ -916,7 +917,7 @@ export async function getSupplierInvitations(
     const num = s.cr49f_selectedsuppliernumber?.toLowerCase() || "";
     const selId = cleanGuid(s.cr49f_selectedsuppliersid);
     return (
-      num === supplierId.toLowerCase() ||
+      (supplierId && num === supplierId.toLowerCase()) ||
       (cleanSupId && num === cleanSupId.toLowerCase()) ||
       (cleanSupId && selId === cleanSupId)
     );
@@ -924,11 +925,11 @@ export async function getSupplierInvitations(
 
   const matchingResponses = allResponses.filter((r) => {
     const supLookup = cleanGuid(r._cr49f_supplier_value) || cleanGuid((r as unknown as Record<string, unknown>).cr49f_supplier as string);
-    if (matchingSelectedSupp.some((s) => cleanGuid(s.cr49f_selectedsuppliersid) === supLookup)) return true;
-    if (cleanSupId && supLookup === cleanSupId) return true;
+    if (supLookup && matchingSelectedSupp.some((s) => cleanGuid(s.cr49f_selectedsuppliersid) === supLookup)) return true;
+    if (cleanSupId && supLookup && supLookup === cleanSupId) return true;
     const respId = r.cr49f_responseid || "";
     return (
-      respId.includes(`SUP:${supplierId}`) ||
+      (supplierId && respId.includes(`SUP:${supplierId}`)) ||
       (cleanSupId && respId.includes(`SUP:${cleanSupId}`))
     );
   });
@@ -1036,6 +1037,19 @@ export async function getSupplierInvitations(
       }
     }
 
+    const isRfqApproved = Boolean(
+      Number(rfq.cr49f_status) === 1 ||
+      rfq.cr49f_statusname?.toLowerCase() === "approved" ||
+      rfq.cr49f_statusname?.toLowerCase() === "rewarded" ||
+      isRewarded ||
+      (typeof window !== "undefined" && (
+        localStorage.getItem(`rfq_status_${rfqId}`) === "Approved" ||
+        localStorage.getItem(`rfq_status_${rfqId}`) === "Rewarded" ||
+        (rfq.cr49f_rfqnumber && localStorage.getItem(`rfq_status_${rfq.cr49f_rfqnumber}`) === "Approved") ||
+        (rfq.cr49f_rfqnumber && localStorage.getItem(`rfq_status_${rfq.cr49f_rfqnumber}`) === "Rewarded")
+      ))
+    );
+
     invitations.push({
       rfqId,
       rfqNumber: rfq.cr49f_rfqnumber || `RFQ-${rfqId.slice(0, 6)}`,
@@ -1053,6 +1067,7 @@ export async function getSupplierInvitations(
       warranty: parentResp?.cr49f_warranty,
       itemCount: 0,
       isRewarded,
+      isRfqApproved,
     });
   }
 

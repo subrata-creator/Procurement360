@@ -356,7 +356,19 @@ export default function PurchaseRequestDetail() {
           getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
           !t.cr49f_task?.toLowerCase().includes("changes needed")
       );
-      setApprovalTasks(filtered);
+      // Deduplicate by sequence
+      const uniqueBySeq = new Map<number, Cr49f_approvaltaskses>();
+      for (const t of filtered) {
+        const seq = t.cr49f_sequence ?? 1;
+        if (!uniqueBySeq.has(seq)) {
+          uniqueBySeq.set(seq, t);
+        }
+      }
+      setApprovalTasks(
+        Array.from(uniqueBySeq.values()).sort(
+          (a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0)
+        )
+      );
     } catch (err) {
       console.warn("Failed to load approval tasks:", err);
     } finally {

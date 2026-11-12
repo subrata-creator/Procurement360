@@ -43,6 +43,7 @@ export interface WorkQueueItem {
   isActive: boolean;
   targetUrl: string;
   sequence?: number;
+  parentId?: string;
   createdOnTime?: number;
   rawCreatedDate?: string;
 }
@@ -331,6 +332,7 @@ const TaskInbox: React.FC = () => {
           isActive,
           targetUrl,
           sequence: t.cr49f_sequence,
+          parentId: prId || rfqId || poId || "",
           createdOnTime,
           rawCreatedDate: rawDateStr,
         };
@@ -382,11 +384,27 @@ const TaskInbox: React.FC = () => {
             };
           });
 
-    return source
-      .filter(
-        (task) => task.isActive && (task.status === "Pending" || task.status === "Changes Needed")
-      )
-      .sort((a, b) => (b.createdOnTime || 0) - (a.createdOnTime || 0));
+    const activeOnly = source.filter(
+      (task) => task.isActive && (task.status === "Pending" || task.status === "Changes Needed")
+    );
+
+    // Deduplicate identical tasks for the same parent record
+    const seenKeys = new Set<string>();
+    const deduplicated: WorkQueueItem[] = [];
+
+    for (const item of activeOnly) {
+      const pKey = item.parentId
+        ? `${item.parentId}_${item.sequence ?? 1}_${item.taskName?.trim().toLowerCase()}`
+        : `${item.id}_${item.taskName?.trim().toLowerCase()}`;
+
+      if (seenKeys.has(pKey)) {
+        continue;
+      }
+      seenKeys.add(pKey);
+      deduplicated.push(item);
+    }
+
+    return deduplicated.sort((a, b) => (b.createdOnTime || 0) - (a.createdOnTime || 0));
   }, [dataverseTasks, hasLoaded]);
 
   // Tab counts for active tasks

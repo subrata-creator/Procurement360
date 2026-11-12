@@ -391,6 +391,19 @@ export async function createApprovalTasksForObject(
   const cleanId = cleanGuid(params.recordId);
   if (!cleanId) throw new Error("Invalid record ID");
 
+  // Idempotency check: if approval tasks already exist for this record, do NOT create duplicates!
+  try {
+    const existing = await getApprovalTasksForRecord(params.objectType, cleanId);
+    if (existing.length > 0) {
+      console.log(
+        `[ApprovalWorkflow] Tasks already exist for record ${cleanId} (${existing.length} tasks). Skipping duplicate creation.`
+      );
+      return existing;
+    }
+  } catch (checkErr) {
+    console.warn("[ApprovalWorkflow] Could not check existing tasks:", checkErr);
+  }
+
   console.log(`[ApprovalWorkflow] Starting approval tasks creation for objectType=${params.objectType}, recordId=${cleanId}`);
 
   // Step 1: Query template tasks dynamically from cr49f_tasks in Dataverse
@@ -447,10 +460,18 @@ export async function createApprovalTasksForObject(
         })
         : [];
 
-      // If no tasks matched by cycle lookup, use all active tasks from cr49f_tasks directly
+      // If no tasks matched by cycle lookup, filter tasks matching this objectType's sample template
       if (matchedTasks.length === 0) {
-        matchedTasks = allDbTasks.filter((t) => t.statecode === 0 || t.statecode === undefined);
-        console.log(`[ApprovalWorkflow] Using ${matchedTasks.length} active tasks directly from cr49f_tasks`);
+        const sampleCycle = SAMPLE_APPROVAL_CYCLES.find(
+          (c) => c.objectType === params.objectType
+        );
+        const sampleTaskTitles = (sampleCycle?.tasks || []).map((st) => st.cr49f_task.toLowerCase().trim());
+
+        matchedTasks = allDbTasks.filter((t) => {
+          const tName = (t.cr49f_task || "").toLowerCase().trim();
+          const isActive = t.statecode === 0 || t.statecode === undefined;
+          return isActive && sampleTaskTitles.some((st) => tName.includes(st) || st.includes(tName));
+        });
       }
 
       if (matchedTasks.length > 0) {
@@ -468,7 +489,7 @@ export async function createApprovalTasksForObject(
     console.warn("[ApprovalWorkflow] Could not query tasks dynamically from Dataverse cr49f_tasks:", err);
   }
 
-  // Fallback to sample definition ONLY if Dataverse cr49f_tasks has no records at all
+  // Fallback to sample definition if template tasks are empty
   if (templateTasks.length === 0) {
     console.log(`[ApprovalWorkflow] Using sample approval cycle fallback for objectType=${params.objectType}`);
     const sampleCycle = SAMPLE_APPROVAL_CYCLES.find(
@@ -485,6 +506,21 @@ export async function createApprovalTasksForObject(
       }));
     }
   }
+
+  // Ensure templateTasks is strictly deduplicated by sequence number and capped at standard 3-5 steps
+  const uniqueTemplateTasks = new Map<number, NormalizedTemplateTask>();
+  for (const t of templateTasks) {
+    const seq = t.cr49f_sequencenumber || 1;
+    const existing = uniqueTemplateTasks.get(seq);
+    if (!existing) {
+      uniqueTemplateTasks.set(seq, t);
+    } else if (existing.cr49f_task === "Approval Task" && t.cr49f_task !== "Approval Task") {
+      uniqueTemplateTasks.set(seq, t);
+    }
+  }
+  templateTasks = Array.from(uniqueTemplateTasks.values())
+    .sort((a, b) => a.cr49f_sequencenumber - b.cr49f_sequencenumber)
+    .slice(0, 5);
 
   // Sort ascending by sequence number
   templateTasks.sort((a, b) => a.cr49f_sequencenumber - b.cr49f_sequencenumber);
@@ -1753,7 +1789,7 @@ export async function getApprovalTasksForRecord(
     const res = await Cr49f_approvaltasksesService.getAll();
     const allTasks = res.data ?? [];
 
-    const matched = allTasks.filter((t) => {
+    const rawMatched = allTasks.filter((t) => {
       const { prId: prVal, rfqId: rfqVal, poId: poVal } = extractTaskParentIds(t);
       if (objectType === 1 && prVal === cleanId) return true;
       if (objectType === 2 && rfqVal === cleanId) return true;
@@ -1761,7 +1797,33 @@ export async function getApprovalTasksForRecord(
       return false;
     });
 
-    matched.sort((a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0));
+    // Deduplicate tasks by sequence number so each sequence step appears exactly once
+    const uniqueMap = new Map<string, Cr49f_approvaltaskses>();
+    for (const t of rawMatched) {
+      const seq = t.cr49f_sequence ?? 0;
+      // Changes needed tasks (seq 0) are tracked per task ID
+      const dedupeKey = seq === 0 ? `cn_${cleanGuid(t.cr49f_approvaltasksid)}` : `seq_${seq}`;
+
+      const existing = uniqueMap.get(dedupeKey);
+      if (!existing) {
+        uniqueMap.set(dedupeKey, t);
+      } else {
+        const tStatus = getTaskApprovalStatusLabel(t);
+        const exStatus = getTaskApprovalStatusLabel(existing);
+        const tIsActive = t.statecode === 0;
+        const exIsActive = existing.statecode === 0;
+
+        if (exStatus === "Pending" && tStatus === "Approved") {
+          uniqueMap.set(dedupeKey, t);
+        } else if (!exIsActive && tIsActive && exStatus === tStatus) {
+          uniqueMap.set(dedupeKey, t);
+        }
+      }
+    }
+
+    const matched = Array.from(uniqueMap.values()).sort(
+      (a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0)
+    );
 
     // Apply local storage overlay to ensure immediate status consistency, auto-heal DB, and activate sequence
     if (typeof window !== "undefined") {

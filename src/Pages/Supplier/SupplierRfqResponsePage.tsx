@@ -34,6 +34,7 @@ import {
   type FullSupplierResponse,
   type SupplierResponseLineItem,
 } from "../../Services/RfqSupplierResponseService";
+import { cleanGuid } from "../../Services/ApprovalWorkflowService";
 import { QuotationDocumentModal } from "../../components/QuotationDocumentModal";
 import {
   buildQuotationDocument,
@@ -289,6 +290,22 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
   }, [rfqId, activeSupplier]);
 
   const isSubmitted = response?.status === "Submitted";
+  const isRewarded = response?.status === "Rewarded";
+
+  const isRfqApproved = Boolean(
+    rfq && (
+      Number(rfq.cr49f_status) === 1 ||
+      rfq.cr49f_statusname?.toLowerCase() === "approved" ||
+      rfq.cr49f_statusname?.toLowerCase() === "rewarded" ||
+      isRewarded ||
+      (typeof window !== "undefined" && (
+        localStorage.getItem(`rfq_status_${cleanGuid(rfq.cr49f_requestforqoutationid)}`) === "Approved" ||
+        localStorage.getItem(`rfq_status_${cleanGuid(rfq.cr49f_requestforqoutationid)}`) === "Rewarded" ||
+        (rfq.cr49f_rfqnumber && localStorage.getItem(`rfq_status_${rfq.cr49f_rfqnumber}`) === "Approved") ||
+        (rfq.cr49f_rfqnumber && localStorage.getItem(`rfq_status_${rfq.cr49f_rfqnumber}`) === "Rewarded")
+      ))
+    )
+  );
 
   // Handle line item field edits with immediate recalculation
   const handleLineChange = (
@@ -629,7 +646,7 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {isSubmitted && (
+          {isSubmitted && isRfqApproved && (
             <button
               type="button"
               className="supplier-btn-action primary"
@@ -706,14 +723,33 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button
-                  type="button"
-                  className="supplier-btn-banner-action"
-                  onClick={() => setIsQuotationDocOpen(true)}
-                >
-                  <FileText size={13} />
-                  View Quotation Document
-                </button>
+                {isRfqApproved ? (
+                  <button
+                    type="button"
+                    className="supplier-btn-banner-action"
+                    onClick={() => setIsQuotationDocOpen(true)}
+                  >
+                    <FileText size={13} />
+                    View Quotation Document
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#f1f5f9",
+                      background: "rgba(255, 255, 255, 0.15)",
+                      padding: "5px 10px",
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Clock size={13} />
+                    Document available after RFQ approval
+                  </div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600 }}>
                   <Lock size={13} />
                   Read-Only
@@ -1365,23 +1401,41 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                           </p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="supplier-btn-action primary"
-                        onClick={() => setIsQuotationDocOpen(true)}
-                        style={{
-                          width: "100%",
-                          justifyContent: "center",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 7,
-                          padding: "9px 14px",
-                          fontWeight: 700,
-                        }}
-                      >
-                        <FileText size={14} />
-                        View Quotation Document
-                      </button>
+                      {isRfqApproved ? (
+                        <button
+                          type="button"
+                          className="supplier-btn-action primary"
+                          onClick={() => setIsQuotationDocOpen(true)}
+                          style={{
+                            width: "100%",
+                            justifyContent: "center",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 7,
+                            padding: "9px 14px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          <FileText size={14} />
+                          View Quotation Document
+                        </button>
+                      ) : (
+                        <div
+                          style={{
+                            padding: "8px 12px",
+                            background: "#f8fafc",
+                            borderRadius: 8,
+                            border: "1px dashed #cbd5e1",
+                            textAlign: "center",
+                            fontSize: 12,
+                            color: "#64748b",
+                            fontWeight: 600,
+                          }}
+                        >
+                          <Clock size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: 5 }} />
+                          Quotation document available after RFQ approval
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

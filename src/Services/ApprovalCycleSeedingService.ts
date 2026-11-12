@@ -124,9 +124,15 @@ export async function seedApprovalCyclesToDataverse(
     if (!cycleId) continue;
 
     // Filter existing tasks belonging to this cycle
-    const currentCycleTasks = existingTasks.filter(
-      (t) => cleanGuid(t._cr49f_procurementapprovalcycle_value) === cycleId
-    );
+    const currentCycleTasks = existingTasks.filter((t) => {
+      const raw = t as unknown as Record<string, unknown>;
+      const tCycleId =
+        cleanGuid(t._cr49f_procurementapprovalcycle_value) ||
+        cleanGuid(raw._cr49f_ProcurementApprovalCycle_value as string) ||
+        cleanGuid(raw.cr49f_procurementapprovalcycle as string) ||
+        cleanGuid(raw.cr49f_ProcurementApprovalCycle as string);
+      return tCycleId === cycleId;
+    });
 
     // Create missing tasks (ensures min 3 and max 5 tasks)
     for (let tIdx = 0; tIdx < item.tasks.length; tIdx++) {
@@ -134,12 +140,16 @@ export async function seedApprovalCyclesToDataverse(
       const targetSeq = t.cr49f_sequencenumber;
       const targetTask = t.cr49f_task.toLowerCase().trim();
 
-      const taskExists = currentCycleTasks.some((ct) => {
-        const seqMatch = ct.cr49f_sequencenumber === targetSeq;
-        const nameMatch =
-          ct.cr49f_task && ct.cr49f_task.toLowerCase().trim() === targetTask;
-        return seqMatch || nameMatch;
-      });
+      const taskExists =
+        currentCycleTasks.some((ct) => {
+          const seqMatch = ct.cr49f_sequencenumber === targetSeq;
+          const nameMatch =
+            ct.cr49f_task && ct.cr49f_task.toLowerCase().trim() === targetTask;
+          return seqMatch || nameMatch;
+        }) ||
+        existingTasks.some((et) => {
+          return et.cr49f_task && et.cr49f_task.toLowerCase().trim() === targetTask;
+        });
 
       if (!taskExists) {
         notify(

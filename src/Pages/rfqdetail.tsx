@@ -319,7 +319,19 @@ export default function RfqDetail() {
                     getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
                     !t.cr49f_task?.toLowerCase().includes("changes needed")
                 );
-                setApprovalTasks(filtered);
+                // Deduplicate by sequence
+                const uniqueBySeq = new Map<number, Cr49f_approvaltaskses>();
+                for (const t of filtered) {
+                  const seq = t.cr49f_sequence ?? 1;
+                  if (!uniqueBySeq.has(seq)) {
+                    uniqueBySeq.set(seq, t);
+                  }
+                }
+                setApprovalTasks(
+                  Array.from(uniqueBySeq.values()).sort(
+                    (a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0)
+                  )
+                );
               }
             } catch (taskErr) {
               console.warn("Could not load RFQ approval tasks:", taskErr);
@@ -702,8 +714,93 @@ export default function RfqDetail() {
         }
       >();
 
-      // 1. Dynamic SearchSupplier flow recommendations
-      if (flowInvitedSuppliers.length > 0) {
+      // Build invited suppliers strictly from selected/invited sources
+      // If Dataverse has selected suppliers (or localStorage has creation cache),
+      // that is the EXCLUSIVE authority. Do NOT inject uninvited flow recommendations!
+      if (selectedSuppliers.length > 0) {
+        selectedSuppliers.forEach((sel, idx) => {
+          const name = sel.cr49f_supplierquotation || sel.cr49f_selectedsuppliernumber || `Supplier #${idx + 1}`;
+          const matched = allSuppliers.find(
+            (as) =>
+              as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
+              as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase() ||
+              (sel.cr49f_selectedsuppliernumber && as.cr49f_supplierid1?.toLowerCase() === sel.cr49f_selectedsuppliernumber.toLowerCase())
+          );
+          const cachedMatch: any = cachedInvited.find(
+            (cs: any) =>
+              cs.cr49f_name?.toLowerCase() === name.toLowerCase() ||
+              (sel.cr49f_selectedsuppliernumber && cs.cr49f_supplierid1?.toLowerCase() === sel.cr49f_selectedsuppliernumber.toLowerCase())
+          );
+          const supCode = sel.cr49f_selectedsuppliernumber || matched?.cr49f_supplierid1 || cachedMatch?.cr49f_supplierid1;
+          const supId = matched?.cr49f_supplierid || cachedMatch?.cr49f_supplierid || sel.cr49f_selectedsuppliersid || `sel-${idx + 1}`;
+          const hasResponded =
+            Boolean(sel.cr49f_responded) ||
+            fullSupplierResponses.some(
+              (fsr) =>
+                fsr.status === "Submitted" &&
+                (cleanGuid(fsr.supplierId) === cleanGuid(supId) ||
+                  (supCode &&
+                    fsr.supplierCode?.toLowerCase() === supCode.toLowerCase()) ||
+                  fsr.supplierName?.toLowerCase() === name.toLowerCase())
+            );
+
+          invitedMap.set(name.toLowerCase(), {
+            id: supId,
+            name: matched?.cr49f_name || cachedMatch?.cr49f_name || name,
+            email: matched?.cr49f_email || cachedMatch?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@vendor.com`,
+            phone: matched?.cr49f_phonenumber || cachedMatch?.cr49f_phonenumber || "+91 98 7654 3210",
+            address: [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || [cachedMatch?.cr49f_city, cachedMatch?.cr49f_country].filter(Boolean).join(", ") || "Vendor Facility",
+            category: matched?.cr49f_suppliercategory || cachedMatch?.cr49f_suppliercategory || "Vendor",
+            code: supCode,
+            verified: true,
+            ranking: idx + 1,
+            rewarded:
+              Boolean(sel.cr49f_selectedsuppliers) ||
+              Boolean((sel as any).cr49f_selectedsupplier) ||
+              Boolean((sel as any).IsRewarded) ||
+              Boolean((sel as any).isrewarded) ||
+              Boolean((sel as any).cr49f_isrewarded) ||
+              Boolean((sel as any).cr49f_IsRewarded) ||
+              isSupplierRewardedCheck(supId, matched?.cr49f_name || name, idx + 1),
+            hasResponse: hasResponded,
+            reason: cachedMatch?.flowReason || (matched as any)?.flowReason,
+          });
+        });
+      } else if (cachedInvited.length > 0) {
+        cachedInvited.forEach((sup: any, idx) => {
+          const name = sup.cr49f_name || "Supplier";
+          const matched = allSuppliers.find(
+            (as) =>
+              as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
+              as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
+          );
+          const supCode = sup.cr49f_supplierid1 || matched?.cr49f_supplierid1;
+          const supId = matched?.cr49f_supplierid || sup.cr49f_supplierid || `inv-${idx + 1}`;
+          const hasResp =
+            fullSupplierResponses.some(
+              (fsr) =>
+                fsr.status === "Submitted" &&
+                (cleanGuid(fsr.supplierId) === cleanGuid(supId) ||
+                  (supCode && fsr.supplierCode?.toLowerCase() === supCode.toLowerCase()) ||
+                  fsr.supplierName?.toLowerCase() === name.toLowerCase())
+            ) || idx === 0;
+
+          invitedMap.set(name.toLowerCase(), {
+            id: supId,
+            name,
+            email: sup.cr49f_email || matched?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@partner.com`,
+            phone: sup.cr49f_phonenumber || matched?.cr49f_phonenumber || "+91 80 6788 1000",
+            address: [sup.cr49f_city, sup.cr49f_country].filter(Boolean).join(", ") || [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || "Registered Vendor Location",
+            category: (sup as unknown as { cr49f_suppliercategory?: string }).cr49f_suppliercategory || matched?.cr49f_suppliercategory || "Vendor",
+            code: supCode,
+            verified: true,
+            ranking: sup.flowRank ?? (idx + 1),
+            rewarded: isSupplierRewardedCheck(supId, name, sup.flowRank ?? (idx + 1)),
+            hasResponse: hasResp,
+            reason: sup.flowReason,
+          });
+        });
+      } else if (flowInvitedSuppliers.length > 0) {
         flowInvitedSuppliers.forEach((s) => {
           const hasResp =
             Boolean(s.hasResponse) ||
@@ -732,86 +829,6 @@ export default function RfqDetail() {
           });
         });
       }
-
-      // 2. From cached creation
-      cachedInvited.forEach((sup: any, idx) => {
-        const name = sup.cr49f_name || "Supplier";
-        const matched = allSuppliers.find(
-          (as) =>
-            as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
-            as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
-        );
-        const supCode = sup.cr49f_supplierid1 || matched?.cr49f_supplierid1;
-        const supId = matched?.cr49f_supplierid || `inv-${idx + 1}`;
-        const hasResp =
-          fullSupplierResponses.some(
-            (fsr) =>
-              fsr.status === "Submitted" &&
-              (cleanGuid(fsr.supplierId) === cleanGuid(supId) ||
-                (supCode && fsr.supplierCode?.toLowerCase() === supCode.toLowerCase()) ||
-                fsr.supplierName?.toLowerCase() === name.toLowerCase())
-          ) || idx === 0;
-
-        invitedMap.set(name.toLowerCase(), {
-          id: supId,
-          name,
-          email: sup.cr49f_email || matched?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@partner.com`,
-          phone: sup.cr49f_phonenumber || matched?.cr49f_phonenumber || "+91 80 6788 1000",
-          address: [sup.cr49f_city, sup.cr49f_country].filter(Boolean).join(", ") || [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || "Registered Vendor Location",
-          category: (sup as unknown as { cr49f_suppliercategory?: string }).cr49f_suppliercategory || matched?.cr49f_suppliercategory || "Vendor",
-          code: supCode,
-          verified: true,
-          ranking: sup.flowRank ?? (idx + 1),
-          rewarded: isSupplierRewardedCheck(supId, name, sup.flowRank ?? (idx + 1)),
-          hasResponse: hasResp,
-          reason: sup.flowReason,
-        });
-      });
-
-      // 3. From selected suppliers dataverse
-      selectedSuppliers.forEach((sel, idx) => {
-        const name = sel.cr49f_supplierquotation || sel.cr49f_selectedsuppliernumber || `Supplier #${idx + 1}`;
-        const matched = allSuppliers.find(
-          (as) =>
-            as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
-            as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
-        );
-        const supCode = sel.cr49f_selectedsuppliernumber || matched?.cr49f_supplierid1;
-        const supId = sel.cr49f_selectedsuppliersid || `sel-${idx + 1}`;
-        const hasResponded =
-          Boolean(sel.cr49f_responded) ||
-          fullSupplierResponses.some(
-            (fsr) =>
-              fsr.status === "Submitted" &&
-              (cleanGuid(fsr.supplierId) === cleanGuid(supId) ||
-                (supCode &&
-                  fsr.supplierCode?.toLowerCase() === supCode.toLowerCase()) ||
-                fsr.supplierName?.toLowerCase() === name.toLowerCase())
-          );
-
-        if (!invitedMap.has(name.toLowerCase())) {
-          invitedMap.set(name.toLowerCase(), {
-            id: supId,
-            name: matched?.cr49f_name || name,
-            email: matched?.cr49f_email || `${name.toLowerCase().replace(/[^a-z]/g, "")}@vendor.com`,
-            phone: matched?.cr49f_phonenumber || "+91 98 7654 3210",
-            address: [matched?.cr49f_city, matched?.cr49f_country].filter(Boolean).join(", ") || "Vendor Facility",
-            category: matched?.cr49f_suppliercategory || "Vendor",
-            code: supCode,
-            verified: true,
-            ranking: invitedMap.size + 1,
-            rewarded:
-              Boolean(sel.cr49f_selectedsuppliers) ||
-              Boolean((sel as any).cr49f_selectedsupplier) ||
-              Boolean((sel as any).IsRewarded) ||
-              Boolean((sel as any).isrewarded) ||
-              Boolean((sel as any).cr49f_isrewarded) ||
-              Boolean((sel as any).cr49f_IsRewarded) ||
-              isSupplierRewardedCheck(supId, matched?.cr49f_name || name, invitedMap.size + 1),
-            hasResponse: hasResponded,
-          });
-        }
-      });
 
       // 4. Fallback if none assigned
       if (invitedMap.size === 0) {
@@ -1062,6 +1079,10 @@ export default function RfqDetail() {
 
   // Helper to open formal Quotation Document modal for any supplier
   const handleSupplierCardClick = (supplier: RfqSupplier) => {
+    if (!isApprovedOrRewarded) {
+      alert("Quotation details and vendor evaluation will be accessible once this RFQ is approved by the approval workflow.");
+      return;
+    }
     const supIdClean = cleanGuid(supplier.id);
     const supCodeClean = (supplier.code || "").toLowerCase().trim();
     const supNameClean = (supplier.name || "").toLowerCase().trim();
@@ -1638,7 +1659,7 @@ export default function RfqDetail() {
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     <Building2 size={13} />
                     <span>Invited Suppliers ({rfqData.invitedSuppliers.length})</span>
-                    {flowInvitedSuppliers.length > 0 && (
+                    {flowInvitedSuppliers.length > 0 && selectedSuppliers.length === 0 && (
                       <span className="rfq-flow-badge-tag">
                         <Sparkles size={11} />
                         Dynamic Flow Matched
@@ -1665,9 +1686,17 @@ export default function RfqDetail() {
                         className={`rfq-summary-supplier-card ${
                           isAwarded ? "awarded" : hasResponse ? "responded" : ""
                         }`}
-                        onClick={() => handleSupplierCardClick(supplier)}
-                        style={{ cursor: "pointer" }}
-                        title={`Click to view quotation document and AI recommendation for ${supplier.name}`}
+                        onClick={() => {
+                          if (isApprovedOrRewarded) {
+                            handleSupplierCardClick(supplier);
+                          }
+                        }}
+                        style={{ cursor: isApprovedOrRewarded ? "pointer" : "default" }}
+                        title={
+                          isApprovedOrRewarded
+                            ? `Click to view quotation document and AI recommendation for ${supplier.name}`
+                            : "Quotation details will be available once RFQ approval is completed"
+                        }
                       >
                         <div className="rfq-summary-supplier-card-header">
                           <div className="rfq-summary-supplier-avatar-group">
@@ -1760,36 +1789,60 @@ export default function RfqDetail() {
                         </div>
 
                         <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #cbd5e1" }}>
-                          <button
-                            type="button"
-                            className="supplier-btn-action primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSupplierCardClick(supplier);
-                            }}
-                            style={{
-                              width: "100%",
-                              justifyContent: "center",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              padding: "6px 10px",
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {hasResponse ? (
-                              <>
-                                <FileText size={12} />
-                                View Quotation &amp; Recommendation
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles size={12} />
-                                View Details &amp; Recommendation
-                              </>
-                            )}
-                          </button>
+                          {isApprovedOrRewarded ? (
+                            <button
+                              type="button"
+                              className="supplier-btn-action primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSupplierCardClick(supplier);
+                              }}
+                              style={{
+                                width: "100%",
+                                justifyContent: "center",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                padding: "6px 10px",
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {hasResponse ? (
+                                <>
+                                  <FileText size={12} />
+                                  View Quotation &amp; Recommendation
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles size={12} />
+                                  View Details &amp; Recommendation
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <div
+                              style={{
+                                width: "100%",
+                                textAlign: "center",
+                                padding: "6px 10px",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                color: "#64748b",
+                                background: "#f8fafc",
+                                borderRadius: 6,
+                                border: "1px dashed #cbd5e1",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 5,
+                              }}
+                              title="RFQ must be approved before quotation and recommendation can be viewed"
+                            >
+                              <Clock size={12} />
+                              RFQ Pending Approval
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -2253,15 +2306,32 @@ export default function RfqDetail() {
                         <td>{resp.deliveryDate ? new Date(resp.deliveryDate).toLocaleDateString() : "—"}</td>
                         <td>{resp.warranty || "Standard Terms"}</td>
                         <td style={{ textAlign: "right" }}>
-                          <button
-                            type="button"
-                            className="supplier-btn-action"
-                            onClick={() => setSelectedQuotationForView(resp)}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
-                          >
-                            <FileText size={12} />
-                            View Quotation
-                          </button>
+                          {isApprovedOrRewarded ? (
+                            <button
+                              type="button"
+                              className="supplier-btn-action"
+                              onClick={() => setSelectedQuotationForView(resp)}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+                            >
+                              <FileText size={12} />
+                              View Quotation
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                fontSize: 11.5,
+                                color: "#94a3b8",
+                                fontWeight: 600,
+                              }}
+                              title="RFQ must be approved before quotations can be viewed"
+                            >
+                              <Clock size={12} />
+                              Pending RFQ Approval
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -1278,8 +1278,9 @@ function ModernDataverseTaskDetail({
     : "Medium";
 
   // Stepper milestones from siblingTasks: sequential approval milestones only (sequence >= 1, excluding changes needed tasks)
-  const displaySteps = (siblingTasks.length > 0 ? siblingTasks : [task])
-    .filter((s) => {
+  // Deduplicate by sequence number so each step milestone (Step 1, Step 2, Step 3...) appears exactly once
+  const displaySteps = useMemo(() => {
+    const rawList = (siblingTasks.length > 0 ? siblingTasks : [task]).filter((s) => {
       const sSeq = s.cr49f_sequence ?? 0;
       const sStatus = getTaskApprovalStatusLabel(s);
       const sTitle = String(s.cr49f_task || "").toLowerCase();
@@ -1288,8 +1289,31 @@ function ModernDataverseTaskDetail({
         sStatus !== "Changes Needed" &&
         !sTitle.includes("changes needed")
       );
-    })
-    .sort((a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0));
+    });
+
+    const bySeq = new Map<number, Cr49f_approvaltaskses>();
+    for (const s of rawList) {
+      const seq = s.cr49f_sequence ?? 1;
+      const existing = bySeq.get(seq);
+      if (!existing) {
+        bySeq.set(seq, s);
+      } else {
+        const isCurrentViewed = cleanGuid(s.cr49f_approvaltasksid) === cleanTaskId;
+        const sStatus = getTaskApprovalStatusLabel(s);
+        const existingStatus = getTaskApprovalStatusLabel(existing);
+
+        if (isCurrentViewed) {
+          bySeq.set(seq, s);
+        } else if (existingStatus === "Pending" && (sStatus === "Approved" || s.statecode === 0)) {
+          bySeq.set(seq, s);
+        }
+      }
+    }
+
+    return Array.from(bySeq.values()).sort(
+      (a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0)
+    );
+  }, [siblingTasks, task, cleanTaskId]);
 
   return (
     <section className="task-page-container">
@@ -1501,7 +1525,7 @@ function ModernDataverseTaskDetail({
 
                   <div className="task-step-details">
                     <span className="task-step-title">{stepItem.cr49f_task || `Task #${index + 1}`}</span>
-                    <span className="task-step-meta">{stepRole} Â· {stepDept}</span>
+                    <span className="task-step-meta">{stepRole} · {stepDept}</span>
                     <span
                       className={`task-step-badge ${stepApproved
                           ? "approved"

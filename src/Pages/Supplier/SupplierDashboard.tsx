@@ -622,10 +622,17 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                                 View Award
                               </>
                             ) : inv.status === "Submitted" ? (
-                              <>
-                                <FileText size={13} />
-                                View Quote
-                              </>
+                              inv.isRfqApproved ? (
+                                <>
+                                  <FileText size={13} />
+                                  View Quote
+                                </>
+                              ) : (
+                                <>
+                                  <Clock size={13} />
+                                  Submitted (In Review)
+                                </>
+                              )
                             ) : inv.status === "Draft" ? (
                               <>
                                 <Clock size={13} />

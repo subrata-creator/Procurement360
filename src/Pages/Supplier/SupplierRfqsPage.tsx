@@ -368,10 +368,17 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
                           View Award
                         </>
                       ) : inv.status === "Submitted" ? (
-                        <>
-                          <FileText size={12} />
-                          View Quotation
-                        </>
+                        inv.isRfqApproved ? (
+                          <>
+                            <FileText size={12} />
+                            View Quotation
+                          </>
+                        ) : (
+                          <>
+                            <Clock size={12} />
+                            Submitted (In Review)
+                          </>
+                        )
                       ) : inv.status === "Draft" ? (
                         <>
                           <Clock size={12} />
