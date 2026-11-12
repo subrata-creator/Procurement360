@@ -38,7 +38,7 @@ export interface OrderRow {
   status: OrderStatus;
 }
 
-export const orders: OrderRow[] = [
+export const INITIAL_ORDERS: OrderRow[] = [
   { refNo: "PO-2026-032", rfq: "RFQ-2026-052", pr: "PR-2026-088", supplier: "Logitech", amount: 17171, createdBy: "Ashish Bhatia", createdOn: "2026-04-03", status: "Approved" },
   { refNo: "PO-2026-031", rfq: "No RFQ available", pr: "No PR available", supplier: "Logitech", amount: 187, createdBy: "Ashish Bhatia", createdOn: "2026-03-22", status: "Approved" },
   { refNo: "PO-2026-030", rfq: "No RFQ available", pr: "No PR available", supplier: "Classmate", amount: 209, createdBy: "Ashish Bhatia", createdOn: "2026-03-22", status: "In Review" },
@@ -47,6 +47,71 @@ export const orders: OrderRow[] = [
   { refNo: "PO-2026-027", rfq: "RFQ-2026-042", pr: "PR-2026-083", supplier: "Logitech", amount: 6600, createdBy: "Ashish Bhatia", createdOn: "2026-01-28", status: "Approved" },
   { refNo: "PO-2026-026", rfq: "RFQ-2026-041", pr: "PR-2026-081", supplier: "Dell Inc.", amount: 5500, createdBy: "Ashish Bhatia", createdOn: "2026-01-27", status: "Approved" },
 ];
+
+export function getCustomStoredOrders(): OrderRow[] {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem("procurement_custom_orders") : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function getAllOrders(): OrderRow[] {
+  const custom = getCustomStoredOrders();
+  const customRefs = new Set(custom.map((c) => c.refNo));
+  return [...custom, ...INITIAL_ORDERS.filter((o) => !customRefs.has(o.refNo))];
+}
+
+export const orders: OrderRow[] = getAllOrders();
+
+export function generateNextPoNumber(): string {
+  const all = getAllOrders();
+  const currentYear = new Date().getFullYear();
+  let maxSeq = 32;
+  for (const o of all) {
+    const match = o.refNo.match(/PO-(?:\d{4}-)?(\d+)/i);
+    if (match) {
+      const seq = parseInt(match[1], 10);
+      if (!isNaN(seq) && seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+  const nextSeq = maxSeq + 1;
+  return `PO-${currentYear}-${String(nextSeq).padStart(3, "0")}`;
+}
+
+export function saveCreatedOrder(newOrder: OrderRow, fullRecord?: OrderRecord) {
+  const custom = getCustomStoredOrders();
+  const filtered = custom.filter((o) => o.refNo !== newOrder.refNo);
+  const updated = [newOrder, ...filtered];
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("procurement_custom_orders", JSON.stringify(updated));
+      if (fullRecord) {
+        window.localStorage.setItem("procurement_custom_order_" + newOrder.refNo, JSON.stringify(fullRecord));
+        if (fullRecord.lineItems) {
+          window.localStorage.setItem(
+            "procurement_custom_order_lines_" + newOrder.refNo,
+            JSON.stringify(fullRecord.lineItems)
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not save order to localStorage:", err);
+  }
+
+  const existingIdx = orders.findIndex((o) => o.refNo === newOrder.refNo);
+  if (existingIdx >= 0) {
+    orders[existingIdx] = newOrder;
+  } else {
+    orders.unshift(newOrder);
+  }
+}
 
 export function getInitials(name: string): string {
   return name
@@ -156,6 +221,18 @@ const ITEM_CATALOG: { itemCode: string; itemName: string; unitPrice: number }[] 
 const DELIVERY_ADDRESSES = ["Green View Apart", "Corporate Tower B", "Warehouse 4, Industrial Area", "Head Office Annex"];
 
 function buildLineItems(record: OrderRow, seed: number): OrderLineItem[] {
+  try {
+    if (typeof window !== "undefined") {
+      const customLinesRaw = window.localStorage.getItem("procurement_custom_order_lines_" + record.refNo);
+      if (customLinesRaw) {
+        const parsed = JSON.parse(customLinesRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    }
+  } catch {}
+
   const reference = REFERENCE_LINE_ITEMS[record.refNo];
   if (reference) {
     return reference.map((item, index) => ({
@@ -294,7 +371,21 @@ export interface OrderRecord extends OrderRow {
 }
 
 export function getOrderByRef(ref: string): OrderRecord | undefined {
-  const record = orders.find((row) => row.refNo === ref);
+  try {
+    if (typeof window !== "undefined") {
+      const customRecordRaw = window.localStorage.getItem("procurement_custom_order_" + ref);
+      if (customRecordRaw) {
+        const parsed = JSON.parse(customRecordRaw);
+        if (parsed && parsed.refNo === ref) {
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not read custom order record from storage:", e);
+  }
+
+  const record = orders.find((row) => row.refNo === ref) || getAllOrders().find((row) => row.refNo === ref);
   if (!record) return undefined;
 
   const seed = seedFromRef(record.refNo);

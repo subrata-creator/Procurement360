@@ -84,6 +84,7 @@ import {
   type FullSupplierResponse,
 } from "../Services/RfqSupplierResponseService";
 import { QuotationDocumentModal } from "../components/QuotationDocumentModal";
+import { createPurchaseOrderFromQuotation } from "../Services/PurchaseOrderService";
 
 import "../Styles/RFQSummary.css";
 import "../Styles/SupplierPortal.css";
@@ -177,9 +178,19 @@ export default function RfqDetail() {
     open: boolean;
     rfqId?: string;
     rfqNumber?: string;
+    rfqTitle?: string;
+    associatedPr?: string;
+    deliveryLocation?: string;
     supplierId?: string;
     supplierName?: string;
+    supplierEmail?: string;
+    supplierPhone?: string;
+    supplierAddress?: string;
+    quotation?: FullSupplierResponse | null;
+    totalAmount?: number;
+    itemCount?: number;
   } | null>(null);
+  const [isCreatingPo, setIsCreatingPo] = useState<boolean>(false);
 
   // Dynamic SearchSupplier flow invited suppliers
   const [flowInvitedSuppliers, setFlowInvitedSuppliers] = useState<RfqSupplier[]>([]);
@@ -1339,14 +1350,45 @@ export default function RfqDetail() {
       setTimeout(() => setTaskNotice(null), 5000);
 
       // Close quotation document modal and prompt user for Purchase Order creation
+      const matchedResp = fullSupplierResponses.find((r) => {
+        const rId = cleanGuid(r.supplierId);
+        const sId = cleanGuid(supplier.id);
+        const rCode = (r.supplierCode || "").toLowerCase().trim();
+        const sCode = (supplier.code || "").toLowerCase().trim();
+        const rName = (r.supplierName || "").toLowerCase().trim();
+        const sName = (supplier.name || "").toLowerCase().trim();
+        return (
+          (rId && sId && rId === sId) ||
+          (rCode && sCode && rCode === sCode) ||
+          (rName && sName && (rName.includes(sName) || sName.includes(rName)))
+        );
+      });
+
+      const effectiveResp = matchedResp || selectedQuotationForView;
+      const profile = allSuppliers.find(
+        (s) =>
+          cleanGuid(s.cr49f_supplierid) === cleanGuid(supplier.id) ||
+          (s.cr49f_supplierid1 && supplier.code && s.cr49f_supplierid1.toLowerCase() === supplier.code.toLowerCase()) ||
+          (s.cr49f_name && s.cr49f_name.toLowerCase() === supplier.name.toLowerCase())
+      );
+
       setSelectedQuotationForView(null);
       setSelectedSupplierForModal(null);
       setProceedPoModal({
         open: true,
         rfqId: rfqId,
         rfqNumber: rfqNum || rfqData.refNo,
+        rfqTitle: liveRfq.cr49f_rfqtitle || rfqData.title,
+        associatedPr: rfqData.associatedPr ?? undefined,
+        deliveryLocation: liveRfq.cr49f_deliverylocation || rfqData.deliveryLocation,
         supplierId: supplier.id,
         supplierName: supplier.name,
+        supplierEmail: profile?.cr49f_email || supplier.email,
+        supplierPhone: profile?.cr49f_phonenumber || supplier.phone,
+        supplierAddress: profile?.cr49f_address || supplier.address,
+        quotation: effectiveResp,
+        totalAmount: effectiveResp?.totalAmount,
+        itemCount: effectiveResp?.lines?.length || rfqData.lineItems.length,
       });
     } catch (err) {
       console.error("Failed to reward supplier:", err);
@@ -2894,14 +2936,47 @@ export default function RfqDetail() {
                 Do you want to proceed for Purchase order creation?
               </h4>
               <p className="rfq-po-prompt-desc">
-                You can generate a formal Purchase Order now based on this awarded RFQ and the approved commercial quote, or return to review the RFQ summary.
+                On confirmation, an official Purchase Order and itemized Order Line Items will be created automatically in Dataverse as per this supplier's approved quotation.
               </p>
+
+              <div
+                style={{
+                  background: "var(--background-hex, #f8fafc)",
+                  border: "1px solid var(--border-hex, #e2e8f0)",
+                  borderRadius: "10px",
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  fontSize: "12.5px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted-foreground-hex, #64748b)" }}>
+                  <span>Awarded Supplier:</span>
+                  <strong style={{ color: "var(--foreground-hex, #0f172a)" }}>{proceedPoModal.supplierName}</strong>
+                </div>
+                {typeof proceedPoModal.totalAmount === "number" && proceedPoModal.totalAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted-foreground-hex, #64748b)" }}>
+                    <span>Quoted Order Value:</span>
+                    <strong style={{ color: "#059669" }}>
+                      ₹{proceedPoModal.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted-foreground-hex, #64748b)" }}>
+                  <span>Order Line Scope:</span>
+                  <span style={{ color: "var(--foreground-hex, #0f172a)", fontWeight: 600 }}>
+                    {proceedPoModal.itemCount ?? proceedPoModal.quotation?.lines?.length ?? rfqData.lineItems.length} Quoted Line Items
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div className="rfq-po-prompt-footer">
               <button
                 type="button"
                 className="rfq-po-prompt-btn-secondary"
+                disabled={isCreatingPo}
                 onClick={() => setProceedPoModal(null)}
               >
                 Cancel
@@ -2909,20 +2984,76 @@ export default function RfqDetail() {
               <button
                 type="button"
                 className="rfq-po-prompt-btn-primary"
-                onClick={() => {
-                  const stateToPass = {
-                    rfqNumber: proceedPoModal.rfqNumber,
-                    rfqId: proceedPoModal.rfqId,
-                    supplierName: proceedPoModal.supplierName,
-                    supplierId: proceedPoModal.supplierId,
-                    fromAward: true,
-                  };
-                  setProceedPoModal(null);
-                  navigate("/orders", { state: stateToPass });
+                disabled={isCreatingPo}
+                onClick={async () => {
+                  if (!proceedPoModal) return;
+                  try {
+                    setIsCreatingPo(true);
+                    const res = await createPurchaseOrderFromQuotation({
+                      rfqId: proceedPoModal.rfqId,
+                      rfqNumber: proceedPoModal.rfqNumber || rfqData.refNo,
+                      rfqTitle: proceedPoModal.rfqTitle || rfqData.title,
+                      associatedPr: proceedPoModal.associatedPr || rfqData.associatedPr || "PR-2026-081",
+                      deliveryLocation: proceedPoModal.deliveryLocation || rfqData.deliveryLocation,
+                      supplierId: proceedPoModal.supplierId,
+                      supplierName: proceedPoModal.supplierName || "Awarded Supplier",
+                      supplierEmail: proceedPoModal.supplierEmail,
+                      supplierPhone: proceedPoModal.supplierPhone,
+                      supplierAddress: proceedPoModal.supplierAddress,
+                      quotation: proceedPoModal.quotation,
+                      quotationLines:
+                        proceedPoModal.quotation?.lines?.map((l) => ({
+                          itemName: l.itemName,
+                          description: l.description || l.comments,
+                          quantity: Number(l.offeredQuantity) || Number(l.requestedQuantity) || 1,
+                          unitPrice: Number(l.unitPrice) || 0,
+                          vatPercent: Number(l.tax) || 10,
+                          lineTotal: Number(l.totalPrice) || 0,
+                        })) ||
+                        rfqData.lineItems.map((li) => ({
+                          itemName: li.itemName,
+                          description: li.itemCode || "",
+                          quantity: li.quantity,
+                          unitPrice: li.unitPrice,
+                          vatPercent: 10,
+                          lineTotal: li.totalAmount || li.quantity * li.unitPrice * 1.1,
+                        })),
+                    });
+
+                    setTaskNotice(
+                      `Purchase Order ${res.poNumber} created successfully with ${res.lineItemCount} line items!`
+                    );
+                    setProceedPoModal(null);
+                    // Navigate to the newly created Purchase Order detail page
+                    navigate(`/orders/${res.poNumber}`, {
+                      state: {
+                        rfqNumber: proceedPoModal.rfqNumber,
+                        rfqId: proceedPoModal.rfqId,
+                        supplierName: proceedPoModal.supplierName,
+                        poNumber: res.poNumber,
+                        newlyCreated: true,
+                        fromAward: true,
+                      },
+                    });
+                  } catch (createErr) {
+                    console.error("Failed to create Purchase Order:", createErr);
+                    alert("Failed to create Purchase Order. Please try again.");
+                  } finally {
+                    setIsCreatingPo(false);
+                  }
                 }}
               >
-                <ShoppingCart size={15} />
-                <span>Proceed to Purchase Order</span>
+                {isCreatingPo ? (
+                  <>
+                    <Loader2 size={15} className="quotation-spin-icon" />
+                    <span>Creating Purchase Order &amp; Lines...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart size={15} />
+                    <span>Confirm &amp; Create Purchase Order</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

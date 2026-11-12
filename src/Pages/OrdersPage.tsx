@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FC, ReactNode } from "react";
 import {
   Building2,
@@ -27,7 +27,7 @@ import { getInitials } from "../data/Purchaserequestsdata";
 // page (orderdetail.tsx) reads from, so the list and the detail page
 // share one source of truth instead of two separate arrays going stale
 // against each other.
-import { orders, type OrderRow, type OrderStatus } from "../data/OrdersData";
+import { getAllOrders, orders, type OrderRow, type OrderStatus } from "../data/OrdersData";
 
 import "../Styles/Styles.css";
 import "../Styles/OrdersPage.css";
@@ -90,18 +90,32 @@ const OrdersPage: FC = () => {
     rfqId?: string;
     supplierName?: string;
     supplierId?: string;
+    poNumber?: string;
+    newlyCreated?: boolean;
     fromAward?: boolean;
   } | null;
   const [awardedRfqBanner, setAwardedRfqBanner] = useState<typeof navState>(
-    navState?.fromAward ? navState : null
+    navState?.fromAward || navState?.newlyCreated ? navState : null
   );
+  const [orderList, setOrderList] = useState<OrderRow[]>(() => getAllOrders());
+
+  useEffect(() => {
+    setOrderList(getAllOrders());
+    if (navState?.fromAward || navState?.newlyCreated) {
+      setAwardedRfqBanner(navState);
+    }
+  }, [location, navState]);
+
   const [search, setSearch] = useState("");
   const [supplierQuery, setSupplierQuery] = useState("All Suppliers");
   const [createdOnQuery, setCreatedOnQuery] = useState("");
   const [statusQuery, setStatusQuery] = useState("All Status");
   const [askAiQuery, setAskAiQuery] = useState("");
 
-  const suppliers = useMemo(() => Array.from(new Set(orders.map((row) => row.supplier))).sort(), []);
+  const suppliers = useMemo(
+    () => Array.from(new Set(orderList.map((row) => row.supplier))).sort(),
+    [orderList]
+  );
 
   const runAskAiQuery = () => {
     const query = askAiQuery.trim();
@@ -120,8 +134,17 @@ const OrdersPage: FC = () => {
 
   const visibleOrders = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return orders.filter((row) => {
-      const haystack = [row.refNo, row.rfq, row.pr, row.supplier, row.createdBy, row.createdOn, formatUsDate(row.createdOn), row.status]
+    return orderList.filter((row) => {
+      const haystack = [
+        row.refNo,
+        row.rfq,
+        row.pr,
+        row.supplier,
+        row.createdBy,
+        row.createdOn,
+        formatUsDate(row.createdOn),
+        row.status,
+      ]
         .join(" ")
         .toLowerCase();
       return (
@@ -131,7 +154,7 @@ const OrdersPage: FC = () => {
         (statusQuery === "All Status" || row.status === statusQuery)
       );
     });
-  }, [search, supplierQuery, createdOnQuery, statusQuery]);
+  }, [orderList, search, supplierQuery, createdOnQuery, statusQuery]);
 
   /* ---------- KPI cards (summary figures) ---------- */
   const metrics: { label: string; value: string; caption: string; progress?: number; icon: ReactNode; tone: string }[] = [
@@ -318,7 +341,7 @@ const OrdersPage: FC = () => {
             <span className="orders-title-icon" aria-hidden="true"><ShoppingCart size={14} /></span>
             <div className="purchase-title-copy">
               <strong>Purchase Orders</strong>
-              <span>{visibleOrders.length} of {orders.length} orders</span>
+              <span>{visibleOrders.length} of {orderList.length} orders</span>
             </div>
           </div>
           <div className="purchase-actions">
@@ -361,30 +384,52 @@ const OrdersPage: FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground-hex, #0f172a)" }}>
-                  Create Purchase Order for Awarded RFQ: {awardedRfqBanner.rfqNumber}
+                  {awardedRfqBanner.poNumber
+                    ? `Purchase Order ${awardedRfqBanner.poNumber} Created Successfully`
+                    : `Purchase Order for Awarded RFQ: ${awardedRfqBanner.rfqNumber}`}
                 </div>
                 <div style={{ fontSize: "12.5px", color: "var(--muted-foreground-hex, #64748b)" }}>
-                  Awarded Supplier: <strong>{awardedRfqBanner.supplierName}</strong>. Ready to initiate PO procurement record.
+                  Awarded Supplier: <strong>{awardedRfqBanner.supplierName}</strong>. Linked to {awardedRfqBanner.rfqNumber} with itemized quotation lines.
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setAwardedRfqBanner(null)}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--muted-foreground-hex, #94a3b8)",
-                padding: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              aria-label="Dismiss banner"
-            >
-              <X size={16} />
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {awardedRfqBanner.poNumber && (
+                <button
+                  type="button"
+                  style={{
+                    background: "#2563eb",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "6px 12px",
+                    fontSize: "12.5px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => navigate(`/orders/${awardedRfqBanner.poNumber}`)}
+                >
+                  View Order
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAwardedRfqBanner(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--muted-foreground-hex, #94a3b8)",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                aria-label="Dismiss banner"
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
         )}
 
