@@ -115,6 +115,16 @@
           "entitySetName": "cr49f_rfqsupplierresponses",
           "logicalName": "cr49f_rfqsupplierresponse",
           "isHidden": false
+        },
+        "purchaseorders": {
+          "entitySetName": "cr49f_purchaseorders",
+          "logicalName": "cr49f_purchaseorder",
+          "isHidden": false
+        },
+        "purchaseorderlineitems": {
+          "entitySetName": "cr49f_purchaseorderlineitems",
+          "logicalName": "cr49f_purchaseorderlineitem",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

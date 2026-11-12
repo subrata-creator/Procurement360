@@ -33,6 +33,20 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cr49f_purchaseorderlineitems": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_purchaseorderlineitemid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr49f_purchaseorders": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_purchaseorderid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr49f_purchaserequestlines": {
     "tableId": "",
     "version": "",
