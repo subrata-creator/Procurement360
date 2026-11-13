@@ -43,15 +43,15 @@
 .prj-title-text h2 {
   margin: 0;
   color: var(--foreground-hex);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1.25;
 }
 
 .prj-title-text p {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   color: var(--muted-foreground-hex);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .prj-controls {
@@ -106,13 +106,13 @@
 }
 
 .prj-select {
-  height: 30px;
+  height: 32px;
   padding: 0 10px 0 28px;
   border: 1px solid var(--border-hex);
   border-radius: 7px;
   background: var(--background-hex);
   color: var(--foreground-hex);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   outline: none;
@@ -150,11 +150,11 @@
 
 .prj-step-num {
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border-radius: 50%;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: #ffffff;
 }
@@ -168,7 +168,7 @@
 
 .prj-step-label {
   color: var(--foreground-hex);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -255,7 +255,8 @@
 
 .prj-card-note {
   color: var(--muted-foreground-hex);
-  font-size: 10.5px;
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -352,13 +353,13 @@
 
 .prj-vert-title {
   color: var(--foreground-hex);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .prj-vert-desc {
   color: var(--muted-foreground-hex);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .prj-vert-right {
@@ -420,8 +421,8 @@
 .prj-ai-text {
   margin: 0;
   color: var(--card-foreground-hex);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .prj-ai-text b {
@@ -437,7 +438,7 @@
   border: 0;
   background: transparent;
   color: var(--warning-hex);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;

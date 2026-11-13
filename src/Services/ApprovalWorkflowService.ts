@@ -22,6 +22,45 @@ export const cleanGuid = (id?: string | null): string => {
   return match ? match[0] : str.replace(/[{}]/g, "");
 };
 
+/**
+ * Resolves a Dataverse record's creator display name from the `createdby` lookup
+ * annotations (`_createdby_value@OData.Community.Display.V1.FormattedValue`) and
+ * `createdbyname` / `owneridname` properties.
+ */
+export function resolveRecordCreatedBy(record: unknown, fallback = "Unknown"): string {
+  if (!record || typeof record !== "object") return fallback;
+  const r = record as Record<string, unknown>;
+  const nestedCreatedBy =
+    r.createdby && typeof r.createdby === "object"
+      ? (r.createdby as Record<string, unknown>)
+      : null;
+  const nestedOwner =
+    r.ownerid && typeof r.ownerid === "object"
+      ? (r.ownerid as Record<string, unknown>)
+      : null;
+
+  const candidates = [
+    r["_createdby_value@OData.Community.Display.V1.FormattedValue"],
+    r.createdbyname,
+    nestedCreatedBy?.fullname,
+    nestedCreatedBy?.name,
+    r["_createdonbehalfby_value@OData.Community.Display.V1.FormattedValue"],
+    r.createdonbehalfbyname,
+    r["_ownerid_value@OData.Community.Display.V1.FormattedValue"],
+    r.owneridname,
+    nestedOwner?.fullname,
+    nestedOwner?.name,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return fallback;
+}
+
 export function extractTaskParentIds(task: Cr49f_approvaltaskses | Record<string, unknown>): {
   prId: string;
   rfqId: string;

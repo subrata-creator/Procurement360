@@ -4,7 +4,6 @@ import {
   Building2,
   Calendar,
   Check,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -49,6 +48,7 @@ import type {
 } from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
 
+import SuccessCelebrationIcon from "./SuccessCelebrationIcon";
 import "../Styles/CreateRFQModal.css";
 
 export interface CreateRFQModalProps {
@@ -717,8 +717,6 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     rfqNumber?: string;
     title: string;
     deliveryLocation?: string;
-    invitedCount: number;
-    invitedNames: string[];
   } | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1280,17 +1278,11 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
         console.warn("Could not create approval tasks for RFQ:", taskErr);
       }
 
-      const invitedNames = chosenSuppliers
-        .map((s) => s.cr49f_name)
-        .filter(Boolean) as string[];
-
       setCreatedRfqInfo({
         id: createdRfqId,
         rfqNumber: created.cr49f_rfqnumber || undefined,
         title: formData.rfqTitle,
         deliveryLocation: resolvedDeliveryLocation,
-        invitedCount: chosenSuppliers.length,
-        invitedNames,
       });
 
       // Track newly linked PR so it immediately disappears from available PRs
@@ -1360,20 +1352,8 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
               <X size={18} />
             </button>
 
-            <div className="rfq-success-icon-wrap">
-              <CheckCircle2 size={40} className="rfq-success-icon" />
-            </div>
+            <SuccessCelebrationIcon />
             <h2 className="rfq-success-title">RFQ Created Successfully!</h2>
-            <p className="rfq-success-desc">
-              Your Request for Quotation{" "}
-              <strong>{createdRfqInfo?.rfqNumber || createdRfqInfo?.title}</strong> has been
-              created in Dataverse with status{" "}
-              <span className="rfq-status-badge">
-                <span className="rfq-status-dot" />
-                Pending
-              </span>
-              .
-            </p>
 
             <div className="rfq-success-details-card">
               <div className="rfq-success-row">
@@ -1410,63 +1390,6 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                     formData.deliveryLocation ||
                     "From Selected Purchase Request"}
                 </span>
-              </div>
-
-              <div className="rfq-success-divider" />
-
-              <div className="rfq-success-row">
-                <span className="rfq-success-label">
-                  <Calendar size={14} className="rfq-success-row-icon" />
-                  Submission Deadline
-                </span>
-                <span className="rfq-success-value">
-                  {formData.submissionDeadline
-                    ? new Date(formData.submissionDeadline).toLocaleString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "Not specified"}
-                </span>
-              </div>
-
-              <div className="rfq-success-divider" />
-
-              <div className="rfq-success-row rfq-success-suppliers-row">
-                <span className="rfq-success-label">
-                  <Users size={14} className="rfq-success-row-icon" />
-                  Invited Suppliers
-                </span>
-                <div className="rfq-success-suppliers-val">
-                  {createdRfqInfo?.invitedCount ? (
-                    <div className="rfq-invited-chips-wrap">
-                      <span className="rfq-suppliers-count-badge">
-                        {createdRfqInfo.invitedCount}{" "}
-                        {createdRfqInfo.invitedCount === 1 ? "supplier" : "suppliers"}
-                      </span>
-                      <div className="rfq-invited-chips">
-                        {createdRfqInfo.invitedNames.slice(0, 3).map((name, idx) => (
-                          <span key={idx} className="rfq-supplier-chip" title={name}>
-                            <Building2 size={11} className="rfq-chip-icon" />
-                            <span className="rfq-chip-text">{name}</span>
-                          </span>
-                        ))}
-                        {createdRfqInfo.invitedNames.length > 3 && (
-                          <span
-                            className="rfq-supplier-chip rfq-chip-more"
-                            title={createdRfqInfo.invitedNames.slice(3).join(", ")}
-                          >
-                            +{createdRfqInfo.invitedNames.length - 3} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="rfq-success-value text-muted">None selected</span>
-                  )}
-                </div>
               </div>
             </div>
 

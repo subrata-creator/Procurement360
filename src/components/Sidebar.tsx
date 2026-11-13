@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 
 export const adminNavigationItems = [
-  { label: "Dashboard", icon: Home },
   { label: "Users", icon: Users },
   { label: "Approval Cycle", icon: Workflow },
   { label: "Products / Services", icon: PackageSearch },
@@ -25,6 +24,7 @@ export const userNavigationItems = [
   { label: "Purchase Requests", icon: ShoppingCart },
   { label: "RFQs", icon: ClipboardList },
   { label: "Orders", icon: ShoppingBag },
+  { label: "Suppliers", icon: Truck },
   { label: "Invoices", icon: ReceiptText },
   { label: "Contracts", icon: FileSignature },
 ];

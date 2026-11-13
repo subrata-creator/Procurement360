@@ -67,7 +67,11 @@ const getInitials = (name?: string) => {
     .toUpperCase();
 };
 
-const SupplierSummary: React.FC = () => {
+interface SupplierSummaryProps {
+  readOnly?: boolean;
+}
+
+const SupplierSummary: React.FC<SupplierSummaryProps> = ({ readOnly = false }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -322,15 +326,17 @@ const SupplierSummary: React.FC = () => {
             <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
           </button>
 
-          <button
-            type="button"
-            className="supplier-btn-hdr primary"
-            onClick={() => setIsEditModalOpen(true)}
-            title="Edit Supplier Information"
-          >
-            <Pencil size={13} />
-            <span>Edit Supplier</span>
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              className="supplier-btn-hdr primary"
+              onClick={() => setIsEditModalOpen(true)}
+              title="Edit Supplier Information"
+            >
+              <Pencil size={13} />
+              <span>Edit Supplier</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -836,7 +842,7 @@ const SupplierSummary: React.FC = () => {
       )}
 
       {/* EDIT SUPPLIER MODAL */}
-      {isEditModalOpen && (
+      {!readOnly && isEditModalOpen && (
         <SupplierModal
           isOpen={isEditModalOpen}
           supplier={supplier}

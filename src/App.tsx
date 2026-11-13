@@ -23,6 +23,7 @@ import RfqDetail from "./Pages/rfqdetail";
 import UsersPage from "./Pages/Admin/UsersPage";
 import ApprovalCycleConfigPage from "./Pages/Admin/ApprovalCycleConfigPage";
 import SuppliersPage from "./Pages/SuppliersPage";
+import UserSuppliersPage from "./Pages/UserSuppliersPage";
 import ProductsPage from "./Pages/ProductsPage";
 import SupplierSummary from "./Pages/SupplierSummary";
 import SupplierDashboard from "./Pages/Supplier/SupplierDashboard";
@@ -32,7 +33,7 @@ import SupplierRfqResponsePage from "./Pages/Supplier/SupplierRfqResponsePage";
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
 import ProcurementCopilot from "./components/ProcurementCopilot";
-import { Bot } from "lucide-react";
+import FloatingCopilotButton from "./components/FloatingCopilotButton";
 import "./Styles/Styles.css";
 
 interface LoggedInUser {
@@ -96,6 +97,9 @@ const AppContent: React.FC = () => {
   const isOrdersRoute = location.pathname.startsWith("/orders");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
 
+  const isRoleLoading = loggedInUser.userRole === "Loading...";
+  const isAdmin =
+    loggedInUser.userRole?.trim().toLowerCase() === "admin";
   const isSupplier =
     loggedInUser.userRole?.trim().toLowerCase() === "supplier";
 
@@ -123,7 +127,8 @@ const AppContent: React.FC = () => {
           ? "Orders"
           : undefined;
 
-  const activeNavigation = routeNavigation ?? fallbackNavigation;
+  const activeNavigation =
+    routeNavigation ?? (isAdmin ? "Users" : fallbackNavigation);
 
   // Load the actual signed-in user's profile.
   useEffect(() => {
@@ -248,15 +253,24 @@ const AppContent: React.FC = () => {
     }
   }, [themeMode]);
 
-  const isAdmin =
-    loggedInUser.userRole?.trim().toLowerCase() === "admin";
+  // Keep Admin users off the User Dashboard route and land them on Users.
+  useEffect(() => {
+    if (isAdmin && location.pathname === "/") {
+      navigate("/users", { replace: true });
+    }
+  }, [isAdmin, location.pathname, navigate]);
+
+  // Reset scroll position to top when switching routes/tabs.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname]);
 
   // Navigation handler
   const handleNavigation = (item: string) => {
     setFallbackNavigation(item);
 
     if (item === "Dashboard") {
-      navigate(isSupplier ? "/supplier-dashboard" : "/");
+      navigate(isAdmin ? "/users" : isSupplier ? "/supplier-dashboard" : "/");
     } else if (item === "My RFQs") {
       navigate("/supplier-rfqs");
     } else if (item === "My Quotations") {
@@ -279,7 +293,7 @@ const AppContent: React.FC = () => {
     } else if (item === "Orders") {
       navigate("/orders");
     } else {
-      navigate("/");
+      navigate(isAdmin ? "/users" : "/");
     }
   };
 
@@ -367,8 +381,14 @@ const AppContent: React.FC = () => {
             </Routes>
           ) : isSuppliersRoute ? (
             <Routes>
-              <Route path="/suppliers" element={<SuppliersPage />} />
-              <Route path="/suppliers/:id" element={<SupplierSummary />} />
+              <Route
+                path="/suppliers"
+                element={isAdmin ? <SuppliersPage /> : <UserSuppliersPage />}
+              />
+              <Route
+                path="/suppliers/:id"
+                element={<SupplierSummary readOnly={!isAdmin} />}
+              />
             </Routes>
           ) : isProductsRoute ? (
             <Routes>
@@ -410,6 +430,21 @@ const AppContent: React.FC = () => {
                 element={<TaskDetail />}
               />
             </Routes>
+          ) : isRoleLoading && location.pathname === "/" ? (
+            <div
+              style={{
+                display: "grid",
+                placeItems: "center",
+                minHeight: "60vh",
+                color: "var(--muted-foreground-hex, #64748b)",
+                fontSize: 13,
+                fontWeight: 500,
+              }}
+            >
+              Loading workspace...
+            </div>
+          ) : isAdmin ? (
+            <UsersPage />
           ) : isSupplier ? (
             <SupplierDashboard
               userEmail={loggedInUser.userEmail}
@@ -425,23 +460,16 @@ const AppContent: React.FC = () => {
       </div>
 
       {/* =====================================================
-          GLOBAL CHATBOT (Visible on all pages)
+          GLOBAL CHATBOT (Visible on all pages, draggable)
       ===================================================== */}
-      <button
-        type="button"
-        className={`dashboard-chatbot-button global-chatbot-button${isCopilotOpen ? " launcher-hidden" : ""}`}
-        aria-label="Open PR Assistant"
-        aria-expanded={isCopilotOpen}
-        aria-hidden={isCopilotOpen}
-        tabIndex={isCopilotOpen ? -1 : 0}
-        title="Open PR Assistant"
-        onClick={() => {
+      <FloatingCopilotButton
+        isOpen={isCopilotOpen}
+        resetKey={location.pathname}
+        onOpen={() => {
           setHasOpenedCopilot(true);
           setIsCopilotOpen(true);
         }}
-      >
-        <Bot size={24} strokeWidth={1.9} />
-      </button>
+      />
 
       <ProcurementCopilot
         isOpen={isCopilotOpen}

@@ -76,6 +76,7 @@ import {
   getApprovalTasksForRecord,
   updateTaskCommentsInDataverse,
   parseTaskComments,
+  resolveRecordCreatedBy,
   type TaskComment,
 } from "../Services/ApprovalWorkflowService";
 import "../Styles/TaskDetail.css";
@@ -1250,9 +1251,9 @@ function ModernDataverseTaskDetail({
       : task.cr49f_task || "Approval Task";
 
   const requesterName = isRfq
-    ? parentRFQ?.createdbyname || "Neha Sharma"
+    ? resolveRecordCreatedBy(parentRFQ, "Neha Sharma")
     : isPr
-      ? parentPR?.createdbyname || "Sakshi Paliwal"
+      ? resolveRecordCreatedBy(parentPR, "Sakshi Paliwal")
       : "Business User";
 
   const deptLabel = task.cr49f_department
