@@ -6,7 +6,7 @@ export interface ApprovalStep {
   date?: string;
   by?: string;
   department?: string;
-  status: "Completed" | "Current" | "Pending" | "Rejected" | "Skipped";
+  status: "Completed" | "Current" | "Pending" | "Rejected" | "Skipped" | "In Progress";
 }
 
 export interface SubTask {
@@ -230,18 +230,18 @@ export function buildApprovalSteps(record: PurchaseRequestRecord): ApprovalStep[
       const step = index + 1;
       if (step === 1) return { step, title, date: record.date, by: record.createdBy, status: "Completed" };
       if (step <= 3) return { step, title, status: "Completed" };
-      if (step === 4) return { step, title, status: hasRFQ ? "Completed" : "Pending" };
-      if (step === 5) return { step, title, status: hasPO ? "Completed" : "Pending" };
+      if (step === 4) return { step, title, status: hasRFQ ? "Current" : "Pending" };
+      if (step === 5) return { step, title, status: hasPO ? "Current" : "Pending" };
       return { step, title, status: "Pending" };
     });
   }
 
   // Default for "In Review", "Pending", or any pending PR:
-  // Step 1: Created (Completed), Step 2: Under Review (Current), remaining steps: Pending
+  // Step 1: PR Creation is in progress until all tasks get approved
   return STEP_LABELS.map((title, index) => {
     const step = index + 1;
-    if (step === 1) return { step, title, date: record.date, by: record.createdBy, status: "Completed" };
-    if (step === 2) return { step, title, status: "Current" };
+    if (step === 1) return { step, title, date: record.date, by: record.createdBy, status: "Current" };
+    if (step === 2) return { step, title, status: "Pending" };
     return { step, title, status: "Pending" };
   });
 }

@@ -307,6 +307,31 @@
   white-space: nowrap;
 }
 
+.pr-detail-status-tag.pending {
+  background: var(--muted-hex, #f1f5f9);
+  color: var(--muted-foreground-hex, #64748b);
+  border: 1px solid var(--border-hex, #e2e8f0);
+}
+
+.pr-detail-status-tag.in-progress,
+.pr-detail-status-tag.current {
+  background: rgba(59, 130, 246, 0.14);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.pr-detail-status-tag.completed {
+  background: rgba(34, 197, 94, 0.14);
+  color: #22C55E;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.pr-detail-status-tag.rejected {
+  background: rgba(239, 68, 68, 0.14);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
 
 /* =========================================================
    APPROVAL TIMELINE
@@ -391,7 +416,8 @@
   color: var(--primary-foreground-hex);
 }
 
-.approval-step-circle.current {
+.approval-step-circle.current,
+.approval-step-circle.in-progress {
   background: #38BDF8;
   border-color: #38BDF8;
   color: #fff;
@@ -437,9 +463,10 @@
   color: #22C55E;
 }
 
-.approval-step-status.current {
+.approval-step-status.current,
+.approval-step-status.in-progress {
   background: rgba(56, 189, 248, 0.14);
-  color: #38BDF8;
+  color: #0284c7;
 }
 
 .approval-step-status.pending {
@@ -529,6 +556,11 @@
 .subtask-status.in-progress {
   background: rgba(245, 158, 11, 0.14);
   color: #F59E0B;
+}
+
+.subtask-status.rejected {
+  background: rgba(239, 68, 68, 0.14);
+  color: #EF4444;
 }
 
 .subtask-status.pending {
@@ -1634,7 +1666,8 @@
   color: var(--primary-foreground-hex);
 }
 
-.pr-summary-approval-step.current .pr-summary-approval-node {
+.pr-summary-approval-step.current .pr-summary-approval-node,
+.pr-summary-approval-step.in-progress .pr-summary-approval-node {
   border: 2px solid #3B82F6;
   background: var(--card-hex);
   color: #60A5FA;
@@ -1708,9 +1741,10 @@
   color: #22C55E;
 }
 
-.pr-summary-approval-badge.current {
+.pr-summary-approval-badge.current,
+.pr-summary-approval-badge.in-progress {
   background: rgba(56, 189, 248, 0.14);
-  color: #38BDF8;
+  color: #0284c7;
 }
 
 .pr-summary-approval-badge.rejected {

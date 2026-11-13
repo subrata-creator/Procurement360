@@ -56,6 +56,14 @@ export interface CreateRFQModalProps {
   onClose: () => void;
   onCreated?: () => void;
   existingRfqs?: Cr49f_requestforqoutations[];
+  initialPurchaseRequestId?: string;
+  isPurchaseRequestReadOnly?: boolean;
+  initialPurchaseRequest?: {
+    cr49f_purchaserequestid: string;
+    cr49f_prnumber?: string;
+    cr49f_prtitle?: string;
+    cr49f_deliverylocation?: string;
+  };
 }
 
 export interface RFQFormData {
@@ -641,7 +649,11 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
   onClose,
   onCreated,
   existingRfqs,
+  initialPurchaseRequestId,
+  isPurchaseRequestReadOnly,
+  initialPurchaseRequest,
 }) => {
+  const isPrReadOnly = Boolean(isPurchaseRequestReadOnly);
   const [activeStep, setActiveStep] = useState<1 | 2>(1);
   const [formData, setFormData] = useState<RFQFormData>(() => {
     try {
@@ -680,16 +692,69 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
     }
   }, [existingRfqs]);
 
+  // Include initialPurchaseRequest in purchaseRequests if not already there
+  const allPurchaseRequests = useMemo(() => {
+    if (!initialPurchaseRequest) return purchaseRequests;
+    const exists = purchaseRequests.some(
+      (p) =>
+        cleanGuid(p.cr49f_purchaserequestid) === cleanGuid(initialPurchaseRequest.cr49f_purchaserequestid) ||
+        (initialPurchaseRequest.cr49f_prnumber && p.cr49f_prnumber === initialPurchaseRequest.cr49f_prnumber)
+    );
+    if (exists) return purchaseRequests;
+    const synthPR: Cr49f_purchaserequests = {
+      cr49f_purchaserequestid: initialPurchaseRequest.cr49f_purchaserequestid,
+      cr49f_prnumber: initialPurchaseRequest.cr49f_prnumber,
+      cr49f_prtitle: initialPurchaseRequest.cr49f_prtitle,
+      cr49f_deliverylocation: initialPurchaseRequest.cr49f_deliverylocation,
+      cr49f_status: 1 as any,
+      cr49f_statusname: "Approved",
+      statecode: 0,
+      ownerid: "system",
+    } as Cr49f_purchaserequests;
+    return [synthPR, ...purchaseRequests];
+  }, [purchaseRequests, initialPurchaseRequest]);
+
+  // Auto-select initialPurchaseRequestId if provided when modal opens
+  useEffect(() => {
+    if (isOpen && (initialPurchaseRequestId || initialPurchaseRequest) && allPurchaseRequests.length > 0) {
+      const targetId = initialPurchaseRequest?.cr49f_purchaserequestid || initialPurchaseRequestId;
+      const targetNum = initialPurchaseRequest?.cr49f_prnumber || initialPurchaseRequestId;
+      const prGuid = cleanGuid(targetId);
+      const found = allPurchaseRequests.find(
+        (p) =>
+          (prGuid && cleanGuid(p.cr49f_purchaserequestid) === prGuid) ||
+          p.cr49f_purchaserequestid === targetId ||
+          (targetNum && p.cr49f_prnumber === targetNum)
+      );
+      if (found) {
+        setFormData((prev) => ({
+          ...prev,
+          purchaseRequestId: found.cr49f_purchaserequestid,
+          deliveryLocation: found.cr49f_deliverylocation || prev.deliveryLocation || "",
+        }));
+      }
+    }
+  }, [isOpen, initialPurchaseRequestId, initialPurchaseRequest, allPurchaseRequests]);
+
   // Filter PRs so that ONLY approved Purchase Requests without an existing RFQ are selectable
   const availablePurchaseRequests = useMemo(() => {
-    return purchaseRequests.filter((pr) => {
+    return allPurchaseRequests.filter((pr) => {
+      // Always allow the pre-selected PR when read-only
+      if (
+        isPrReadOnly &&
+        (cleanGuid(pr.cr49f_purchaserequestid) === cleanGuid(formData.purchaseRequestId) ||
+          pr.cr49f_purchaserequestid === formData.purchaseRequestId ||
+          (initialPurchaseRequest?.cr49f_prnumber && pr.cr49f_prnumber === initialPurchaseRequest.cr49f_prnumber))
+      ) {
+        return true;
+      }
       // 1. Must be approved
       if (!isPrApproved(pr, approvalTasks)) return false;
       // 2. If an RFQ is already created with this PR, do not show in dropdown
       if (hasExistingRfq(pr, linkedPrIds)) return false;
       return true;
     });
-  }, [purchaseRequests, approvalTasks, linkedPrIds]);
+  }, [allPurchaseRequests, approvalTasks, linkedPrIds, isPrReadOnly, formData.purchaseRequestId, initialPurchaseRequest]);
 
   // Alias for backward compatibility
   const approvedPurchaseRequests = availablePurchaseRequests;
@@ -722,10 +787,16 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof RFQFormData, string>>>({});
 
-  // Reset form and ensure PR selection starts blank whenever modal is opened
+  // Reset form whenever modal is opened (or prefill if opened for a specific PR)
   useEffect(() => {
     if (isOpen) {
-      setFormData(initialFormData);
+      const targetPrId = initialPurchaseRequest?.cr49f_purchaserequestid || initialPurchaseRequestId || "";
+      const targetLocation = initialPurchaseRequest?.cr49f_deliverylocation || "";
+      setFormData({
+        ...initialFormData,
+        purchaseRequestId: targetPrId,
+        deliveryLocation: targetLocation,
+      });
       setActiveStep(1);
       setErrors({});
       setFlowMatchedSuppliers(null);
@@ -735,7 +806,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
       setIsSuccess(false);
       setCreatedRfqInfo(null);
     }
-  }, [isOpen]);
+  }, [isOpen, initialPurchaseRequestId, initialPurchaseRequest]);
 
   // Load purchase requests and existing RFQs from Dataverse (do NOT auto-select; keep dropdown blank until user chooses)
   useEffect(() => {
@@ -856,9 +927,10 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
 
   // When a PR is chosen, fetch delivery location automatically from the selected PR (Approved PR without existing RFQ only)
   const handlePRChange = (prId: string) => {
+    if (isPrReadOnly) return;
     const chosen =
       availablePurchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId) ||
-      purchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId);
+      allPurchaseRequests.find((pr) => pr.cr49f_purchaserequestid === prId);
 
     if (chosen && hasExistingRfq(chosen, linkedPrIds)) {
       setErrors((prev) => ({
@@ -962,8 +1034,8 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
 
     if (!formData.purchaseRequestId) {
       newErrors.purchaseRequestId = "Please select an approved Purchase Request.";
-    } else {
-      const selected = purchaseRequests.find(
+    } else if (!isPrReadOnly) {
+      const selected = allPurchaseRequests.find(
         (pr) =>
           pr.cr49f_purchaserequestid === formData.purchaseRequestId ||
           pr.cr49f_prnumber === formData.purchaseRequestId
@@ -1000,7 +1072,7 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
 
   const getSelectedPR = () => {
     if (!formData.purchaseRequestId) return undefined;
-    return purchaseRequests.find(
+    return allPurchaseRequests.find(
       (pr) =>
         pr.cr49f_purchaserequestid === formData.purchaseRequestId ||
         pr.cr49f_prnumber === formData.purchaseRequestId
@@ -1544,13 +1616,19 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                     <div className="rfq-input-field">
                       <label htmlFor="purchaseRequest">
                         Purchase Request <span className="rfq-required-star">*</span>
+                        {isPrReadOnly && (
+                          <span style={{ fontSize: 11, fontWeight: 500, color: "var(--muted-foreground-hex, #64748b)", marginLeft: 6 }}>
+                            (Read only · Pre-selected)
+                          </span>
+                        )}
                       </label>
                       <select
                         id="purchaseRequest"
                         value={formData.purchaseRequestId}
                         onChange={(e) => handlePRChange(e.target.value)}
-                        disabled={isLoadingPRs}
-                        className={errors.purchaseRequestId ? "has-error" : ""}
+                        disabled={isLoadingPRs || isPrReadOnly}
+                        className={`${errors.purchaseRequestId ? "has-error" : ""} ${isPrReadOnly ? "rfq-input-disabled" : ""}`}
+                        style={isPrReadOnly ? { cursor: "not-allowed", opacity: 0.88, backgroundColor: "var(--muted-hex, #f1f5f9)" } : undefined}
                       >
                         <option value="">
                           {isLoadingPRs
@@ -1572,6 +1650,10 @@ export const CreateRFQModal: React.FC<CreateRFQModalProps> = ({
                         <span className="rfq-field-error">{errors.purchaseRequestId}</span>
                       ) : prLoadError ? (
                         <span className="rfq-field-hint has-error">{prLoadError}</span>
+                      ) : isPrReadOnly ? (
+                        <span className="rfq-field-hint">
+                          Initiating RFQ directly for this approved Purchase Request (locked).
+                        </span>
                       ) : approvedPurchaseRequests.length === 0 ? (
                         <span className="rfq-field-hint has-error">
                           No approved purchase requests available without an existing RFQ.

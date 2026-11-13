@@ -24,17 +24,23 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
-  buildApprovalSteps,
   buildDefaultSubTasks,
-  buildMilestoneSubTasks,
   getInitials,
+  getPurchaseRequestByRef,
+  purchaseRequests,
   type ApprovalStep,
   type LineItem,
   type PurchaseRequestRecord,
 } from "../data/Purchaserequestsdata";
 import { rfqs } from "../data/rfqs";
+import { SAMPLE_APPROVAL_CYCLES } from "../data/SampleApprovalCycleData";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_purchaserequestlinesService";
+import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
+import { getDynamicPurchaseOrders } from "../Services/PurchaseOrderService";
+import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
+import type { OrderRow } from "../data/OrdersData";
+import CreateRFQModal from "../components/CreateRFQModal";
 import {
   createApprovalTasksForObject,
   getApprovalTasksForRecord,
@@ -56,11 +62,6 @@ import "../Styles/PRSummary.css";
 
 const TABS = ["Summary", "RFQs", "Associated Tasks", "Notes", "Attachments"];
 
-// Milestones hidden from both the PR Journey timeline and the Approval
-// History sidebar, per request: "Review & Approval" and "Approved" are
-// dropped everywhere the journey's milestone list is shown.
-const HIDDEN_MILESTONES = ["Review & Approval", "Approved"];
-
 type LivePurchaseRequest = {
   cr49f_purchaserequestid: string;
   cr49f_prnumber?: string;
@@ -75,6 +76,7 @@ type LivePurchaseRequest = {
   cr49f_requireddeliverydate?: string;
   createdon?: string;
   createdbyname?: string;
+  modifiedon?: string;
 };
 
 type LivePurchaseRequestLine = {
@@ -237,58 +239,95 @@ export default function PurchaseRequestDetail() {
 
   const [liveRequests, setLiveRequests] = useState<LivePurchaseRequest[]>([]);
   const [liveLines, setLiveLines] = useState<LivePurchaseRequestLine[]>([]);
+  const [allRfqs, setAllRfqs] = useState<Cr49f_requestforqoutations[]>([]);
+  const [allOrders, setAllOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  // Real Dataverse cr49f_approvaltasks state
+  // Approval tasks states
   const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
+  const [rfqApprovalTasks, setRfqApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
+  const [poApprovalTasks, setPoApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
   const [taskActionNotice, setTaskActionNotice] = useState<string | null>(null);
+  const [isCreateRfqModalOpen, setIsCreateRfqModalOpen] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadData = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
+    setLoadError("");
+    try {
+      const [requestResult, lineResult, rfqResult, ordersResult] = await Promise.allSettled([
+        Cr49f_purchaserequestsService.getAll(),
+        Cr49f_purchaserequestlinesService.getAll(),
+        Cr49f_requestforqoutationsService.getAll(),
+        getDynamicPurchaseOrders(),
+      ]);
 
-    async function loadData() {
-      setLoading(true);
-      setLoadError("");
-      try {
-        const [requestResult, lineResult] = await Promise.all([
-          Cr49f_purchaserequestsService.getAll(),
-          Cr49f_purchaserequestlinesService.getAll(),
-        ]);
-        if (cancelled) return;
-        if (!requestResult.success) throw new Error("Unable to load purchase requests from Dataverse.");
-        if (!lineResult.success) throw new Error("Unable to load purchase request line items from Dataverse.");
-        setLiveRequests((requestResult.data ?? []) as LivePurchaseRequest[]);
-        setLiveLines((lineResult.data ?? []) as LivePurchaseRequestLine[]);
-      } catch (err) {
-        if (!cancelled) {
-          console.error("Failed to load purchase request summary:", err);
-          setLoadError(err instanceof Error ? err.message : "An unexpected error occurred while loading the purchase request.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (requestResult.status === "fulfilled" && requestResult.value.success) {
+        setLiveRequests((requestResult.value.data ?? []) as LivePurchaseRequest[]);
+      }
+      if (lineResult.status === "fulfilled" && lineResult.value.success) {
+        setLiveLines((lineResult.value.data ?? []) as LivePurchaseRequestLine[]);
+      }
+      if (rfqResult.status === "fulfilled" && rfqResult.value.success) {
+        setAllRfqs((rfqResult.value.data ?? []) as Cr49f_requestforqoutations[]);
+      }
+      if (ordersResult.status === "fulfilled") {
+        setAllOrders(ordersResult.value ?? []);
+      }
+    } catch (err) {
+      console.error("Failed to load purchase request summary:", err);
+      if (isInitial) {
+        setLoadError(err instanceof Error ? err.message : "An unexpected error occurred while loading the purchase request.");
+      }
+    } finally {
+      if (isInitial) {
+        setLoading(false);
       }
     }
+  };
 
-    void loadData();
-    return () => { cancelled = true; };
+  useEffect(() => {
+    void loadData(true);
+    const handleFocus = () => void loadData(false);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const liveRecord = useMemo(() => {
     if (!ref) return undefined;
     const routeRef = normalizeId(ref);
-    return liveRequests.find((request) =>
+    const foundLive = liveRequests.find((request) =>
       normalizeId(request.cr49f_prnumber) === routeRef ||
       normalizeId(request.cr49f_purchaserequestid) === routeRef
     );
+    if (foundLive) return foundLive;
+
+    // Fallback: seeded / mock PRs
+    const mockPr = getPurchaseRequestByRef(ref) || purchaseRequests.find((p) => normalizeId(p.ref) === routeRef);
+    if (mockPr) {
+      return {
+        cr49f_purchaserequestid: mockPr.ref,
+        cr49f_prnumber: mockPr.ref,
+        cr49f_prtitle: mockPr.title,
+        cr49f_status: mockPr.status === "Approved" ? 1 : mockPr.status === "Rejected" ? 3 : 0,
+        cr49f_businessjustification: mockPr.justification,
+        cr49f_deliverylocation: mockPr.deliveryAddress,
+        createdon: mockPr.date,
+        createdbyname: mockPr.createdBy,
+      } as LivePurchaseRequest;
+    }
+
+    return undefined;
   }, [liveRequests, ref]);
 
   const mappedLineItems: LineItem[] = useMemo(() => {
     if (!liveRecord) return [];
     const requestId = normalizeId(liveRecord.cr49f_purchaserequestid);
-    return liveLines
+    const lines = liveLines
       .filter((line) => normalizeId(line._cr49f_purchaserequest_value) === requestId)
       .map((line, index) => {
         const quantity = Number(line.cr49f_quantity) || 0;
@@ -298,7 +337,6 @@ export default function PurchaseRequestDetail() {
           itemCode: line.cr49f_prlinenumber || `LINE-${index + 1}`,
           itemName: line.cr49f_itemname || line.cr49f_itemdescription || "Unnamed item",
           quantity,
-          // Not modeled on cr49f_purchaserequestlines today:
           previousContract: "—",
           unitPrice: currencyFormatter.format(unitPrice),
           totalAmount: currencyFormatter.format(quantity * unitPrice),
@@ -306,47 +344,121 @@ export default function PurchaseRequestDetail() {
           deliveryAddress: "—",
         };
       });
-  }, [liveRecord, liveLines]);
+    if (lines.length > 0) return lines;
 
-  // The old mock PurchaseRequestRecord shape, filled from the live
-  // Dataverse record so buildApprovalSteps/buildDefaultSubTasks/
-  // buildMilestoneSubTasks keep working unchanged. rfq/po are forced
-  // to "not available" — cr49f_purchaserequests has no RFQ/PO lookup
-  // yet, so the journey's RFQ Initiated/PO Created steps stay Pending
-  // until that linkage exists. department/category/costCenter are
-  // intentionally left unset (not on this table, and dropped from the
-  // grid below per your request).
+    const mockPr = getPurchaseRequestByRef(ref || "") || purchaseRequests.find((p) => normalizeId(p.ref) === normalizeId(ref || ""));
+    return mockPr?.lineItems ?? [];
+  }, [liveRecord, liveLines, ref]);
+
+  // Dynamically match any RFQ linked to this PR
+  const matchedRfq = useMemo(() => {
+    if (!liveRecord) return undefined;
+    const prGuid = cleanGuid(liveRecord.cr49f_purchaserequestid);
+    const prNum = liveRecord.cr49f_prnumber?.trim();
+
+    // 1. Dataverse allRfqs
+    const dvMatch = allRfqs.find((r) => {
+      const raw = r as unknown as Record<string, unknown>;
+      const linkedPrGuid = cleanGuid(
+        r._cr49f_prrfq_value ||
+        (raw._cr49f_PRRFQ_value as string) ||
+        (raw.cr49f_PRRFQ as string) ||
+        (raw.cr49f_prrfq as string)
+      );
+      if (prGuid && linkedPrGuid && linkedPrGuid === prGuid) return true;
+
+      const rfqPrName =
+        (raw["_cr49f_prrfq_value@OData.Community.Display.V1.FormattedValue"] as string) ||
+        r.cr49f_prrfqname ||
+        (raw.cr49f_PRRFQname as string);
+      if (prNum && rfqPrName && rfqPrName.toLowerCase().includes(prNum.toLowerCase())) return true;
+      if (prNum && r.cr49f_rfqtitle && r.cr49f_rfqtitle.toLowerCase().includes(prNum.toLowerCase())) return true;
+
+      return false;
+    });
+    if (dvMatch) return dvMatch;
+
+    // 2. Mock / static rfqs list fallback
+    const mockMatch = rfqs.find((r) => {
+      if (prNum && r.pr && r.pr.toLowerCase() === prNum.toLowerCase()) return true;
+      if (prGuid && r.pr && cleanGuid(r.pr) === prGuid) return true;
+      return false;
+    });
+    if (mockMatch) {
+      return {
+        cr49f_requestforqoutationid: mockMatch.refNo,
+        cr49f_rfqnumber: mockMatch.refNo,
+        cr49f_rfqtitle: mockMatch.title,
+        cr49f_status: ((mockMatch.status as string) === "Approved" || (mockMatch.status as string) === "Closed" ? 1 : 0) as any,
+        createdon: mockMatch.createdDate,
+        createdbyname: mockMatch.createdBy,
+        statecode: 0,
+      } as Cr49f_requestforqoutations;
+    }
+
+    return undefined;
+  }, [liveRecord, allRfqs]);
+
+  // Dynamically match any PO linked to this PR or matched RFQ
+  const matchedPo = useMemo(() => {
+    if (!liveRecord) return undefined;
+    const prGuid = cleanGuid(liveRecord.cr49f_purchaserequestid);
+    const prNum = liveRecord.cr49f_prnumber?.trim();
+    const matchedRfqNum = matchedRfq?.cr49f_rfqnumber?.trim();
+    const matchedRfqGuid = matchedRfq ? cleanGuid(matchedRfq.cr49f_requestforqoutationid) : "";
+
+    const foundOrder = allOrders.find((o) => {
+      if (prNum && o.pr && o.pr.toLowerCase() === prNum.toLowerCase()) return true;
+      if (prNum && (o as any).associatedPr && (o as any).associatedPr.toLowerCase() === prNum.toLowerCase()) return true;
+      if (prGuid && o.pr && cleanGuid(o.pr) === prGuid) return true;
+
+      if (matchedRfqNum && o.rfq && o.rfq.toLowerCase() === matchedRfqNum.toLowerCase()) return true;
+      if (matchedRfqGuid && (o as any).rfqId && cleanGuid((o as any).rfqId) === matchedRfqGuid) return true;
+
+      return false;
+    });
+    if (foundOrder) return foundOrder;
+
+    return undefined;
+  }, [liveRecord, allOrders, matchedRfq]);
+
   const record: PurchaseRequestRecord | undefined = useMemo(() => {
     if (!liveRecord) return undefined;
+    const fallbackMock = getPurchaseRequestByRef(ref || "") || purchaseRequests.find((p) => normalizeId(p.ref) === normalizeId(ref || ""));
     return {
       ref: liveRecord.cr49f_prnumber || liveRecord.cr49f_purchaserequestid,
-      title: liveRecord.cr49f_prtitle || "Untitled Purchase Request",
-      rfq: "No RFQ available",
-      po: "No PO available",
-      createdBy: resolveRecordCreatedBy(liveRecord, "Unknown"),
-      date: toUsDate(liveRecord.createdon),
-      status: mapToPRStatus(liveRecord.cr49f_status, liveRecord.cr49f_purchaserequestid),
-      requester: resolveRecordCreatedBy(liveRecord, "") || undefined,
-      requiredDate: toUsDate(liveRecord.cr49f_requireddeliverydate),
-      totalAmount: liveRecord.cr49f_totalamount != null ? currencyFormatter.format(liveRecord.cr49f_totalamount) : undefined,
-      justification: liveRecord.cr49f_businessjustification,
-      deliveryAddress: liveRecord.cr49f_deliverylocation,
-      lineItems: mappedLineItems,
+      title: liveRecord.cr49f_prtitle || fallbackMock?.title || "Untitled Purchase Request",
+      rfq: matchedRfq?.cr49f_rfqnumber || fallbackMock?.rfq || "No RFQ available",
+      po: matchedPo?.refNo || fallbackMock?.po || "No PO available",
+      createdBy: resolveRecordCreatedBy(liveRecord, fallbackMock?.createdBy || "Unknown"),
+      date: toUsDate(liveRecord.createdon) || fallbackMock?.date || "—",
+      status: mapToPRStatus(liveRecord.cr49f_status, liveRecord.cr49f_purchaserequestid) || fallbackMock?.status || "In Review",
+      requester: resolveRecordCreatedBy(liveRecord, "") || fallbackMock?.requester || undefined,
+      requiredDate: toUsDate(liveRecord.cr49f_requireddeliverydate) || fallbackMock?.requiredDate,
+      totalAmount: liveRecord.cr49f_totalamount != null ? currencyFormatter.format(liveRecord.cr49f_totalamount) : fallbackMock?.totalAmount,
+      justification: liveRecord.cr49f_businessjustification || fallbackMock?.justification,
+      deliveryAddress: liveRecord.cr49f_deliverylocation || fallbackMock?.deliveryAddress,
+      lineItems: mappedLineItems.length > 0 ? mappedLineItems : (fallbackMock?.lineItems ?? []),
     };
-  }, [liveRecord, mappedLineItems]);
+  }, [liveRecord, mappedLineItems, matchedRfq, matchedPo, ref]);
 
   const loadApprovalTasks = async (prId: string) => {
+    const validGuid = cleanGuid(prId);
+    if (!validGuid) {
+      setApprovalTasks([]);
+      return;
+    }
     setLoadingTasks(true);
     try {
-      let tasks = await getApprovalTasksForRecord(1, prId);
+      let tasks = await getApprovalTasksForRecord(1, validGuid);
       if (tasks.length === 0 && liveRecord) {
         try {
           await createApprovalTasksForObject({
-            objectType: 1,
-            recordId: prId,
+            objectType: 1, // PR
+            recordId: validGuid,
             recordName: liveRecord.cr49f_prtitle || "Purchase Request Approval",
           });
-          tasks = await getApprovalTasksForRecord(1, prId);
+          tasks = await getApprovalTasksForRecord(1, validGuid);
         } catch (autoErr) {
           console.warn("[PRSummary] Auto-create tasks for PR failed:", autoErr);
         }
@@ -357,7 +469,6 @@ export default function PurchaseRequestDetail() {
           getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
           !t.cr49f_task?.toLowerCase().includes("changes needed")
       );
-      // Deduplicate by sequence
       const uniqueBySeq = new Map<number, Cr49f_approvaltaskses>();
       for (const t of filtered) {
         const seq = t.cr49f_sequence ?? 1;
@@ -377,11 +488,114 @@ export default function PurchaseRequestDetail() {
     }
   };
 
+  const loadRfqApprovalTasks = async (rfq: Cr49f_requestforqoutations) => {
+    const rfqId = cleanGuid(rfq.cr49f_requestforqoutationid);
+    if (!rfqId) {
+      setRfqApprovalTasks([]);
+      return;
+    }
+    try {
+      let tasks = await getApprovalTasksForRecord(2, rfqId);
+      if (tasks.length === 0 && !rfq.cr49f_requestforqoutationid.startsWith("RFQ-")) {
+        try {
+          await createApprovalTasksForObject({
+            objectType: 2,
+            recordId: rfqId,
+            recordName: rfq.cr49f_rfqtitle || "RFQ Sourcing Approval",
+          });
+          tasks = await getApprovalTasksForRecord(2, rfqId);
+        } catch (autoErr) {
+          console.warn("[PRSummary] Auto-create tasks for RFQ failed:", autoErr);
+        }
+      }
+      const filtered = tasks.filter(
+        (t) =>
+          (t.cr49f_sequence ?? 0) >= 1 &&
+          getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
+          !t.cr49f_task?.toLowerCase().includes("changes needed")
+      );
+      const uniqueBySeq = new Map<number, Cr49f_approvaltaskses>();
+      for (const t of filtered) {
+        const seq = t.cr49f_sequence ?? 1;
+        if (!uniqueBySeq.has(seq)) {
+          uniqueBySeq.set(seq, t);
+        }
+      }
+      setRfqApprovalTasks(
+        Array.from(uniqueBySeq.values()).sort(
+          (a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0)
+        )
+      );
+    } catch (err) {
+      console.warn("Failed to load RFQ approval tasks:", err);
+    }
+  };
+
+  const loadPoApprovalTasks = async (po: OrderRow) => {
+    const raw = po as unknown as Record<string, unknown>;
+    const poId = cleanGuid((raw.dataversePoId as string) || (raw.id as string) || (raw.guid as string));
+    if (!poId) {
+      setPoApprovalTasks([]);
+      return;
+    }
+    try {
+      let tasks = await getApprovalTasksForRecord(3, poId);
+      if (tasks.length === 0 && raw.dataversePoId) {
+        try {
+          await createApprovalTasksForObject({
+            objectType: 3,
+            recordId: poId,
+            recordName: `PO Approval - ${po.refNo}`,
+          });
+          tasks = await getApprovalTasksForRecord(3, poId);
+        } catch (autoErr) {
+          console.warn("[PRSummary] Auto-create tasks for PO failed:", autoErr);
+        }
+      }
+      const filtered = tasks.filter(
+        (t) =>
+          (t.cr49f_sequence ?? 0) >= 1 &&
+          getTaskApprovalStatusLabel(t) !== "Changes Needed" &&
+          !t.cr49f_task?.toLowerCase().includes("changes needed")
+      );
+      const uniqueBySeq = new Map<number, Cr49f_approvaltaskses>();
+      for (const t of filtered) {
+        const seq = t.cr49f_sequence ?? 1;
+        if (!uniqueBySeq.has(seq)) {
+          uniqueBySeq.set(seq, t);
+        }
+      }
+      setPoApprovalTasks(
+        Array.from(uniqueBySeq.values()).sort(
+          (a, b) => (a.cr49f_sequence ?? 0) - (b.cr49f_sequence ?? 0)
+        )
+      );
+    } catch (err) {
+      console.warn("Failed to load PO approval tasks:", err);
+    }
+  };
+
   useEffect(() => {
     if (liveRecord?.cr49f_purchaserequestid) {
       void loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
     }
   }, [liveRecord?.cr49f_purchaserequestid]);
+
+  useEffect(() => {
+    if (matchedRfq) {
+      void loadRfqApprovalTasks(matchedRfq);
+    } else {
+      setRfqApprovalTasks([]);
+    }
+  }, [matchedRfq?.cr49f_requestforqoutationid]);
+
+  useEffect(() => {
+    if (matchedPo) {
+      void loadPoApprovalTasks(matchedPo);
+    } else {
+      setPoApprovalTasks([]);
+    }
+  }, [matchedPo?.refNo]);
 
   const handleGenerateTasks = async () => {
     if (!liveRecord?.cr49f_purchaserequestid) return;
@@ -423,12 +637,9 @@ export default function PurchaseRequestDetail() {
       }
       setTaskActionNotice(
         result.nextActivatedTask
-          ? `Task "${task.cr49f_task}" approved! Next task "${result.nextActivatedTask.cr49f_task}" is now Active. Opening dashboard...`
-          : `Task "${task.cr49f_task}" approved! All approval tasks completed. PR is now Approved! Opening dashboard...`
+          ? `Task "${task.cr49f_task}" approved! Next task "${result.nextActivatedTask.cr49f_task}" is now Active.`
+          : `Task "${task.cr49f_task}" approved! All approval tasks completed. PR is now Approved!`
       );
-      setTimeout(() => {
-        navigate("/");
-      }, 700);
     } catch (err) {
       console.error("Approve failed:", err);
       setTaskActionNotice(err instanceof Error ? err.message : "Approval failed.");
@@ -500,26 +711,436 @@ export default function PurchaseRequestDetail() {
   const statusLabel = getStatusLabel(liveRecord);
   const priorityLabel = getPriorityLabel(liveRecord);
 
-  const approvalSteps = buildApprovalSteps(record);
-  // PR Journey timeline: drop the Review & Approval and Approved stages,
-  // renumbering what's left so the circles read 1..n with no gaps.
-  const visibleApprovalSteps = approvalSteps.filter(
-    (step) => !HIDDEN_MILESTONES.some((hidden) => step.title.startsWith(hidden))
-  );
-  // Approval History (sidebar) stays in sync with the timeline by
-  // sourcing from the same visibleApprovalSteps list.
+  // Milestone 1: PR Creation status
+  const hasPrTasks = approvalTasks.length > 0;
+  const allPrTasksApproved = hasPrTasks
+    ? approvalTasks.every((t) => getTaskApprovalStatusLabel(t) === "Approved")
+    : (liveRecord.cr49f_status === 1 || record.status === "Approved");
+  const isPrRejected = approvalTasks.some((t) => getTaskApprovalStatusLabel(t) === "Rejected") ||
+                       liveRecord.cr49f_status === 3 || record.status === "Rejected";
+
+  const prCreationStatus: "Completed" | "Current" | "Rejected" = isPrRejected
+    ? "Rejected"
+    : allPrTasksApproved
+    ? "Completed"
+    : "Current"; // displayed as "In Progress"
+
+  const isPrApproved =
+    !isPrRejected &&
+    (statusLabel.toLowerCase() === "approved" ||
+      record.status === "Approved" ||
+      liveRecord.cr49f_status === 1 ||
+      prCreationStatus === "Completed" ||
+      allPrTasksApproved);
+
+  // Milestone 2: RFQ Initiated status
+  const isRfqCreated = Boolean(matchedRfq);
+  let rfqMilestoneStatus: "Completed" | "Current" | "Pending" | "Rejected" = "Pending";
+  if (isRfqCreated) {
+    const hasRfqTasks = rfqApprovalTasks.length > 0;
+    const allRfqTasksApproved = hasRfqTasks
+      ? rfqApprovalTasks.every((t) => getTaskApprovalStatusLabel(t) === "Approved")
+      : (matchedRfq?.cr49f_status === 1 || (matchedRfq as any)?.cr49f_statusname === "Approved");
+    const isRfqRejected = rfqApprovalTasks.some((t) => getTaskApprovalStatusLabel(t) === "Rejected") ||
+                          matchedRfq?.cr49f_status === 3;
+
+    rfqMilestoneStatus = isRfqRejected
+      ? "Rejected"
+      : allRfqTasksApproved
+      ? "Completed"
+      : "Current"; // displayed as "In Progress"
+  }
+
+  // Milestone 3: PO Created status
+  const isPoCreated = Boolean(matchedPo);
+  let poMilestoneStatus: "Completed" | "Current" | "Pending" | "Rejected" = "Pending";
+  if (isPoCreated) {
+    const hasPoTasks = poApprovalTasks.length > 0;
+    const allPoTasksApproved = hasPoTasks
+      ? poApprovalTasks.every((t) => getTaskApprovalStatusLabel(t) === "Approved")
+      : (matchedPo?.status === "Approved" || (matchedPo as any)?.cr49f_status === 1);
+    const isPoRejected = poApprovalTasks.some((t) => getTaskApprovalStatusLabel(t) === "Rejected") ||
+                         matchedPo?.status === "Rejected";
+
+    poMilestoneStatus = isPoRejected
+      ? "Rejected"
+      : allPoTasksApproved
+      ? "Completed"
+      : "Current"; // displayed as "In Progress"
+  }
+
+  const visibleApprovalSteps: ApprovalStep[] = [
+    {
+      step: 1,
+      title: "PR Creation",
+      status: prCreationStatus,
+      date: prCreationStatus === "Completed" ? (liveRecord.modifiedon ? toUsDate(liveRecord.modifiedon) : record.date) : record.date,
+      by: record.createdBy,
+    },
+    {
+      step: 2,
+      title: "RFQ Initiated",
+      status: rfqMilestoneStatus,
+      date: matchedRfq?.createdon ? toUsDate(matchedRfq.createdon) : undefined,
+      by: matchedRfq?.createdbyname || (isRfqCreated ? "Procurement Specialist" : undefined),
+    },
+    {
+      step: 3,
+      title: "PO Created",
+      status: poMilestoneStatus,
+      date: matchedPo?.createdOn ? toUsDate(matchedPo.createdOn) : undefined,
+      by: matchedPo?.createdBy || (isPoCreated ? "Purchasing Agent" : undefined),
+    },
+    {
+      step: 4,
+      title: "Invoice Created",
+      status: "Pending",
+    },
+    {
+      step: 5,
+      title: "Closed",
+      status: "Pending",
+    },
+  ];
+
+  const currentInProgressStep =
+    visibleApprovalSteps.find((s) => s.status === "Current") || visibleApprovalSteps[0];
+
+  const activeMilestone = (() => {
+    if (selectedMilestone) {
+      const fresh = visibleApprovalSteps.find((s) => s.step === selectedMilestone.step);
+      if (fresh) return fresh;
+    }
+    return currentInProgressStep || visibleApprovalSteps[0] || null;
+  })();
+
+  // Approval History (sidebar) stays in sync with the timeline by sourcing from visibleApprovalSteps
   const historyEvents = visibleApprovalSteps.filter(
     (step) => step.status === "Completed" || step.status === "Current" || step.status === "Rejected"
   );
-  const activeMilestone = selectedMilestone || visibleApprovalSteps[0] || null;
-  const isPrCreationMilestone =
-    activeMilestone?.title?.toLowerCase().includes("pr creation") ||
-    activeMilestone?.step === 1;
-  const subTasks = activeMilestone ? buildMilestoneSubTasks(record, activeMilestone) : [];
+
+  const isPrCreationMilestone = activeMilestone?.step === 1;
+  const isRfqMilestone = activeMilestone?.step === 2;
+  const isPoMilestone = activeMilestone?.step === 3;
+
+  type NormalizedMilestoneTask = {
+    id: string | number;
+    sequence: number;
+    task: string;
+    status: "Completed" | "In Progress" | "Pending" | "Rejected";
+    statusClass: "completed" | "in-progress" | "pending" | "rejected";
+    assignedTo: string;
+    initials: string;
+    remarks: string;
+    completedOn: string;
+    approvalTaskId?: string;
+  };
+
+  const activeMilestoneTasks: NormalizedMilestoneTask[] = (() => {
+    if (!record || !activeMilestone) return [];
+
+    // 1. PR Creation Milestone
+    if (isPrCreationMilestone) {
+      if (approvalTasks.length > 0) {
+        return approvalTasks.map((t, index) => {
+          const approvalStatus = getTaskApprovalStatusLabel(t);
+          const isApproved = approvalStatus === "Approved";
+          const isRejected = approvalStatus === "Rejected";
+          const isPending = approvalStatus === "Pending";
+          const isActive = t.statecode === 0 && isPending;
+
+          const label = isApproved
+            ? "Completed"
+            : isRejected
+            ? "Rejected"
+            : isActive
+            ? "In Progress"
+            : "Pending";
+          const sClass = isApproved
+            ? "completed"
+            : isRejected
+            ? "rejected"
+            : isActive
+            ? "in-progress"
+            : "pending";
+
+          const roleName = t.cr49f_role
+            ? (Cr49f_approvaltasksescr49f_role[t.cr49f_role] || "Approver")
+            : "Approver";
+          const parsedComments = parseTaskComments(t.cr49f_comments ?? (t as unknown as Record<string, unknown>).cr49f_Comments);
+          const latestComment = parsedComments.length > 0 ? parsedComments[parsedComments.length - 1].text : null;
+          const remarks = latestComment || (isApproved
+            ? "Completed for this approval stage"
+            : isRejected
+            ? "Task rejected"
+            : isActive
+            ? "Awaiting approval decision"
+            : "Pending previous task approval");
+
+          const completedOn = isApproved
+            ? (t.modifiedon ? toUsDate(t.modifiedon) : (record.date || "—"))
+            : "—";
+
+          return {
+            id: t.cr49f_approvaltasksid || index,
+            sequence: t.cr49f_sequence || index + 1,
+            task: t.cr49f_task || "PR Approval Task",
+            status: label,
+            statusClass: sClass,
+            assignedTo: roleName,
+            initials: getInitials(roleName),
+            remarks,
+            completedOn,
+            approvalTaskId: t.cr49f_approvaltasksid,
+          };
+        });
+      }
+
+      const fallbackTasks = buildDefaultSubTasks(record);
+      return fallbackTasks.map((ft, index) => {
+        const isApproved = prCreationStatus === "Completed";
+        const label = isApproved ? "Completed" : index === 0 ? "In Progress" : "Pending";
+        const sClass = isApproved ? "completed" : index === 0 ? "in-progress" : "pending";
+        return {
+          id: ft.id,
+          sequence: index + 1,
+          task: ft.task,
+          status: label,
+          statusClass: sClass,
+          assignedTo: ft.assignedTo,
+          initials: getInitials(ft.assignedTo),
+          remarks: isApproved ? "Completed for this approval stage" : index === 0 ? "Awaiting reviewer action" : "Queued for next workflow action",
+          completedOn: isApproved ? record.date : "—",
+        };
+      });
+    }
+
+    // 2. RFQ Initiated Milestone
+    if (isRfqMilestone) {
+      if (isRfqCreated) {
+        if (rfqApprovalTasks.length > 0) {
+          return rfqApprovalTasks.map((t, index) => {
+            const approvalStatus = getTaskApprovalStatusLabel(t);
+            const isApproved = approvalStatus === "Approved";
+            const isRejected = approvalStatus === "Rejected";
+            const isPending = approvalStatus === "Pending";
+            const isActive = t.statecode === 0 && isPending;
+
+            const label = isApproved
+              ? "Completed"
+              : isRejected
+              ? "Rejected"
+              : isActive
+              ? "In Progress"
+              : "Pending";
+            const sClass = isApproved
+              ? "completed"
+              : isRejected
+              ? "rejected"
+              : isActive
+              ? "in-progress"
+              : "pending";
+
+            const roleName = t.cr49f_role
+              ? (Cr49f_approvaltasksescr49f_role[t.cr49f_role] || "Procurement Officer")
+              : "Procurement Officer";
+            const parsedComments = parseTaskComments(t.cr49f_comments ?? (t as unknown as Record<string, unknown>).cr49f_Comments);
+            const latestComment = parsedComments.length > 0 ? parsedComments[parsedComments.length - 1].text : null;
+            const remarks = latestComment || (isApproved
+              ? "Completed for sourcing stage"
+              : isRejected
+              ? "RFQ task rejected"
+              : isActive
+              ? "Awaiting vendor bidding evaluation"
+              : "Pending previous RFQ task");
+
+            const completedOn = isApproved
+              ? (t.modifiedon ? toUsDate(t.modifiedon) : (matchedRfq?.createdon ? toUsDate(matchedRfq.createdon) : "—"))
+              : "—";
+
+            return {
+              id: t.cr49f_approvaltasksid || index,
+              sequence: t.cr49f_sequence || index + 1,
+              task: t.cr49f_task || "RFQ Sourcing Task",
+              status: label,
+              statusClass: sClass,
+              assignedTo: roleName,
+              initials: getInitials(roleName),
+              remarks,
+              completedOn,
+              approvalTaskId: t.cr49f_approvaltasksid,
+            };
+          });
+        }
+
+        const rfqCycle = SAMPLE_APPROVAL_CYCLES.find((c) => c.objectType === 2);
+        const cycleTasks = rfqCycle?.tasks || [
+          { cr49f_task: "Review Sourcing Scope & Vendor Bidding List", cr49f_role: 4, cr49f_sequencenumber: 1 },
+          { cr49f_task: "Technical & Compliance Bid Evaluation", cr49f_role: 2, cr49f_sequencenumber: 2 },
+          { cr49f_task: "Commercial Comparison & Vendor Selection Approval", cr49f_role: 3, cr49f_sequencenumber: 3 },
+        ];
+        const isApproved = rfqMilestoneStatus === "Completed";
+        return cycleTasks.map((ct, idx) => {
+          const roleLabel = Cr49f_approvaltasksescr49f_role[ct.cr49f_role as keyof typeof Cr49f_approvaltasksescr49f_role] || "Procurement Officer";
+          const label = isApproved ? "Completed" : idx === 0 ? "In Progress" : "Pending";
+          const sClass = isApproved ? "completed" : idx === 0 ? "in-progress" : "pending";
+          return {
+            id: `rfq-t-${idx + 1}`,
+            sequence: ct.cr49f_sequencenumber || idx + 1,
+            task: ct.cr49f_task,
+            status: label,
+            statusClass: sClass,
+            assignedTo: roleLabel,
+            initials: getInitials(roleLabel),
+            remarks: isApproved
+              ? "Completed for sourcing stage"
+              : idx === 0
+              ? "Vendor quotation review in progress"
+              : "Queued for the next workflow action",
+            completedOn: isApproved && matchedRfq?.createdon ? toUsDate(matchedRfq.createdon) : "—",
+          };
+        });
+      }
+
+      // No RFQ created yet: do not show any tasks until RFQ is initiated
+      return [];
+    }
+
+    // 3. PO Created Milestone
+    if (isPoMilestone) {
+      if (isPoCreated) {
+        if (poApprovalTasks.length > 0) {
+          return poApprovalTasks.map((t, index) => {
+            const approvalStatus = getTaskApprovalStatusLabel(t);
+            const isApproved = approvalStatus === "Approved";
+            const isRejected = approvalStatus === "Rejected";
+            const isPending = approvalStatus === "Pending";
+            const isActive = t.statecode === 0 && isPending;
+
+            const label = isApproved
+              ? "Completed"
+              : isRejected
+              ? "Rejected"
+              : isActive
+              ? "In Progress"
+              : "Pending";
+            const sClass = isApproved
+              ? "completed"
+              : isRejected
+              ? "rejected"
+              : isActive
+              ? "in-progress"
+              : "pending";
+
+            const roleName = t.cr49f_role
+              ? (Cr49f_approvaltasksescr49f_role[t.cr49f_role] || "Procurement Admin")
+              : "Procurement Admin";
+            const parsedComments = parseTaskComments(t.cr49f_comments ?? (t as unknown as Record<string, unknown>).cr49f_Comments);
+            const latestComment = parsedComments.length > 0 ? parsedComments[parsedComments.length - 1].text : null;
+            const remarks = latestComment || (isApproved
+              ? "Completed for purchase order stage"
+              : isRejected
+              ? "PO task rejected"
+              : isActive
+              ? "Awaiting order verification & sign-off"
+              : "Pending previous PO task");
+
+            const completedOn = isApproved
+              ? (t.modifiedon ? toUsDate(t.modifiedon) : (matchedPo?.createdOn ? toUsDate(matchedPo.createdOn) : "—"))
+              : "—";
+
+            return {
+              id: t.cr49f_approvaltasksid || index,
+              sequence: t.cr49f_sequence || index + 1,
+              task: t.cr49f_task || "PO Verification Task",
+              status: label,
+              statusClass: sClass,
+              assignedTo: roleName,
+              initials: getInitials(roleName),
+              remarks,
+              completedOn,
+              approvalTaskId: t.cr49f_approvaltasksid,
+            };
+          });
+        }
+
+        const poCycle = SAMPLE_APPROVAL_CYCLES.find((c) => c.objectType === 3);
+        const cycleTasks = poCycle?.tasks || [
+          { cr49f_task: "PO Generation & Contract Line Validation", cr49f_role: 4, cr49f_sequencenumber: 1 },
+          { cr49f_task: "Supplier Risk, Compliance & Terms Verification", cr49f_role: 2, cr49f_sequencenumber: 2 },
+          { cr49f_task: "Financial Controller Budget Commitment Sign-Off", cr49f_role: 3, cr49f_sequencenumber: 3 },
+          { cr49f_task: "Executive Procurement Director Authorization", cr49f_role: 2, cr49f_sequencenumber: 4 },
+          { cr49f_task: "PO Dispatch & Vendor Confirmation Acknowledgment", cr49f_role: 4, cr49f_sequencenumber: 5 },
+        ];
+        const isApproved = poMilestoneStatus === "Completed";
+        return cycleTasks.map((ct, idx) => {
+          const roleLabel = Cr49f_approvaltasksescr49f_role[ct.cr49f_role as keyof typeof Cr49f_approvaltasksescr49f_role] || "Procurement Admin";
+          const label = isApproved ? "Completed" : idx === 0 ? "In Progress" : "Pending";
+          const sClass = isApproved ? "completed" : idx === 0 ? "in-progress" : "pending";
+          return {
+            id: `po-t-${idx + 1}`,
+            sequence: ct.cr49f_sequencenumber || idx + 1,
+            task: ct.cr49f_task,
+            status: label,
+            statusClass: sClass,
+            assignedTo: roleLabel,
+            initials: getInitials(roleLabel),
+            remarks: isApproved
+              ? "Completed for purchase order stage"
+              : idx === 0
+              ? "Order compliance & terms validation in progress"
+              : "Queued for the next workflow action",
+            completedOn: isApproved && matchedPo?.createdOn ? toUsDate(matchedPo.createdOn) : "—",
+          };
+        });
+      }
+
+      // No PO created yet: do not show any tasks until PO is initiated
+      return [];
+    }
+
+    // 4. Invoices / Closed: not initiated yet, do not show any tasks
+    return [];
+  })();
+
   const lineItems = record.lineItems ?? [];
-  const associatedRfqs = record.rfq.startsWith("RFQ-")
-    ? rfqs.filter((rfq) => rfq.refNo === record.rfq)
-    : [];
+
+  const associatedRfqs = (() => {
+    const list: Array<{
+      refNo: string;
+      title: string;
+      pr: string;
+      po: string;
+      responses: number | string;
+      supplier: string;
+      createdBy: string;
+      createdDate: string;
+      status: string;
+    }> = [];
+
+    if (matchedRfq) {
+      const raw = matchedRfq as unknown as Record<string, unknown>;
+      list.push({
+        refNo: matchedRfq.cr49f_rfqnumber || matchedRfq.cr49f_requestforqoutationid,
+        title: matchedRfq.cr49f_rfqtitle || "Request for Quotation",
+        pr: record.ref,
+        po: matchedPo ? (matchedPo.refNo || "—") : "—",
+        responses: 0,
+        supplier: (matchedRfq as any).supplier || "—",
+        createdBy: matchedRfq.createdbyname || (raw.createdbyyominame as string) || "Procurement Admin",
+        createdDate: matchedRfq.createdon ? toUsDate(matchedRfq.createdon) : record.date,
+        status: matchedRfq.cr49f_status === 1 ? "Approved" : matchedRfq.cr49f_status === 3 ? "Rejected" : "In Review",
+      });
+    }
+
+    if (record.rfq && record.rfq.startsWith("RFQ-") && !list.some((r) => r.refNo === record.rfq)) {
+      const found = rfqs.filter((r) => r.refNo === record.rfq);
+      list.push(...found);
+    }
+
+    return list;
+  })();
+
   // Associated Tasks: only the PR Creation stage's tasks that are still
   // In Progress or Pending (not the completed ones).
   const prCreationActiveTasks = buildDefaultSubTasks(record).filter(
@@ -533,9 +1154,41 @@ export default function PurchaseRequestDetail() {
     `${record.status === "In Review" ? "It is currently awaiting review." : `Current status is ${statusLabel.toLowerCase()}.`}`,
   ].join(" ");
 
-  const isMilestoneCompleted = isPrCreationMilestone && approvalTasks.length > 0
-    ? approvalTasks.every((t) => getTaskApprovalStatusLabel(t) === "Approved")
-    : (subTasks.length > 0 && subTasks.every((task) => task.status === "Completed"));
+  const milestoneDisplayStatus = activeMilestone?.status === "Current"
+    ? "In Progress"
+    : activeMilestone?.status === "Skipped"
+    ? "Not Applicable"
+    : (activeMilestone?.status || "Pending");
+
+  const milestoneTagClass = activeMilestone?.status === "Completed"
+    ? "completed"
+    : activeMilestone?.status === "Current"
+    ? "in-progress"
+    : activeMilestone?.status === "Rejected"
+    ? "rejected"
+    : "pending";
+
+  const milestoneSubtitle = (() => {
+    if (!activeMilestone) return "";
+    if (isPrCreationMilestone) {
+      return activeMilestone.status === "Completed"
+        ? `Milestone status: Completed · ${record.requester || record.createdBy}`
+        : `Milestone status: In Progress · ${record.requester || record.createdBy}`;
+    }
+    if (isRfqMilestone) {
+      return isRfqCreated
+        ? `Milestone status: ${milestoneDisplayStatus} · ${matchedRfq?.cr49f_rfqnumber || "RFQ"}${matchedRfq?.cr49f_rfqtitle ? ` (${matchedRfq.cr49f_rfqtitle})` : ""}`
+        : `Milestone status: Pending - Tannu Jha`;
+    }
+    if (isPoMilestone) {
+      return isPoCreated
+        ? `Milestone status: ${milestoneDisplayStatus} · ${matchedPo?.refNo || "PO"}`
+        : `Milestone status: Pending · Purchasing Agent`;
+    }
+    return activeMilestone.date
+      ? `Milestone activity on ${activeMilestone.date}`
+      : `Milestone status: ${milestoneDisplayStatus}`;
+  })();
 
   const saveNote = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -602,10 +1255,27 @@ export default function PurchaseRequestDetail() {
         </div>
 
         <div className="pr-detail-actions">
-          <button type="button" className="pr-detail-primary-btn">
-            <FileText size={11} />
-            Initiate RFQ
-          </button>
+          {matchedRfq ? (
+            <button
+              type="button"
+              className="pr-detail-primary-btn"
+              onClick={() => navigate(`/rfqs/${matchedRfq.cr49f_rfqnumber || matchedRfq.cr49f_requestforqoutationid}`)}
+              title="View the RFQ linked to this Purchase Request"
+            >
+              <FileText size={11} />
+              View Linked RFQ ({matchedRfq.cr49f_rfqnumber || "RFQ"})
+            </button>
+          ) : isPrApproved ? (
+            <button
+              type="button"
+              className="pr-detail-primary-btn"
+              onClick={() => setIsCreateRfqModalOpen(true)}
+              title="Initiate RFQ for this approved PR"
+            >
+              <FileText size={11} />
+              Initiate RFQ
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -623,27 +1293,31 @@ export default function PurchaseRequestDetail() {
         </div>
 
         <div className="approval-timeline">
-          {visibleApprovalSteps.map((step, index) => (
-            <button
-              className={`approval-step ${activeMilestone?.step === step.step ? "selected" : ""}`}
-              key={step.step}
-              type="button"
-              aria-label={`${step.title}, ${step.status}. View milestone tasks`}
-              aria-pressed={activeMilestone?.step === step.step}
-              aria-expanded={subTasksOpen && activeMilestone?.step === step.step}
-              onClick={() => toggleMilestone(step)}
-            >
-              <div className={`approval-step-line ${step.status === "Completed" ? "done" : ""}`} />
-              <div className={`approval-step-circle ${stepCircleClass(step.status)}`}>{index + 1}</div>
+          {visibleApprovalSteps.map((step, index) => {
+            const isPreviousCompleted = index > 0 && visibleApprovalSteps[index - 1].status === "Completed";
+            const displayStatus = step.status === "Current" ? "In Progress" : (step.status === "Skipped" ? "Not Applicable" : step.status);
+            return (
+              <button
+                className={`approval-step ${activeMilestone?.step === step.step ? "selected" : ""}`}
+                key={step.step}
+                type="button"
+                aria-label={`${step.title}, ${displayStatus}. View milestone tasks`}
+                aria-pressed={activeMilestone?.step === step.step}
+                aria-expanded={subTasksOpen && activeMilestone?.step === step.step}
+                onClick={() => toggleMilestone(step)}
+              >
+                <div className={`approval-step-line ${isPreviousCompleted ? "done" : ""}`} />
+                <div className={`approval-step-circle ${stepCircleClass(step.status)}`}>{index + 1}</div>
 
-              <div className="approval-step-label">
-                <strong>{step.title}</strong>
-                <span className={`approval-step-status ${step.status.toLowerCase().replace(" ", "-")}`}>
-                  {step.status === "Skipped" ? "Not Applicable" : step.status}
-                </span>
-              </div>
-            </button>
-          ))}
+                <div className="approval-step-label">
+                  <strong>{step.title}</strong>
+                  <span className={`approval-step-status ${displayStatus.toLowerCase().replace(/\s+/g, "-")}`}>
+                    {displayStatus}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -656,17 +1330,14 @@ export default function PurchaseRequestDetail() {
               </div>
               <div className="pr-detail-card-title">
                 <h2>{activeMilestone.title} - Sub Tasks</h2>
-                <p>
-                  {activeMilestone.date ? `Milestone activity on ${activeMilestone.date}` : `Milestone status: ${activeMilestone.status}`}
-                  {activeMilestone.by ? ` · ${activeMilestone.by}` : (record.createdBy ? ` · ${record.createdBy}` : "")}
-                </p>
+                <p>{milestoneSubtitle}</p>
               </div>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-              <span className={`pr-detail-status-tag ${isMilestoneCompleted ? "completed" : ""}`}>
+              <span className={`pr-detail-status-tag ${milestoneTagClass}`}>
                 <ShieldCheck size={9} />
-                {isMilestoneCompleted ? "Completed" : (activeMilestone.status === "Skipped" ? "Not Applicable" : activeMilestone.status)}
+                {milestoneDisplayStatus}
               </span>
 
               <button
@@ -695,56 +1366,21 @@ export default function PurchaseRequestDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {isPrCreationMilestone && approvalTasks.length > 0 ? (
-                    approvalTasks.map((task, index) => {
-                      const approvalStatus = getTaskApprovalStatusLabel(task);
-                      const isApproved = approvalStatus === "Approved";
-                      const isRejected = approvalStatus === "Rejected";
-                      const isPending = approvalStatus === "Pending";
-                      const isActive = task.statecode === 0 && isPending;
-
-                      const statusLabel = isApproved
-                        ? "Completed"
-                        : isRejected
-                        ? "Rejected"
-                        : isActive
-                        ? "In Progress"
-                        : "Pending";
-                      const statusClass = isApproved
-                        ? "completed"
-                        : isRejected
-                        ? "rejected"
-                        : isActive
-                        ? "in-progress"
-                        : "pending";
-
-                      const roleName = task.cr49f_role
-                        ? (Cr49f_approvaltasksescr49f_role[task.cr49f_role] || "Approver")
-                        : "Approver";
-                      const initials = getInitials(roleName);
-                      const parsedComments = parseTaskComments(task.cr49f_comments ?? (task as unknown as Record<string, unknown>).cr49f_Comments);
-                      const latestComment = parsedComments.length > 0 ? parsedComments[parsedComments.length - 1].text : null;
-                      const remarks = latestComment || (isApproved
-                        ? "Completed for this approval stage"
-                        : isRejected
-                        ? "Task rejected"
-                        : isActive
-                        ? "Awaiting approval decision"
-                        : "Pending previous task approval");
-
-                      const completedOn = isApproved
-                        ? (task.modifiedon ? toUsDate(task.modifiedon) : (record.date || "—"))
-                        : "—";
-
-                      return (
-                        <tr
-                          key={task.cr49f_approvaltasksid || index}
-                          style={{ cursor: "pointer" }}
-                          onClick={() => navigate(`/tasks/${task.cr49f_approvaltasksid}`)}
-                          title="Click to view task details, approve/reject, or add comment"
-                        >
-                          <td>{task.cr49f_sequence || index + 1}</td>
-                          <td>
+                  {activeMilestoneTasks.length > 0 ? (
+                    activeMilestoneTasks.map((task) => (
+                      <tr
+                        key={task.id}
+                        style={{ cursor: task.approvalTaskId ? "pointer" : "default" }}
+                        onClick={() => {
+                          if (task.approvalTaskId) {
+                            navigate(`/tasks/${task.approvalTaskId}`);
+                          }
+                        }}
+                        title={task.approvalTaskId ? "Click to view task details, approve/reject, or add comment" : undefined}
+                      >
+                        <td>{task.sequence}</td>
+                        <td>
+                          {task.approvalTaskId ? (
                             <span
                               style={{
                                 fontWeight: 600,
@@ -754,41 +1390,35 @@ export default function PurchaseRequestDetail() {
                                 cursor: "pointer",
                               }}
                             >
-                              {task.cr49f_task}
+                              {task.task}
                             </span>
-                          </td>
-                          <td>
-                            <span className={`subtask-status ${statusClass}`}>{statusLabel}</span>
-                          </td>
-                          <td>
-                            <div className="pr-detail-table-avatar">
-                              <span>{initials}</span>
-                              {roleName}
-                            </div>
-                          </td>
-                          <td>{remarks}</td>
-                          <td>{completedOn}</td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    subTasks.map((task, index) => (
-                      <tr key={task.id}>
-                        <td>{index + 1}</td>
-                        <td>{task.task}</td>
+                          ) : (
+                            task.task
+                          )}
+                        </td>
                         <td>
-                          <span className={`subtask-status ${subtaskStatusClass(task.status)}`}>{task.status}</span>
+                          <span className={`subtask-status ${task.statusClass}`}>{task.status}</span>
                         </td>
                         <td>
                           <div className="pr-detail-table-avatar">
-                            <span>{getInitials(task.assignedTo)}</span>
+                            <span>{task.initials}</span>
                             {task.assignedTo}
                           </div>
                         </td>
                         <td>{task.remarks}</td>
-                        <td>{task.completedOn || "—"}</td>
+                        <td>{task.completedOn}</td>
                       </tr>
                     ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: "center", padding: "20px 16px", color: "var(--muted-foreground-hex)" }}>
+                        {isPoMilestone && !isPoCreated
+                          ? "Purchase Order has not been initiated yet. Tasks will appear once a PO is created."
+                          : isRfqMilestone && !isRfqCreated
+                          ? "Request for Quotation has not been initiated yet. Tasks will appear once an RFQ is created."
+                          : "No sub-tasks recorded for this milestone."}
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -1397,10 +2027,11 @@ export default function PurchaseRequestDetail() {
                 <div className="pr-summary-approval-list">
                   {historyEvents.length > 0 ? historyEvents.map((step, index) => {
                     const [actor, role] = (step.by ?? "").split("|").map((part) => part.trim());
+                    const stepStatusClass = step.status === "Current" ? "in-progress" : step.status.toLowerCase();
                     return (
                       <button
                         type="button"
-                        className={`pr-summary-approval-step ${step.status.toLowerCase()} ${activeMilestone?.step === step.step ? "selected" : ""}`}
+                        className={`pr-summary-approval-step ${stepStatusClass} ${activeMilestone?.step === step.step ? "selected" : ""}`}
                         key={step.step}
                         aria-label={`${step.title}, ${step.status}. View milestone tasks`}
                         aria-expanded={subTasksOpen && activeMilestone?.step === step.step}
@@ -1411,7 +2042,7 @@ export default function PurchaseRequestDetail() {
                         </span>
                         <span className="pr-summary-approval-copy">
                           <strong>{step.title}</strong>
-                          <span className={`pr-summary-approval-badge ${step.status.toLowerCase()}`}>
+                          <span className={`pr-summary-approval-badge ${stepStatusClass}`}>
                             {step.status === "Current" ? "In progress" : step.status}
                           </span>
                           {actor && <span><b>{actor}</b>{role && <>: <em>{role}</em></>}</span>}
@@ -1427,6 +2058,43 @@ export default function PurchaseRequestDetail() {
           </>
         )}
       </section>
+
+      {liveRecord && (
+        <CreateRFQModal
+          isOpen={isCreateRfqModalOpen}
+          onClose={() => setIsCreateRfqModalOpen(false)}
+          onCreated={async () => {
+            setIsCreateRfqModalOpen(false);
+            try {
+              const [rfqRes, posRes] = await Promise.allSettled([
+                Cr49f_requestforqoutationsService.getAll(),
+                getDynamicPurchaseOrders(),
+              ]);
+              if (rfqRes.status === "fulfilled" && rfqRes.value.success) {
+                setAllRfqs((rfqRes.value.data ?? []) as Cr49f_requestforqoutations[]);
+              }
+              if (posRes.status === "fulfilled") {
+                setAllOrders(posRes.value ?? []);
+              }
+              if (liveRecord.cr49f_purchaserequestid) {
+                await loadApprovalTasks(liveRecord.cr49f_purchaserequestid);
+              }
+            } catch (err) {
+              console.warn("Refresh after RFQ creation failed:", err);
+            }
+            setSelectedMilestone({ step: 2, title: "RFQ Initiated", status: "Current" });
+          }}
+          existingRfqs={allRfqs}
+          initialPurchaseRequestId={liveRecord.cr49f_purchaserequestid}
+          initialPurchaseRequest={{
+            cr49f_purchaserequestid: liveRecord.cr49f_purchaserequestid,
+            cr49f_prnumber: liveRecord.cr49f_prnumber || record.ref,
+            cr49f_prtitle: liveRecord.cr49f_prtitle || record.title,
+            cr49f_deliverylocation: liveRecord.cr49f_deliverylocation || record.deliveryAddress,
+          }}
+          isPurchaseRequestReadOnly={true}
+        />
+      )}
     </div>
   );
 }
