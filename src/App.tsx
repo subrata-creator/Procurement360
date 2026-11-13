@@ -111,6 +111,14 @@ const AppContent: React.FC = () => {
   const isSupplierRfqsRoute =
     location.pathname.startsWith("/supplier-rfqs") || isSupplierQuotationsRoute;
 
+  // Chatbot floating should only be visible in user portal (disabled for both admin and supplier)
+  const showChatbot =
+    !isRoleLoading &&
+    !isAdmin &&
+    !isSupplier &&
+    !isSupplierDashboardRoute &&
+    !isSupplierRfqsRoute;
+
   const routeNavigation = isSupplierDashboardRoute
     ? "Dashboard"
     : isSupplierQuotationsRoute
@@ -259,6 +267,13 @@ const AppContent: React.FC = () => {
       navigate("/users", { replace: true });
     }
   }, [isAdmin, location.pathname, navigate]);
+
+  // Ensure copilot is closed if role is Admin or Supplier
+  useEffect(() => {
+    if (isAdmin || isSupplier) {
+      setIsCopilotOpen(false);
+    }
+  }, [isAdmin, isSupplier]);
 
   // Reset scroll position to top when switching routes/tabs.
   useEffect(() => {
@@ -460,22 +475,26 @@ const AppContent: React.FC = () => {
       </div>
 
       {/* =====================================================
-          GLOBAL CHATBOT (Visible on all pages, draggable)
+          USER PORTAL CHATBOT (Disabled for supplier & admin)
       ===================================================== */}
-      <FloatingCopilotButton
-        isOpen={isCopilotOpen}
-        resetKey={location.pathname}
-        onOpen={() => {
-          setHasOpenedCopilot(true);
-          setIsCopilotOpen(true);
-        }}
-      />
+      {showChatbot && (
+        <>
+          <FloatingCopilotButton
+            isOpen={isCopilotOpen}
+            resetKey={location.pathname}
+            onOpen={() => {
+              setHasOpenedCopilot(true);
+              setIsCopilotOpen(true);
+            }}
+          />
 
-      <ProcurementCopilot
-        isOpen={isCopilotOpen}
-        mountFrame={hasOpenedCopilot}
-        onClose={() => setIsCopilotOpen(false)}
-      />
+          <ProcurementCopilot
+            isOpen={isCopilotOpen}
+            mountFrame={hasOpenedCopilot}
+            onClose={() => setIsCopilotOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 };

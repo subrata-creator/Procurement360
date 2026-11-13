@@ -51,7 +51,7 @@ const getPaymentTermsLabel = (terms?: number): string => {
   if (!terms) return "Net 30";
   const raw =
     Cr49f_supplierscr49f_paymentterms[
-      terms as keyof typeof Cr49f_supplierscr49f_paymentterms
+    terms as keyof typeof Cr49f_supplierscr49f_paymentterms
     ];
   return raw ? String(raw).replace(/_/g, " ") : "Net 30";
 };
@@ -334,15 +334,15 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
         rfqStatusFilter === "All"
           ? true
           : rfqStatusFilter === "Rewarded"
-          ? inv.status === "Rewarded" || inv.isRewarded
-          : rfqStatusFilter === "Not Rewarded"
-          ? inv.status === "Not Rewarded"
-          : rfqStatusFilter === "Pending"
-          ? inv.status !== "Rewarded" &&
-            !inv.isRewarded &&
-            inv.status !== "Not Rewarded" &&
-            (inv.status === "Invited" || inv.status === "Draft")
-          : inv.status === rfqStatusFilter;
+            ? inv.status === "Rewarded" || inv.isRewarded
+            : rfqStatusFilter === "Not Rewarded"
+              ? inv.status === "Not Rewarded"
+              : rfqStatusFilter === "Pending"
+                ? inv.status !== "Rewarded" &&
+                !inv.isRewarded &&
+                inv.status !== "Not Rewarded" &&
+                (inv.status === "Invited" || inv.status === "Draft")
+                : inv.status === rfqStatusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -502,13 +502,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 <ArrowRight size={14} />
               </button>
 
-              <button
-                type="button"
-                className="supplier-hero-btn-secondary"
-                onClick={() => setActiveTab("rfqs")}
-              >
-                Review later
-              </button>
+
             </div>
           </div>
 
@@ -890,10 +884,10 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                             <span>
                               {inv.submissionDeadline
                                 ? new Date(inv.submissionDeadline).toLocaleDateString("en-GB", {
-                                    day: "numeric",
-                                    month: "short",
-                                    year: "numeric",
-                                  })
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })
                                 : "Open"}
                             </span>
                             {remainingDays > 0 && (
@@ -906,13 +900,12 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
                         <td>
                           <span
-                            className={`supplier-modern-status-badge ${
-                              isRewarded
+                            className={`supplier-modern-status-badge ${isRewarded
                                 ? "rewarded"
                                 : isNotRewarded
-                                ? "not-rewarded"
-                                : inv.status.toLowerCase()
-                            }`}
+                                  ? "not-rewarded"
+                                  : inv.status.toLowerCase()
+                              }`}
                           >
                             {isRewarded ? (
                               <>
@@ -942,9 +935,9 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                           <strong className="supplier-table-quoted-val">
                             {inv.totalAmount && inv.totalAmount > 0
                               ? `₹${inv.totalAmount.toLocaleString("en-IN", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}`
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
                               : "—"}
                           </strong>
                         </td>
@@ -1142,13 +1135,13 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                   <span>
                     {selectedOpportunityRfq.submissionDeadline
                       ? new Date(selectedOpportunityRfq.submissionDeadline).toLocaleDateString(
-                          "en-GB",
-                          {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          }
-                        )
+                        "en-GB",
+                        {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        }
+                      )
                       : "Open"}
                   </span>
                 </div>
