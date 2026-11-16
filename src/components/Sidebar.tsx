@@ -1,7 +1,6 @@
 import React from "react";
 import {
   ClipboardList,
-  FileSignature,
   Home,
   PackageSearch,
   ReceiptText,
