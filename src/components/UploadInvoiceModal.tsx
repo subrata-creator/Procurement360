@@ -217,8 +217,6 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
     return Math.max(0, calculatedTotalAmount - paid);
   }, [calculatedTotalAmount, amountPaid]);
 
-  if (!isOpen) return null;
-
   // Handle payment status change
   const handlePaymentStatusChange = (val: Cr49f_invoice1scr49f_paymentstatus) => {
     setPaymentStatus(val);
@@ -449,6 +447,8 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="invoice-modal-overlay" onClick={onClose} role="dialog" aria-modal="true">

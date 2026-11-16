@@ -40,6 +40,7 @@ import {
   type OrderStatus,
 } from "../data/OrdersData";
 import { getDynamicPurchaseOrders } from "../Services/PurchaseOrderService";
+import { UploadInvoiceModal } from "../components/UploadInvoiceModal";
 
 import "../Styles/Styles.css";
 import "../Styles/PurchaseRequest.css";
@@ -215,6 +216,7 @@ const OrdersPage: FC = () => {
   const [orderList, setOrderList] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [_loadError, setLoadError] = useState<string | null>(null);
+  const [isUploadInvoiceModalOpen, setIsUploadInvoiceModalOpen] = useState<boolean>(false);
 
   const [search, setSearch] = useState("");
   const [supplierQuery, setSupplierQuery] = useState("All Suppliers");
@@ -565,6 +567,15 @@ const OrdersPage: FC = () => {
               className={isLoading ? "quotation-spin-icon" : ""}
             />
             <span>{isLoading ? "Syncing Dataverse..." : "Sync Live Orders"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsUploadInvoiceModalOpen(true)}
+            className="pr-btn-primary"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <Plus size={14} />
+            <span>Upload Invoice</span>
           </button>
         </div>
       </div>
@@ -1794,6 +1805,13 @@ const OrdersPage: FC = () => {
           </div>
         </div>
       )}
+
+      {/* UPLOAD INVOICE MODAL */}
+      <UploadInvoiceModal
+        isOpen={isUploadInvoiceModalOpen}
+        onClose={() => setIsUploadInvoiceModalOpen(false)}
+        onInvoiceCreated={() => void loadOrders()}
+      />
     </main>
   );
 };
