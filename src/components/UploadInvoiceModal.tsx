@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   X,
-  FileText,
   UploadCloud,
   CheckCircle2,
   AlertCircle,
@@ -13,22 +12,40 @@ import {
   FileCheck,
   Paperclip,
   Trash2,
+  Receipt,
+  CreditCard,
+  Percent,
+  PlusCircle,
+  ShoppingBag,
 } from "lucide-react";
 import type { OrderRecord } from "../data/OrdersData";
 import {
   Cr49f_invoice1sService,
 } from "../generated/services/Cr49f_invoice1sService";
+import {
+  Cr49f_purchaseordersService,
+} from "../generated/services/Cr49f_purchaseordersService";
 import type {
   Cr49f_invoice1s,
   Cr49f_invoice1scr49f_paymentstatus,
 } from "../generated/models/Cr49f_invoice1sModel";
+import type { Cr49f_purchaseorders } from "../generated/models/Cr49f_purchaseordersModel";
 import { cleanGuid } from "../Services/ApprovalWorkflowService";
 import "../Styles/UploadInvoiceModal.css";
+
+interface AvailablePO {
+  id: string;
+  poNumber: string;
+  supplierName: string;
+  amount: number;
+  prNumber?: string;
+  deliveryLocation?: string;
+}
 
 interface UploadInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  order: OrderRecord;
+  order?: OrderRecord | null;
   onInvoiceCreated?: (invoice: Cr49f_invoice1s) => void;
 }
 
@@ -40,6 +57,11 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Available PO list for when opened without a fixed order
+  const [availablePOs, setAvailablePOs] = useState<AvailablePO[]>([]);
+  const [isLoadingPOs, setIsLoadingPOs] = useState<boolean>(false);
+  const [selectedPoNumber, setSelectedPoNumber] = useState<string>("");
+
   // Form fields
   const [invoiceNumber, setInvoiceNumber] = useState<string>("");
   const [invoiceDate, setInvoiceDate] = useState<string>("");
@@ -49,6 +71,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
   const [discount, setDiscount] = useState<number>(0);
   const [additionalCharges, setAdditionalCharges] = useState<number>(0);
   const [paymentStatus, setPaymentStatus] = useState<Cr49f_invoice1scr49f_paymentstatus>(2); // 2: Not Paid
+  const [notes, setNotes] = useState<string>("");
 
   // File upload state
   const [attachedFile, setAttachedFile] = useState<{
@@ -63,9 +86,94 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Initialize form defaults when opened
+  // Load available POs when modal is open without preselected order
   useEffect(() => {
-    if (isOpen && order) {
+    if (!isOpen) return;
+
+    if (!order) {
+      let isMounted = true;
+      setIsLoadingPOs(true);
+
+      const fetchPOs = async () => {
+        try {
+          const res = await Cr49f_purchaseordersService.getAll();
+          const list: AvailablePO[] = [];
+
+          if (res.success && res.data) {
+            res.data.forEach((p: Cr49f_purchaseorders) => {
+              const num = p.cr49f_ponumber || `PO-${p.cr49f_purchaseorderid.slice(0, 8).toUpperCase()}`;
+              list.push({
+                id: cleanGuid(p.cr49f_purchaseorderid),
+                poNumber: num,
+                supplierName: (p as any).cr49f_suppliername || (p as any).cr49f_supplier || "Procurement Supplier",
+                amount: Number(p.cr49f_totalamount) || 0,
+                prNumber: (p as any).cr49f_prnumber || p.cr49f_potitle,
+                deliveryLocation: p.cr49f_deliveryaddress,
+              });
+            });
+          }
+
+          // Check custom local orders
+          try {
+            const raw = localStorage.getItem("procurement_custom_orders");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                parsed.forEach((po: any) => {
+                  if (po.refNo && !list.some((l) => l.poNumber === po.refNo)) {
+                    list.push({
+                      id: po.dataversePoId || po.refNo,
+                      poNumber: po.refNo,
+                      supplierName: po.supplier || po.rewardedSupplier?.name || "Verified Supplier",
+                      amount: Number(po.amount) || 0,
+                      prNumber: po.pr,
+                      deliveryLocation: po.deliveryAddress,
+                    });
+                  }
+                });
+              }
+            }
+          } catch {}
+
+          if (isMounted) {
+            setAvailablePOs(list);
+            if (list.length > 0 && !selectedPoNumber) {
+              setSelectedPoNumber(list[0].poNumber);
+              setTotalAmount(list[0].amount || 0);
+            }
+          }
+        } catch (err) {
+          console.warn("Could not load purchase orders for invoice form:", err);
+        } finally {
+          if (isMounted) setIsLoadingPOs(false);
+        }
+      };
+
+      void fetchPOs();
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [isOpen, order]);
+
+  // Active PO reference (from props or selection)
+  const activePO = useMemo(() => {
+    if (order) {
+      return {
+        id: (order as any).dataversePoId || cleanGuid(order.refNo),
+        poNumber: order.refNo,
+        supplierName: order.rewardedSupplier?.name || order.supplier || "Supplier",
+        amount: order.amount || 0,
+        prNumber: order.pr,
+        deliveryLocation: order.rewardedSupplier?.address || "Delivery Location",
+      };
+    }
+    return availablePOs.find((p) => p.poNumber === selectedPoNumber) || null;
+  }, [order, selectedPoNumber, availablePOs]);
+
+  // Initialize form defaults when opened or active PO changes
+  useEffect(() => {
+    if (isOpen) {
       const today = new Date();
       const todayIso = today.toISOString().split("T")[0];
       const due = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -75,17 +183,42 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
       setInvoiceNumber(`INV-${today.getFullYear()}-${randomSuffix}`);
       setInvoiceDate(todayIso);
       setDueDate(dueIso);
-      setTotalAmount(order.amount || 0);
+      setTotalAmount(activePO?.amount || 0);
       setAmountPaid(0);
       setDiscount(0);
       setAdditionalCharges(0);
       setPaymentStatus(2); // Not Paid
+      setNotes("");
       setAttachedFile(null);
       setErrorMessage(null);
       setSuccessMessage(null);
       setIsSubmitting(false);
     }
-  }, [isOpen, order]);
+  }, [isOpen, activePO?.poNumber]);
+
+  // Handle PO selection change when order is not provided
+  const handlePOSelectChange = (poNum: string) => {
+    setSelectedPoNumber(poNum);
+    const matched = availablePOs.find((p) => p.poNumber === poNum);
+    if (matched) {
+      setTotalAmount(matched.amount || 0);
+      setAmountPaid(0);
+    }
+  };
+
+  // Calculated net total payable: (Total - Discount + Additional Charges)
+  const calculatedNetAmount = useMemo(() => {
+    const base = Number(totalAmount) || 0;
+    const disc = Number(discount) || 0;
+    const addl = Number(additionalCharges) || 0;
+    return Math.max(0, base - disc + addl);
+  }, [totalAmount, discount, additionalCharges]);
+
+  // Remaining balance
+  const remainingBalance = useMemo(() => {
+    const paid = Number(amountPaid) || 0;
+    return Math.max(0, calculatedNetAmount - paid);
+  }, [calculatedNetAmount, amountPaid]);
 
   if (!isOpen) return null;
 
@@ -94,7 +227,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
     setPaymentStatus(val);
     if (val === 1) {
       // Paid in full
-      setAmountPaid(totalAmount);
+      setAmountPaid(calculatedNetAmount);
     } else if (val === 2) {
       // Not Paid
       setAmountPaid(0);
@@ -152,13 +285,19 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
     }
   };
 
-  // Form submission to Dataverse cr49f_invoice1s
+  // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
+    const poRefToUse = activePO?.poNumber || order?.refNo || selectedPoNumber;
+    if (!poRefToUse) {
+      setErrorMessage("Please select an associated Purchase Order.");
+      return;
+    }
+
     if (!invoiceNumber.trim()) {
-      setErrorMessage("Please enter an Invoice Number.");
+      setErrorMessage("Please enter a valid Invoice Number.");
       return;
     }
 
@@ -180,15 +319,14 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      // 1. Resolve Dataverse PO ID if available
-      const rawPoId = (order as any).dataversePoId || cleanGuid(order.refNo);
+      const rawPoId = activePO?.id || cleanGuid(poRefToUse);
       const isRealGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawPoId);
 
       const payload: any = {
         cr49f_invoicenumber: invoiceNumber.trim(),
         cr49f_invoicedate: invoiceDate,
         cr49f_duedate: dueDate,
-        cr49f_totalamount: Number(totalAmount) || 0,
+        cr49f_totalamount: Number(calculatedNetAmount) || Number(totalAmount) || 0,
         cr49f_amountpaid: Number(amountPaid) || 0,
         cr49f_discount: Number(discount) || 0,
         cr49f_additionalcharges: Number(additionalCharges) || 0,
@@ -210,7 +348,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
           createdInvoice = res.data;
         }
       } catch (bindErr) {
-        // If Dataverse failed due to lookup binding, retry without @odata.bind
+        // If relationship binding failed, retry cleanly without @odata.bind
         if (payload["cr49f_AssociatedPO@odata.bind"]) {
           delete payload["cr49f_AssociatedPO@odata.bind"];
           const retryRes = await Cr49f_invoice1sService.create(payload);
@@ -222,13 +360,13 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
         }
       }
 
-      // If Dataverse was not connected or local mock fallback needed
+      // Structure final invoice object
       const finalInvoice: Cr49f_invoice1s = createdInvoice || {
         cr49f_invoice1id: `inv-${Date.now()}`,
         cr49f_invoicenumber: invoiceNumber.trim(),
         cr49f_invoicedate: invoiceDate,
         cr49f_duedate: dueDate,
-        cr49f_totalamount: Number(totalAmount),
+        cr49f_totalamount: Number(calculatedNetAmount),
         cr49f_amountpaid: Number(amountPaid),
         cr49f_discount: Number(discount),
         cr49f_additionalcharges: Number(additionalCharges),
@@ -236,42 +374,45 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
         cr49f_paymentstatusname:
           paymentStatus === 1 ? "Paid" : paymentStatus === 3 ? "Partially Paid" : paymentStatus === 4 ? "On Hold" : "Not Paid",
         cr49f_invoiceattachment: attachedFile?.name || "",
-        _cr49f_associatedpo_value: rawPoId || order.refNo,
+        _cr49f_associatedpo_value: rawPoId || poRefToUse,
         statecode: 0,
         statuscode: 1,
         ownerid: "system",
         createdon: new Date().toISOString(),
       };
 
-      // 2. Persist in local storage fallback keyed by PO reference
+      // Persist to local storage for offline and instant synchronization
       try {
-        const storageKey = `procurement_custom_invoices_${order.refNo}`;
+        const storageKey = `procurement_custom_invoices_${poRefToUse}`;
         const existingRaw = localStorage.getItem(storageKey);
         const existingList = existingRaw ? JSON.parse(existingRaw) : [];
         const updatedList = [
           {
             ...finalInvoice,
             attachmentPreview: attachedFile?.dataUrl || null,
+            notes,
           },
           ...existingList,
         ];
         localStorage.setItem(storageKey, JSON.stringify(updatedList));
 
-        // Also update master list
+        // Master global invoices list
         const masterKey = "procurement_all_invoices";
         const masterRaw = localStorage.getItem(masterKey);
         const masterList = masterRaw ? JSON.parse(masterRaw) : [];
-        masterList.unshift({
+        const itemToStore = {
           ...finalInvoice,
-          poRef: order.refNo,
-          supplierName: order.rewardedSupplier.name || order.supplier,
-        });
-        localStorage.setItem(masterKey, JSON.stringify(masterList));
+          poRef: poRefToUse,
+          supplierName: activePO?.supplierName || "Verified Supplier",
+          notes,
+        };
+        const dedupedMaster = [itemToStore, ...masterList.filter((m: any) => m.cr49f_invoicenumber !== finalInvoice.cr49f_invoicenumber)];
+        localStorage.setItem(masterKey, JSON.stringify(dedupedMaster));
       } catch (storeErr) {
-        console.warn("Could not save invoice to localStorage:", storeErr);
+        console.warn("Could not persist invoice to local storage:", storeErr);
       }
 
-      setSuccessMessage(`Invoice ${invoiceNumber} created and linked to ${order.refNo} successfully!`);
+      setSuccessMessage(`Invoice ${invoiceNumber} created and linked to ${poRefToUse} successfully!`);
 
       if (onInvoiceCreated) {
         onInvoiceCreated(finalInvoice);
@@ -281,8 +422,8 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
         onClose();
       }, 900);
     } catch (err: any) {
-      console.error("Error creating invoice:", err);
-      const msg = err?.message || "Failed to create invoice in Dataverse cr49f_invoice1. Please try again.";
+      console.error("Error saving invoice:", err);
+      const msg = err?.message || "Failed to save invoice. Please check the details and try again.";
       setErrorMessage(msg);
     } finally {
       setIsSubmitting(false);
@@ -302,13 +443,14 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
         <header className="invoice-modal-header">
           <div className="invoice-modal-header-left">
             <div className="invoice-modal-icon-badge">
-              <FileText size={20} />
+              <Receipt size={20} />
             </div>
             <div>
               <h2 className="invoice-modal-title">Upload Supplier Invoice</h2>
               <p className="invoice-modal-subtitle">
-                Record invoice in Dataverse <code className="invoice-table-code">cr49f_invoice1</code> for PO{" "}
-                <strong>{order.refNo}</strong>
+                {activePO
+                  ? `Record and submit billing invoice for Purchase Order ${activePO.poNumber}`
+                  : "Record and submit billing invoice against an approved purchase order"}
               </p>
             </div>
           </div>
@@ -322,30 +464,68 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
           </button>
         </header>
 
-        {/* PO CONTEXT BANNER */}
-        <div className="invoice-po-banner">
-          <div className="invoice-po-banner-item">
-            <span className="invoice-banner-label">Purchase Order</span>
-            <strong className="invoice-banner-value">{order.refNo}</strong>
+        {/* PO SELECTION / SUMMARY BANNER */}
+        {!order ? (
+          <div className="invoice-po-select-banner">
+            <div className="invoice-po-select-row">
+              <div className="invoice-po-select-field">
+                <label htmlFor="select-po-id" className="invoice-banner-label">
+                  Select Associated Purchase Order <span className="required">*</span>
+                </label>
+                <div className="invoice-input-wrapper">
+                  <ShoppingBag size={15} className="invoice-input-icon" />
+                  <select
+                    id="select-po-id"
+                    className="invoice-select-input"
+                    value={selectedPoNumber}
+                    onChange={(e) => handlePOSelectChange(e.target.value)}
+                    disabled={isLoadingPOs}
+                  >
+                    {availablePOs.length === 0 ? (
+                      <option value="">{isLoadingPOs ? "Loading purchase orders..." : "No purchase orders found"}</option>
+                    ) : (
+                      availablePOs.map((p) => (
+                        <option key={p.poNumber} value={p.poNumber}>
+                          {p.poNumber} — {p.supplierName} (${Number(p.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
+              {activePO && (
+                <div className="invoice-po-select-meta">
+                  <span className="invoice-banner-label">Vendor</span>
+                  <strong>{activePO.supplierName}</strong>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="invoice-po-banner-item">
-            <span className="invoice-banner-label">Supplier / Vendor</span>
-            <strong className="invoice-banner-value">
-              <Building size={13} style={{ marginRight: 4, display: "inline" }} />
-              {order.rewardedSupplier.name || order.supplier}
-            </strong>
+        ) : (
+          <div className="invoice-po-banner">
+            <div className="invoice-po-banner-item">
+              <span className="invoice-banner-label">Purchase Order</span>
+              <strong className="invoice-banner-value">{order.refNo}</strong>
+            </div>
+            <div className="invoice-po-banner-item">
+              <span className="invoice-banner-label">Supplier / Vendor</span>
+              <strong className="invoice-banner-value">
+                <Building size={13} style={{ marginRight: 4, display: "inline" }} />
+                {order.rewardedSupplier?.name || order.supplier}
+              </strong>
+            </div>
+            <div className="invoice-po-banner-item">
+              <span className="invoice-banner-label">Order Total</span>
+              <strong className="invoice-banner-value highlight">
+                ${Number(order.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </strong>
+            </div>
+            <div className="invoice-po-banner-item">
+              <span className="invoice-banner-label">Associated PR</span>
+              <strong className="invoice-banner-value">{order.pr || "N/A"}</strong>
+            </div>
           </div>
-          <div className="invoice-po-banner-item">
-            <span className="invoice-banner-label">Order Total Amount</span>
-            <strong className="invoice-banner-value highlight">
-              ${Number(order.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-            </strong>
-          </div>
-          <div className="invoice-po-banner-item">
-            <span className="invoice-banner-label">Associated PR</span>
-            <strong className="invoice-banner-value">{order.pr || "N/A"}</strong>
-          </div>
-        </div>
+        )}
 
         {/* NOTIFICATIONS */}
         {errorMessage && (
@@ -368,7 +548,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
             {/* ROW 1: Invoice Number & Date */}
             <div className="invoice-form-group">
               <label htmlFor="inv-number" className="invoice-field-label">
-                Invoice Number <span className="required">*</span>
+                Invoice Reference Number <span className="required">*</span>
               </label>
               <div className="invoice-input-wrapper">
                 <Tag size={15} className="invoice-input-icon" />
@@ -419,31 +599,34 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                   required
                 />
               </div>
-              <span className="invoice-field-hint">Defaults to Net 30 terms</span>
+              <span className="invoice-field-hint">Net 30 days from invoice issue date</span>
             </div>
 
             <div className="invoice-form-group">
               <label htmlFor="inv-status" className="invoice-field-label">
                 Payment Status <span className="required">*</span>
               </label>
-              <select
-                id="inv-status"
-                className="invoice-select-input"
-                value={paymentStatus}
-                onChange={(e) => handlePaymentStatusChange(Number(e.target.value) as Cr49f_invoice1scr49f_paymentstatus)}
-              >
-                <option value={2}>Not Paid (Default)</option>
-                <option value={1}>Paid (Settled in full)</option>
-                <option value={3}>Partially Paid</option>
-                <option value={4}>On Hold (Verification pending)</option>
-              </select>
-              <span className="invoice-field-hint">Current settlement status in Dataverse</span>
+              <div className="invoice-input-wrapper">
+                <CreditCard size={15} className="invoice-input-icon" />
+                <select
+                  id="inv-status"
+                  className="invoice-select-input"
+                  value={paymentStatus}
+                  onChange={(e) => handlePaymentStatusChange(Number(e.target.value) as Cr49f_invoice1scr49f_paymentstatus)}
+                >
+                  <option value={2}>Not Paid (Default)</option>
+                  <option value={1}>Paid (Settled in full)</option>
+                  <option value={3}>Partially Paid</option>
+                  <option value={4}>On Hold (Verification pending)</option>
+                </select>
+              </div>
+              <span className="invoice-field-hint">Current payment settlement status</span>
             </div>
 
-            {/* ROW 3: Total Amount & Amount Paid */}
+            {/* ROW 3: Base Amount & Amount Paid */}
             <div className="invoice-form-group">
               <label htmlFor="inv-total" className="invoice-field-label">
-                Total Invoice Amount ($) <span className="required">*</span>
+                Base Subtotal Amount ($) <span className="required">*</span>
               </label>
               <div className="invoice-input-wrapper">
                 <DollarSign size={15} className="invoice-input-icon" />
@@ -458,12 +641,14 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                   required
                 />
               </div>
-              <span className="invoice-field-hint">Matches PO total amount: ${order.amount}</span>
+              <span className="invoice-field-hint">
+                {activePO ? `Purchase Order amount: $${activePO.amount.toLocaleString()}` : "Invoice subtotal before adjustments"}
+              </span>
             </div>
 
             <div className="invoice-form-group">
               <label htmlFor="inv-amount-paid" className="invoice-field-label">
-                Amount Paid ($)
+                Amount Paid to Date ($)
               </label>
               <div className="invoice-input-wrapper">
                 <DollarSign size={15} className="invoice-input-icon" />
@@ -478,17 +663,17 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                 />
               </div>
               <span className="invoice-field-hint">
-                Remaining: ${(Math.max(0, totalAmount - amountPaid)).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                Remaining Balance: <strong>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
               </span>
             </div>
 
             {/* ROW 4: Discount & Additional Charges */}
             <div className="invoice-form-group">
               <label htmlFor="inv-discount" className="invoice-field-label">
-                Discount ($)
+                Early Payment / Contract Discount ($)
               </label>
               <div className="invoice-input-wrapper">
-                <DollarSign size={15} className="invoice-input-icon" />
+                <Percent size={15} className="invoice-input-icon" />
                 <input
                   id="inv-discount"
                   type="number"
@@ -500,15 +685,15 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                   placeholder="0.00"
                 />
               </div>
-              <span className="invoice-field-hint">Contractual or prompt payment discounts</span>
+              <span className="invoice-field-hint">Volume, prompt, or contract discounts deducted</span>
             </div>
 
             <div className="invoice-form-group">
               <label htmlFor="inv-additional" className="invoice-field-label">
-                Additional Charges ($)
+                Freight &amp; Additional Charges ($)
               </label>
               <div className="invoice-input-wrapper">
-                <DollarSign size={15} className="invoice-input-icon" />
+                <PlusCircle size={15} className="invoice-input-icon" />
                 <input
                   id="inv-additional"
                   type="number"
@@ -520,14 +705,35 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                   placeholder="0.00"
                 />
               </div>
-              <span className="invoice-field-hint">Shipping, taxes, or freight surcharges</span>
+              <span className="invoice-field-hint">Shipping, packaging, or handling surcharges</span>
+            </div>
+          </div>
+
+          {/* FINANCIAL SUMMARY CARD */}
+          <div className="invoice-financial-summary-card">
+            <div className="invoice-financial-summary-header">
+              <span>Financial Calculation</span>
+              <strong>
+                Net Payable: ${calculatedNetAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </strong>
+            </div>
+            <div className="invoice-financial-summary-formula">
+              <span>Subtotal (${Number(totalAmount || 0).toLocaleString()})</span>
+              <span>-</span>
+              <span>Discount (${Number(discount || 0).toLocaleString()})</span>
+              <span>+</span>
+              <span>Charges (${Number(additionalCharges || 0).toLocaleString()})</span>
+              <span>=</span>
+              <strong className="invoice-net-highlight">
+                ${calculatedNetAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </strong>
             </div>
           </div>
 
           {/* FILE ATTACHMENT DROPZONE */}
           <div className="invoice-dropzone-section">
             <label className="invoice-field-label">
-              Invoice Document Attachment <span className="optional">(PDF, PNG, JPG)</span>
+              Invoice Attachment <span className="optional">(PDF, PNG, JPEG up to 10MB)</span>
             </label>
 
             <input
@@ -547,12 +753,12 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                 onClick={() => fileInputRef.current?.click()}
               >
                 <div className="invoice-dropzone-icon">
-                  <UploadCloud size={28} />
+                  <UploadCloud size={26} />
                 </div>
                 <div className="invoice-dropzone-text">
-                  <strong>Click to upload</strong> or drag and drop your invoice file here
+                  <strong>Click to upload file</strong> or drag and drop invoice copy
                 </div>
-                <span className="invoice-dropzone-sub">PDF, PNG, JPEG up to 10MB</span>
+                <span className="invoice-dropzone-sub">Official invoice scan or digital PDF document</span>
               </div>
             ) : (
               <div className="invoice-attached-file-card">
@@ -569,7 +775,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                   type="button"
                   className="invoice-remove-file-btn"
                   onClick={handleRemoveFile}
-                  title="Remove file"
+                  title="Remove attached file"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -595,7 +801,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
               {isSubmitting ? (
                 <>
                   <Loader2 size={15} className="invoice-spin" />
-                  Saving to Dataverse...
+                  Saving invoice...
                 </>
               ) : (
                 <>

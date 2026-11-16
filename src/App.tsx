@@ -30,6 +30,7 @@ import SupplierSummary from "./Pages/SupplierSummary";
 import SupplierDashboard from "./Pages/Supplier/SupplierDashboard";
 import SupplierRfqsPage from "./Pages/Supplier/SupplierRfqsPage";
 import SupplierRfqResponsePage from "./Pages/Supplier/SupplierRfqResponsePage";
+import InvoicesOverviewPage from "./Pages/InvoicesOverviewPage";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
@@ -96,6 +97,7 @@ const AppContent: React.FC = () => {
   const isForecastRoute = location.pathname.startsWith("/rfq-forecast");
   const isRfqRoute = location.pathname.startsWith("/rfqs");
   const isOrdersRoute = location.pathname.startsWith("/orders");
+  const isInvoicesRoute = location.pathname.startsWith("/invoices");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
 
   const isRoleLoading = loggedInUser.userRole === "Loading...";
@@ -134,7 +136,9 @@ const AppContent: React.FC = () => {
         ? "RFQs"
         : isOrdersRoute
           ? "Orders"
-          : undefined;
+          : isInvoicesRoute
+            ? "Invoices"
+            : undefined;
 
   const activeNavigation =
     routeNavigation ?? (isAdmin ? "Users" : fallbackNavigation);
@@ -308,6 +312,8 @@ const AppContent: React.FC = () => {
       navigate("/products-services");
     } else if (item === "Orders") {
       navigate("/orders");
+    } else if (item === "Invoices") {
+      navigate("/invoices");
     } else {
       navigate(isAdmin ? "/users" : "/");
     }
@@ -446,6 +452,10 @@ const AppContent: React.FC = () => {
                 path="/orders/:ref"
                 element={<OrderDetail />}
               />
+            </Routes>
+          ) : isInvoicesRoute ? (
+            <Routes>
+              <Route path="/invoices" element={<InvoicesOverviewPage />} />
             </Routes>
           ) : isTaskRoute ? (
             <Routes>

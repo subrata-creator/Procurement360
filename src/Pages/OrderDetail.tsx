@@ -187,7 +187,7 @@ const OrderDetail: FC = () => {
           style={{ color: "#2563eb", marginBottom: "16px" }}
         />
         <h2>Loading Purchase Order...</h2>
-        <p>Fetching purchase order and line items from Dataverse cr49f_purchaseorders...</p>
+        <p>Fetching purchase order and line item details...</p>
       </main>
     );
   }
@@ -519,7 +519,7 @@ const OrderDetail: FC = () => {
           {isLoadingInvoices ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: "10px", color: "var(--muted-foreground-hex)" }}>
               <Loader2 size={20} className="quotation-spin-icon" />
-              <span>Loading invoices from Dataverse cr49f_invoice1...</span>
+              <span>Loading invoices...</span>
             </div>
           ) : invoices.length === 0 ? (
             <div className="order-invoices-empty">
@@ -528,7 +528,7 @@ const OrderDetail: FC = () => {
               </div>
               <h3>No Invoices Uploaded Yet</h3>
               <p>
-                No billing invoices have been recorded in <code>cr49f_invoice1</code> for purchase order {record.refNo}.
+                No billing invoices have been recorded for purchase order {record.refNo}.
                 Upload the supplier's commercial invoice to track payment milestones and attachments.
               </p>
               <button
