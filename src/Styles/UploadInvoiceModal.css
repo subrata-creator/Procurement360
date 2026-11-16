@@ -363,7 +363,7 @@
 }
 
 .invoice-select-input {
-  padding-left: 12px;
+  padding: 0 30px 0 36px;
   cursor: pointer;
 }
 

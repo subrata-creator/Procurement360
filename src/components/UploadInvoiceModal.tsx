@@ -16,7 +16,6 @@ import {
   Percent,
   PlusCircle,
   ShoppingBag,
-  Calculator,
 } from "lucide-react";
 import type { OrderRecord } from "../data/OrdersData";
 import {
@@ -232,6 +231,26 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
     }
   };
 
+  // Handle amount paid change and synchronize payment status
+  const handleAmountPaidChange = (val: number) => {
+    const num = isNaN(val) ? 0 : Math.max(0, val);
+    setAmountPaid(num);
+    if (num <= 0) {
+      setPaymentStatus(2); // Not Paid
+    } else if (calculatedTotalAmount > 0 && num >= calculatedTotalAmount) {
+      setPaymentStatus(1); // Paid
+    } else {
+      setPaymentStatus(3); // Partially Paid
+    }
+  };
+
+  // Keep amountPaid synchronized if marked Paid in full
+  useEffect(() => {
+    if (paymentStatus === 1) {
+      setAmountPaid(calculatedTotalAmount);
+    }
+  }, [paymentStatus, calculatedTotalAmount]);
+
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -443,9 +462,11 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <h2 className="invoice-modal-title">Upload Supplier Invoice</h2>
-                <span className="invoice-auto-ref-pill">
-                  Ref: {invoiceNumber} (Auto-generated)
-                </span>
+                {invoiceNumber && (
+                  <span className="invoice-auto-ref-pill">
+                    Ref: {invoiceNumber}
+                  </span>
+                )}
               </div>
               <p className="invoice-modal-subtitle">
                 {activePO
@@ -618,10 +639,10 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                   value={paymentStatus}
                   onChange={(e) => handlePaymentStatusChange(Number(e.target.value) as Cr49f_invoice1scr49f_paymentstatus)}
                 >
-                  <option value={2}>Not Paid (Default)</option>
-                  <option value={1}>Paid (Settled in full)</option>
+                  <option value={2}>Not Paid</option>
                   <option value={3}>Partially Paid</option>
-                  <option value={4}>On Hold (Verification pending)</option>
+                  <option value={1}>Paid</option>
+                  <option value={4}>On Hold</option>
                 </select>
               </div>
               <span className="invoice-field-hint">Current payment settlement status</span>
@@ -668,27 +689,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
               <span className="invoice-field-hint">Shipping, packaging, freight, or handling surcharges added</span>
             </div>
 
-            {/* ROW 4: Total Amount (Auto-Calculated) & Amount Paid */}
-            <div className="invoice-form-group">
-              <label htmlFor="inv-total" className="invoice-field-label">
-                Total Amount ($) <span className="invoice-field-badge">Auto-Calculated</span>
-              </label>
-              <div className="invoice-input-wrapper">
-                <Calculator size={15} className="invoice-input-icon" />
-                <input
-                  id="inv-total"
-                  type="text"
-                  className="invoice-text-input invoice-calculated-input"
-                  value={`$${calculatedTotalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  readOnly
-                  disabled
-                />
-              </div>
-              <span className="invoice-field-hint">
-                PO Total (${Number(poAmount || 0).toLocaleString()}) - Discount (${Number(discount || 0).toLocaleString()}) + Charges (${Number(additionalCharges || 0).toLocaleString()})
-              </span>
-            </div>
-
+            {/* ROW 4: Amount Paid to Date */}
             <div className="invoice-form-group">
               <label htmlFor="inv-amount-paid" className="invoice-field-label">
                 Amount Paid to Date ($)
@@ -702,12 +703,12 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                   min="0"
                   className="invoice-text-input"
                   value={amountPaid || ""}
-                  onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => handleAmountPaidChange(parseFloat(e.target.value) || 0)}
                   placeholder="0.00"
                 />
               </div>
               <span className="invoice-field-hint">
-                Remaining Balance: <strong>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+                Remaining Balance: <strong>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </span>
             </div>
           </div>
@@ -717,21 +718,21 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
             <div className="invoice-financial-summary-header">
               <span>Financial Calculation</span>
               <strong>
-                Total Amount: ${calculatedTotalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                Total Amount: ${calculatedTotalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </strong>
             </div>
             <div className="invoice-financial-summary-formula">
-              <span>PO Total (${Number(poAmount || 0).toLocaleString()})</span>
+              <span>PO Total (${Number(poAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
               <span>-</span>
-              <span>Discount (${Number(discount || 0).toLocaleString()})</span>
+              <span>Discount (${Number(discount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
               <span>+</span>
-              <span>Additional Charges (${Number(additionalCharges || 0).toLocaleString()})</span>
+              <span>Additional Charges (${Number(additionalCharges || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
               <span>=</span>
               <strong className="invoice-net-highlight">
-                ${calculatedTotalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                ${calculatedTotalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </strong>
               <span style={{ marginLeft: "auto", fontSize: "11.5px" }}>
-                Remaining Balance: <strong style={{ color: remainingBalance > 0 ? "#d97706" : "#16a34a" }}>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+                Remaining Balance: <strong style={{ color: remainingBalance > 0 ? "#d97706" : "#16a34a" }}>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </span>
             </div>
           </div>
