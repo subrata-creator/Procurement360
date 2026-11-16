@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   Award,
@@ -36,6 +36,9 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
   defaultFilter = "All",
 }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlFilter = searchParams.get("filter") || defaultFilter;
+
   const [invitations, setInvitations] = useState<SupplierRfqInvitation[]>([]);
   const [suppliersList, setSuppliersList] = useState<Cr49f_suppliers[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<Cr49f_suppliers | null>(null);
@@ -43,7 +46,14 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>(defaultFilter);
+  const [statusFilter, setStatusFilter] = useState<string>(urlFilter);
+
+  useEffect(() => {
+    const filterFromUrl = searchParams.get("filter");
+    if (filterFromUrl) {
+      setStatusFilter(filterFromUrl);
+    }
+  }, [searchParams]);
 
   // 1. Resolve active supplier
   useEffect(() => {
@@ -137,13 +147,13 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
       if (!matchesSearch) return false;
 
       if (statusFilter === "Pending") {
-        return item.status === "Invited" && !item.isRewarded;
+        return item.status === "Invited" && !item.isRewarded && !(item.totalAmount && item.totalAmount > 0);
       }
       if (statusFilter === "Draft") {
-        return item.status === "Draft" && !item.isRewarded;
+        return item.status === "Draft" && !item.isRewarded && !(item.totalAmount && item.totalAmount > 0);
       }
       if (statusFilter === "Submitted") {
-        return item.status === "Submitted" && !item.isRewarded;
+        return (item.status === "Submitted" || (item.totalAmount && item.totalAmount > 0)) && !item.isRewarded && item.status !== "Rewarded";
       }
       if (statusFilter === "Rewarded") {
         return item.status === "Rewarded" || Boolean(item.isRewarded);
@@ -245,21 +255,21 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
             className={`supplier-filter-tab ${statusFilter === "Pending" ? "active" : ""}`}
             onClick={() => setStatusFilter("Pending")}
           >
-            Invited ({invitations.filter((i) => i.status === "Invited" && !i.isRewarded).length})
+            Invited ({invitations.filter((i) => i.status === "Invited" && !i.isRewarded && !(i.totalAmount && i.totalAmount > 0)).length})
           </button>
           <button
             type="button"
             className={`supplier-filter-tab ${statusFilter === "Draft" ? "active" : ""}`}
             onClick={() => setStatusFilter("Draft")}
           >
-            Drafts ({invitations.filter((i) => i.status === "Draft" && !i.isRewarded).length})
+            Drafts ({invitations.filter((i) => i.status === "Draft" && !i.isRewarded && !(i.totalAmount && i.totalAmount > 0)).length})
           </button>
           <button
             type="button"
             className={`supplier-filter-tab ${statusFilter === "Submitted" ? "active" : ""}`}
             onClick={() => setStatusFilter("Submitted")}
           >
-            Submitted ({invitations.filter((i) => i.status === "Submitted" && !i.isRewarded).length})
+            Submitted ({invitations.filter((i) => (i.status === "Submitted" || (i.totalAmount && i.totalAmount > 0)) && !i.isRewarded && i.status !== "Rewarded").length})
           </button>
           <button
             type="button"
@@ -371,7 +381,7 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
                     <button
                       type="button"
                       className={`supplier-btn-action ${
-                        inv.status === "Rewarded" || inv.isRewarded || inv.status === "Submitted" || inv.status === "Not Rewarded"
+                        inv.status === "Rewarded" || inv.isRewarded || inv.status === "Submitted" || (inv.totalAmount && inv.totalAmount > 0) || inv.status === "Not Rewarded"
                           ? ""
                           : "primary"
                       }`}
@@ -387,18 +397,11 @@ export const SupplierRfqsPage: React.FC<SupplierRfqsPageProps> = ({
                           <FileText size={12} />
                           View Details
                         </>
-                      ) : inv.status === "Submitted" ? (
-                        inv.isRfqApproved ? (
-                          <>
-                            <FileText size={12} />
-                            View Quotation
-                          </>
-                        ) : (
-                          <>
-                            <Clock size={12} />
-                            Submitted (In Review)
-                          </>
-                        )
+                      ) : inv.status === "Submitted" || (inv.totalAmount && inv.totalAmount > 0) ? (
+                        <>
+                          <FileText size={12} />
+                          View Quotation
+                        </>
                       ) : inv.status === "Draft" ? (
                         <>
                           <Clock size={12} />
