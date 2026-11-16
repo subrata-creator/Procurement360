@@ -349,6 +349,7 @@ function buildApprovalSteps(record: OrderRow, seed: number, timestamp: string): 
 }
 
 export interface OrderRecord extends OrderRow {
+  dataversePoId?: string;
   utilizedAmount: number;
   remainingAmount: number;
   startDate: string;

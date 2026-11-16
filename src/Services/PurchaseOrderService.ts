@@ -619,6 +619,7 @@ export async function getDynamicPurchaseOrderDetails(
 
       const record: OrderRecord = {
         ...baseRow,
+        dataversePoId: matchedGuid,
         utilizedAmount: baseRow.status === "Approved" ? baseRow.amount : 0,
         remainingAmount: baseRow.status === "Approved" ? 0 : baseRow.amount,
         startDate: formatUsDate(startDate),

@@ -6,6 +6,7 @@
 // Models
 export * as CommonModels from './models/CommonModels';
 export * as Cr49f_approvaltasksesModel from './models/Cr49f_approvaltasksesModel';
+export * as Cr49f_invoice1sModel from './models/Cr49f_invoice1sModel';
 export * as Cr49f_procurementapprovalcyclesModel from './models/Cr49f_procurementapprovalcyclesModel';
 export * as Cr49f_productsesModel from './models/Cr49f_productsesModel';
 export * as Cr49f_purchaseorderlineitemsModel from './models/Cr49f_purchaseorderlineitemsModel';
@@ -28,6 +29,7 @@ export * as SearchSupplierModel from './models/SearchSupplierModel';
 
 // Services
 export * from './services/Cr49f_approvaltasksesService';
+export * from './services/Cr49f_invoice1sService';
 export * from './services/Cr49f_procurementapprovalcyclesService';
 export * from './services/Cr49f_productsesService';
 export * from './services/Cr49f_purchaseorderlineitemsService';

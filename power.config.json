@@ -125,6 +125,11 @@
           "entitySetName": "cr49f_purchaseorderlineitems",
           "logicalName": "cr49f_purchaseorderlineitem",
           "isHidden": false
+        },
+        "invoices": {
+          "entitySetName": "cr49f_invoice1s",
+          "logicalName": "cr49f_invoice1",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

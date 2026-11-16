@@ -12,6 +12,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cr49f_invoice1s": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr49f_invoice1id",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr49f_procurementapprovalcycle": {
     "tableId": "",
     "version": "",
