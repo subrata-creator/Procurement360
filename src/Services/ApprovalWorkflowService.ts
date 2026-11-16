@@ -22,6 +22,21 @@ export const cleanGuid = (id?: string | null): string => {
   return match ? match[0] : str.replace(/[{}]/g, "");
 };
 
+export const isGuid = (val?: string | null): boolean => {
+  if (!val) return false;
+  const str = String(val).toLowerCase().trim().replace(/[{}]/g, "");
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(str) || /^[0-9a-f]{32}$/.test(str);
+};
+
+export const isValidSupplierCode = (code?: string | null): boolean => {
+  if (!code) return false;
+  const trimmed = String(code).trim();
+  if (!trimmed || isGuid(trimmed)) return false;
+  const lower = trimmed.toLowerCase();
+  if (["undefined", "null", "none", "n/a", "na", "[object object]"].includes(lower)) return false;
+  return true;
+};
+
 /**
  * Resolves a Dataverse record's creator display name from the `createdby` lookup
  * annotations (`_createdby_value@OData.Community.Display.V1.FormattedValue`) and

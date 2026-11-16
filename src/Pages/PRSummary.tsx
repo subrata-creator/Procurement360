@@ -4,20 +4,28 @@ import {
   ArrowLeft,
   Building2,
   CalendarDays,
+  Check,
+  CheckCircle2,
   ChevronUp,
   ClipboardList,
   Clock,
+  DollarSign,
+  ExternalLink,
   FileText,
   Flag,
   Loader2,
+  MessageSquare,
+  Package,
   Paperclip,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Tag,
   ThumbsDown,
   ThumbsUp,
   User,
+  Workflow,
   X,
 } from "lucide-react";
 
@@ -59,8 +67,6 @@ import {
 } from "../generated/models/Cr49f_approvaltasksesModel";
 
 import "../Styles/PRSummary.css";
-
-const TABS = ["Summary", "RFQs", "Associated Tasks", "Notes", "Attachments"];
 
 type LivePurchaseRequest = {
   cr49f_purchaserequestid: string;
@@ -1227,6 +1233,36 @@ export default function PurchaseRequestDetail() {
     }
   };
 
+  const calculatedGrandTotal = useMemo(() => {
+    if (liveRecord?.cr49f_totalamount != null && liveRecord.cr49f_totalamount > 0) {
+      return currencyFormatter.format(liveRecord.cr49f_totalamount);
+    }
+    const sum = lineItems.reduce((acc, item) => {
+      const numericVal =
+        parseFloat(item.totalAmount.replace(/[^0-9.-]+/g, "")) ||
+        item.quantity * (parseFloat(item.unitPrice.replace(/[^0-9.-]+/g, "")) || 0);
+      return acc + (isNaN(numericVal) ? 0 : numericVal);
+    }, 0);
+    return sum > 0 ? currencyFormatter.format(sum) : record?.totalAmount || "$0.00";
+  }, [liveRecord?.cr49f_totalamount, lineItems, record?.totalAmount]);
+
+  const totalItemQuantity = useMemo(() => {
+    return lineItems.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
+  }, [lineItems]);
+
+  const prApprovalStats = useMemo(() => {
+    if (approvalTasks.length === 0) {
+      const isDone = prCreationStatus === "Completed";
+      return { total: 4, approved: isDone ? 4 : 0, percent: isDone ? 100 : 25 };
+    }
+    const total = approvalTasks.length;
+    const approved = approvalTasks.filter(
+      (t) => getTaskApprovalStatusLabel(t) === "Approved"
+    ).length;
+    const percent = Math.round((approved / total) * 100);
+    return { total, approved, percent };
+  }, [approvalTasks, prCreationStatus]);
+
   const toggleMilestone = (step: ApprovalStep) => {
     if (subTasksOpen && activeMilestone?.step === step.step) {
       setSubTasksOpen(false);
@@ -1239,51 +1275,155 @@ export default function PurchaseRequestDetail() {
 
   return (
     <div className="pr-detail-page">
+      {/* HEADER SECTION */}
       <div className="pr-detail-heading">
         <div className="pr-detail-heading-left">
-          <button type="button" className="pr-detail-back" onClick={() => navigate(-1)}>
-            <ArrowLeft size={12} />
+          <button
+            type="button"
+            className="pr-detail-back"
+            onClick={() => navigate(-1)}
+            title="Go back"
+          >
+            <ArrowLeft size={16} />
           </button>
 
           <div>
             <div className="pr-detail-title-row">
+              <span className="pr-doc-tag">
+                <FileText size={11} />
+                <span>PURCHASE REQUEST</span>
+              </span>
               <h1>{record.ref}</h1>
-              <span className={`pr-detail-status-pill ${statusPillClass(statusLabel)}`}>{statusLabel}</span>
+              <span className={`pr-detail-status-pill ${statusPillClass(statusLabel)}`}>
+                {statusLabel === "Approved" ? (
+                  <CheckCircle2 size={13} />
+                ) : statusLabel === "Rejected" ? (
+                  <X size={13} />
+                ) : (
+                  <Clock size={13} />
+                )}
+                <span>{statusLabel}</span>
+              </span>
+              <span className={`pr-priority-pill ${priorityLabel.toLowerCase()}`}>
+                <Flag size={11} />
+                <span>{priorityLabel} Priority</span>
+              </span>
             </div>
             <p className="pr-detail-subtitle">{record.title}</p>
           </div>
         </div>
 
         <div className="pr-detail-actions">
+          <button
+            type="button"
+            className="pr-detail-icon-btn"
+            onClick={() => void loadData(true)}
+            title="Refresh PR details"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          </button>
+
           {matchedRfq ? (
             <button
               type="button"
-              className="pr-detail-primary-btn"
-              onClick={() => navigate(`/rfqs/${matchedRfq.cr49f_rfqnumber || matchedRfq.cr49f_requestforqoutationid}`)}
+              className="pr-detail-secondary-btn"
+              onClick={() =>
+                navigate(
+                  `/rfqs/${
+                    matchedRfq.cr49f_rfqnumber ||
+                    matchedRfq.cr49f_requestforqoutationid
+                  }`
+                )
+              }
               title="View the RFQ linked to this Purchase Request"
             >
-              <FileText size={11} />
-              View Linked RFQ ({matchedRfq.cr49f_rfqnumber || "RFQ"})
+              <ExternalLink size={14} />
+              <span>Linked RFQ ({matchedRfq.cr49f_rfqnumber || "RFQ"})</span>
             </button>
           ) : isPrApproved ? (
             <button
               type="button"
-              className="pr-detail-primary-btn"
+              className="pr-detail-primary-btn glow"
               onClick={() => setIsCreateRfqModalOpen(true)}
               title="Initiate RFQ for this approved PR"
             >
-              <FileText size={11} />
-              Initiate RFQ
+              <Plus size={14} />
+              <span>Initiate RFQ</span>
             </button>
           ) : null}
         </div>
       </div>
 
+      {/* EXECUTIVE KPI STATS BAR */}
+      <div className="pr-kpi-grid">
+        {/* KPI 1: Total PR Value */}
+        <div className="pr-kpi-card">
+          <div className="pr-kpi-icon-bubble emerald">
+            <DollarSign size={20} />
+          </div>
+          <div className="pr-kpi-body">
+            <span className="pr-kpi-label">Total Value</span>
+            <strong className="pr-kpi-value">{calculatedGrandTotal}</strong>
+            <span className="pr-kpi-subtext">
+              {lineItems.length} {lineItems.length === 1 ? "Line Item" : "Line Items"} ({totalItemQuantity} units)
+            </span>
+          </div>
+        </div>
+
+        {/* KPI 2: Active Stage */}
+        <div className="pr-kpi-card">
+          <div className="pr-kpi-icon-bubble indigo">
+            <Workflow size={20} />
+          </div>
+          <div className="pr-kpi-body">
+            <span className="pr-kpi-label">Current Stage</span>
+            <strong className="pr-kpi-value">{activeMilestone?.title || "PR Creation"}</strong>
+            <span className="pr-kpi-subtext">
+              Milestone {activeMilestone?.step || 1} of 5 · {milestoneDisplayStatus}
+            </span>
+          </div>
+        </div>
+
+        {/* KPI 3: Approval Progress */}
+        <div className="pr-kpi-card">
+          <div className="pr-kpi-icon-bubble purple">
+            <ShieldCheck size={20} />
+          </div>
+          <div className="pr-kpi-body">
+            <span className="pr-kpi-label">PR Approval Tasks</span>
+            <strong className="pr-kpi-value">
+              {prApprovalStats.approved} / {prApprovalStats.total} Approved
+            </strong>
+            <div className="pr-kpi-progress-bar">
+              <div
+                className="pr-kpi-progress-fill"
+                style={{ width: `${prApprovalStats.percent}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* KPI 4: Required Delivery / Priority */}
+        <div className="pr-kpi-card">
+          <div className="pr-kpi-icon-bubble amber">
+            <CalendarDays size={20} />
+          </div>
+          <div className="pr-kpi-body">
+            <span className="pr-kpi-label">Required Delivery</span>
+            <strong className="pr-kpi-value">{record.requiredDate || "Not Specified"}</strong>
+            <span className="pr-kpi-subtext">
+              Priority: <b>{priorityLabel}</b> · {record.requester || record.createdBy}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* PR JOURNEY MILESTONE STEPPER */}
       <section className="pr-detail-card pr-journey-card">
         <div className="pr-detail-card-header">
           <div className="pr-detail-card-header-left">
             <div className="pr-detail-card-icon">
-              <Clock size={12} />
+              <Clock size={18} />
             </div>
             <div className="pr-detail-card-title">
               <h2>PR Journey</h2>
@@ -1296,6 +1436,10 @@ export default function PurchaseRequestDetail() {
           {visibleApprovalSteps.map((step, index) => {
             const isPreviousCompleted = index > 0 && visibleApprovalSteps[index - 1].status === "Completed";
             const displayStatus = step.status === "Current" ? "In Progress" : (step.status === "Skipped" ? "Not Applicable" : step.status);
+            const isCompleted = step.status === "Completed";
+            const isCurrent = step.status === "Current";
+            const isRejected = step.status === "Rejected";
+
             return (
               <button
                 className={`approval-step ${activeMilestone?.step === step.step ? "selected" : ""}`}
@@ -1307,12 +1451,22 @@ export default function PurchaseRequestDetail() {
                 onClick={() => toggleMilestone(step)}
               >
                 <div className={`approval-step-line ${isPreviousCompleted ? "done" : ""}`} />
-                <div className={`approval-step-circle ${stepCircleClass(step.status)}`}>{index + 1}</div>
+                <div className={`approval-step-circle ${stepCircleClass(step.status)}`}>
+                  {isCompleted ? (
+                    <Check size={16} strokeWidth={2.8} />
+                  ) : isRejected ? (
+                    <X size={16} strokeWidth={2.8} />
+                  ) : (
+                    index + 1
+                  )}
+                </div>
 
                 <div className="approval-step-label">
                   <strong>{step.title}</strong>
                   <span className={`approval-step-status ${displayStatus.toLowerCase().replace(/\s+/g, "-")}`}>
-                    {displayStatus}
+                    {isCurrent && <span className="pulsing-dot" />}
+                    {isCompleted && <Check size={11} strokeWidth={3} />}
+                    <span>{displayStatus}</span>
                   </span>
                 </div>
               </button>
@@ -1321,12 +1475,13 @@ export default function PurchaseRequestDetail() {
         </div>
       </section>
 
+      {/* ACTIVE MILESTONE SUB-TASKS */}
       {activeMilestone && (
         <section className="pr-detail-card">
           <div className="pr-detail-card-header">
             <div className="pr-detail-card-header-left">
               <div className={`pr-detail-card-icon ${milestoneIconClass(activeMilestone.status)}`}>
-                <ShieldCheck size={12} />
+                <ShieldCheck size={18} />
               </div>
               <div className="pr-detail-card-title">
                 <h2>{activeMilestone.title} - Sub Tasks</h2>
@@ -1334,10 +1489,11 @@ export default function PurchaseRequestDetail() {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span className={`pr-detail-status-tag ${milestoneTagClass}`}>
-                <ShieldCheck size={9} />
-                {milestoneDisplayStatus}
+                {activeMilestone.status === "Current" && <span className="pulsing-dot" />}
+                {activeMilestone.status === "Completed" && <Check size={12} strokeWidth={3} />}
+                <span>{milestoneDisplayStatus}</span>
               </span>
 
               <button
@@ -1347,98 +1503,143 @@ export default function PurchaseRequestDetail() {
                 style={{ transform: subTasksOpen ? "rotate(0deg)" : "rotate(180deg)" }}
                 aria-label="Toggle sub-tasks"
               >
-                <ChevronUp size={12} />
+                <ChevronUp size={15} />
               </button>
             </div>
           </div>
 
           {subTasksOpen && (
-            <div className="pr-detail-table-wrapper">
-              <table className="pr-detail-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Task</th>
-                    <th>Status</th>
-                    <th>Assigned To</th>
-                    <th>Remarks</th>
-                    <th>Completed On</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeMilestoneTasks.length > 0 ? (
-                    activeMilestoneTasks.map((task) => (
-                      <tr
-                        key={task.id}
-                        style={{ cursor: task.approvalTaskId ? "pointer" : "default" }}
-                        onClick={() => {
-                          if (task.approvalTaskId) {
-                            navigate(`/tasks/${task.approvalTaskId}`);
-                          }
-                        }}
-                        title={task.approvalTaskId ? "Click to view task details, approve/reject, or add comment" : undefined}
-                      >
-                        <td>{task.sequence}</td>
-                        <td>
-                          {task.approvalTaskId ? (
-                            <span
-                              style={{
-                                fontWeight: 600,
-                                color: "var(--primary-hex, #2563eb)",
-                                textDecoration: "underline",
-                                textUnderlineOffset: 3,
-                                cursor: "pointer",
-                              }}
-                            >
-                              {task.task}
-                            </span>
-                          ) : (
-                            task.task
-                          )}
-                        </td>
-                        <td>
-                          <span className={`subtask-status ${task.statusClass}`}>{task.status}</span>
-                        </td>
-                        <td>
-                          <div className="pr-detail-table-avatar">
-                            <span>{task.initials}</span>
-                            {task.assignedTo}
-                          </div>
-                        </td>
-                        <td>{task.remarks}</td>
-                        <td>{task.completedOn}</td>
+            <div>
+              {activeMilestoneTasks.length > 0 ? (
+                <div className="pr-detail-table-wrapper">
+                  <table className="pr-detail-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 50, textAlign: "center" }}>#</th>
+                        <th>Task</th>
+                        <th>Status</th>
+                        <th>Assigned To</th>
+                        <th>Remarks</th>
+                        <th>Completed On</th>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: "center", padding: "20px 16px", color: "var(--muted-foreground-hex)" }}>
-                        {isPoMilestone && !isPoCreated
-                          ? "Purchase Order has not been initiated yet. Tasks will appear once a PO is created."
-                          : isRfqMilestone && !isRfqCreated
-                          ? "Request for Quotation has not been initiated yet. Tasks will appear once an RFQ is created."
-                          : "No sub-tasks recorded for this milestone."}
-                      </td>
-                    </tr>
+                    </thead>
+                    <tbody>
+                      {activeMilestoneTasks.map((task) => (
+                        <tr
+                          key={task.id}
+                          style={{ cursor: task.approvalTaskId ? "pointer" : "default" }}
+                          onClick={() => {
+                            if (task.approvalTaskId) {
+                              navigate(`/tasks/${task.approvalTaskId}`);
+                            }
+                          }}
+                          title={task.approvalTaskId ? "Click to view task details, approve/reject, or add comment" : undefined}
+                        >
+                          <td style={{ textAlign: "center" }}>
+                            <span className="pr-row-seq">{task.sequence}</span>
+                          </td>
+                          <td>
+                            {task.approvalTaskId ? (
+                              <span
+                                style={{
+                                  fontWeight: 650,
+                                  color: "var(--primary-hex, #2563eb)",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <span>{task.task}</span>
+                                <ExternalLink size={12} style={{ opacity: 0.7 }} />
+                              </span>
+                            ) : (
+                              <strong>{task.task}</strong>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`subtask-status ${task.statusClass}`}>
+                              {task.status === "In Progress" && <span className="pulsing-dot" />}
+                              {task.status === "Completed" && <Check size={11} strokeWidth={3} />}
+                              <span>{task.status}</span>
+                            </span>
+                          </td>
+                          <td>
+                            <div className="pr-detail-table-avatar">
+                              <span>{task.initials}</span>
+                              <strong>{task.assignedTo}</strong>
+                            </div>
+                          </td>
+                          <td style={{ color: "var(--muted-foreground-hex)" }}>{task.remarks}</td>
+                          <td style={{ color: "var(--muted-foreground-hex)" }}>{task.completedOn}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="pr-uninitiated-card">
+                  <div className="pr-uninitiated-icon">
+                    {isPoMilestone ? <Package size={28} /> : isRfqMilestone ? <FileText size={28} /> : <Workflow size={28} />}
+                  </div>
+                  <h3 className="pr-uninitiated-title">
+                    {isPoMilestone && !isPoCreated
+                      ? "Purchase Order Not Yet Initiated"
+                      : isRfqMilestone && !isRfqCreated
+                      ? "Request for Quotation Not Yet Initiated"
+                      : "No Sub-Tasks Available for this Milestone"}
+                  </h3>
+                  <p className="pr-uninitiated-desc">
+                    {isPoMilestone && !isPoCreated
+                      ? "Purchase Order has not been initiated for this request. Tasks and approval workflows will automatically populate once a PO is issued."
+                      : isRfqMilestone && !isRfqCreated
+                      ? "Request for Quotation (RFQ) has not been initiated yet. Once created from an approved PR, sourcing approval tasks will appear here."
+                      : "No sub-tasks are currently recorded for this milestone stage."}
+                  </p>
+                  {isRfqMilestone && !isRfqCreated && isPrApproved && (
+                    <button
+                      type="button"
+                      className="pr-detail-primary-btn glow"
+                      onClick={() => setIsCreateRfqModalOpen(true)}
+                    >
+                      <Plus size={14} />
+                      <span>Initiate RFQ Now</span>
+                    </button>
                   )}
-                </tbody>
-              </table>
+                </div>
+              )}
             </div>
           )}
         </section>
       )}
 
+      {/* PR DETAILS & RELATIONSHIPS SECTION */}
       <section className="pr-detail-card">
         <div className="pr-detail-tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={activeTab === tab ? "active" : ""}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
+          {[
+            { id: "Summary", label: "Summary", icon: ClipboardList, count: null },
+            { id: "RFQs", label: "RFQs", icon: FileText, count: associatedRfqs.length },
+            { id: "Associated Tasks", label: "Associated Tasks", icon: ShieldCheck, count: approvalTasks.length },
+            { id: "Notes", label: "Notes", icon: MessageSquare, count: notes.length },
+            { id: "Attachments", label: "Attachments", icon: Paperclip, count: 0 },
+          ].map((tab) => {
+            const TabIcon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`pr-detail-tab-btn ${isActive ? "active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <TabIcon size={14} />
+                <span>{tab.label}</span>
+                {tab.count !== null && (
+                  <span className="pr-tab-count-badge">{tab.count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {activeTab === "RFQs" && (
@@ -1608,14 +1809,17 @@ export default function PurchaseRequestDetail() {
 
                       return (
                         <tr key={task.cr49f_approvaltasksid}>
-                          <td><strong>{task.cr49f_sequence ?? 1}</strong></td>
+                          <td style={{ textAlign: "center" }}>
+                            <span className="pr-row-seq">{task.cr49f_sequence ?? 1}</span>
+                          </td>
                           <td>
                             <strong
-                              style={{ color: "var(--primary-hex, #2563eb)", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}
+                              style={{ color: "var(--primary-hex, #2563eb)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}
                               onClick={() => navigate(`/tasks/${task.cr49f_approvaltasksid}`)}
                               title="Click to view full task page"
                             >
-                              {task.cr49f_task}
+                              <span>{task.cr49f_task}</span>
+                              <ExternalLink size={12} style={{ opacity: 0.7 }} />
                             </strong>
                             {task.cr49f_id && task.cr49f_id !== task.cr49f_task && (
                               <span style={{ display: "block", fontSize: 11, color: "#64748b", marginTop: 2 }}>
@@ -1624,7 +1828,7 @@ export default function PurchaseRequestDetail() {
                             )}
                           </td>
                           <td>{deptLabel}</td>
-                          <td>{roleLabel}</td>
+                          <td><strong>{roleLabel}</strong></td>
                           <td>{slaLabel}</td>
                           <td>
                             <span
@@ -1675,60 +1879,36 @@ export default function PurchaseRequestDetail() {
                               <div style={{ display: "inline-flex", gap: 6, justifyContent: "center" }}>
                                 <button
                                   type="button"
+                                  className="pr-task-action-btn approve"
                                   onClick={() => void handleApprove(task)}
                                   disabled={actioningTaskId === task.cr49f_approvaltasksid}
-                                  style={{
-                                    padding: "4px 10px",
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    color: "#ffffff",
-                                    backgroundColor: "#16a34a",
-                                    border: "none",
-                                    borderRadius: 4,
-                                    cursor: "pointer",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
                                   title="Approve task and activate next task in sequence"
                                 >
                                   {actioningTaskId === task.cr49f_approvaltasksid ? (
-                                    <Loader2 size={11} className="animate-spin" />
+                                    <Loader2 size={12} className="animate-spin" />
                                   ) : (
-                                    <ThumbsUp size={11} />
+                                    <ThumbsUp size={12} />
                                   )}
                                   <span>Approve</span>
                                 </button>
                                 <button
                                   type="button"
+                                  className="pr-task-action-btn reject"
                                   onClick={() => void handleReject(task)}
                                   disabled={actioningTaskId === task.cr49f_approvaltasksid}
-                                  style={{
-                                    padding: "4px 10px",
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    color: "#ffffff",
-                                    backgroundColor: "#dc2626",
-                                    border: "none",
-                                    borderRadius: 4,
-                                    cursor: "pointer",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
                                   title="Reject task (further tasks remain inactive)"
                                 >
-                                  <ThumbsDown size={11} />
+                                  <ThumbsDown size={12} />
                                   <span>Reject</span>
                                 </button>
                               </div>
                             ) : isApproved ? (
-                              <span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>
-                                ✓ Approved
+                              <span style={{ fontSize: 12, color: "#16a34a", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <Check size={13} strokeWidth={3} /> Approved
                               </span>
                             ) : isRejected ? (
-                              <span style={{ fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
-                                ✕ Rejected
+                              <span style={{ fontSize: 12, color: "#dc2626", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <X size={13} strokeWidth={3} /> Rejected
                               </span>
                             ) : (
                               <span style={{ fontSize: 11, color: "#94a3b8" }}>
@@ -1913,65 +2093,73 @@ export default function PurchaseRequestDetail() {
 
                 <div className="pr-summary-top">
                   <div className="pr-summary-title">
-                    <ClipboardList size={13} />
-                    Purchase Request Details
+                    <ClipboardList size={16} />
+                    <span>Purchase Request Details</span>
                   </div>
                 </div>
 
                 <div className="pr-detail-grid">
                   <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon"><FileText size={11} /></div>
-                    <div>
+                    <div className="pr-detail-field-icon blue"><FileText size={16} /></div>
+                    <div className="pr-detail-field-info">
                       <span>PR Number</span>
                       <strong>{record.ref}</strong>
                     </div>
                   </div>
 
                   <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon"><User size={11} /></div>
-                    <div>
+                    <div className="pr-detail-field-icon purple"><User size={16} /></div>
+                    <div className="pr-detail-field-info">
                       <span>Requester</span>
                       <strong>{record.requester || record.createdBy}</strong>
                     </div>
                   </div>
 
                   <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon"><Tag size={11} /></div>
-                    <div>
-                      <span>Title</span>
+                    <div className="pr-detail-field-icon cyan"><Tag size={16} /></div>
+                    <div className="pr-detail-field-info">
+                      <span>Title / Category</span>
                       <strong>{record.title}</strong>
                     </div>
                   </div>
 
                   <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon"><Building2 size={11} /></div>
-                    <div>
+                    <div className="pr-detail-field-icon amber"><Building2 size={16} /></div>
+                    <div className="pr-detail-field-info">
                       <span>Department</span>
-                      <strong>{record.department || "—"}</strong>
+                      <strong>{record.department || "General Procurement"}</strong>
                     </div>
                   </div>
 
                   <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon"><CalendarDays size={11} /></div>
-                    <div>
+                    <div className="pr-detail-field-icon emerald"><CalendarDays size={16} /></div>
+                    <div className="pr-detail-field-info">
                       <span>Request Date</span>
                       <strong>{record.date}</strong>
                     </div>
                   </div>
 
                   <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon"><CalendarDays size={11} /></div>
-                    <div>
-                      <span>Required Date</span>
+                    <div className="pr-detail-field-icon rose"><Clock size={16} /></div>
+                    <div className="pr-detail-field-info">
+                      <span>Required By</span>
                       <strong>{record.requiredDate || "—"}</strong>
                     </div>
                   </div>
 
                   <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon"><Flag size={11} /></div>
-                    <div>
+                    <div className="pr-detail-field-icon orange"><Flag size={16} /></div>
+                    <div className="pr-detail-field-info">
                       <span>Priority</span>
                       <strong>{priorityLabel}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pr-detail-field">
+                    <div className="pr-detail-field-icon green"><DollarSign size={16} /></div>
+                    <div className="pr-detail-field-info">
+                      <span>Total Value</span>
+                      <strong>{calculatedGrandTotal}</strong>
                     </div>
                   </div>
                 </div>
@@ -1979,43 +2167,83 @@ export default function PurchaseRequestDetail() {
                 <div className="pr-detail-justification">
                   <span>Business Justification</span>
                   <p>{record.justification || "No business justification provided."}</p>
-                  <small>Delivery location: {record.deliveryAddress || "—"}</small>
+                  <small>Delivery destination: <b>{record.deliveryAddress || "Not specified"}</b></small>
                 </div>
 
-                <div className="pr-detail-lineitems-heading">
-                  <FileText size={11} />
-                  Purchase Request Line Items ({lineItems.length})
-                </div>
+                <div className="pr-detail-lineitems-card">
+                  <div className="pr-detail-lineitems-header">
+                    <div className="pr-detail-lineitems-title">
+                      <Package size={16} />
+                      <span>Purchase Request Line Items ({lineItems.length})</span>
+                    </div>
+                    <span className="pr-lineitems-count-tag">
+                      {totalItemQuantity} Total Units
+                    </span>
+                  </div>
 
-                <div className="pr-detail-table-wrapper">
-                  <table className="pr-detail-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Item Code</th>
-                        <th>Item Name</th>
-                        <th>Previous Contract</th>
-                        <th>Delivery Date</th>
-                        <th>Delivery Address</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lineItems.length ? lineItems.map((item, index) => (
-                        <tr key={item.id}>
-                          <td>{index + 1}</td>
-                          <td>{item.itemCode}</td>
-                          <td>{item.itemName}</td>
-                          <td>{item.previousContract}</td>
-                          <td>{item.deliveryDate}</td>
-                          <td>{item.deliveryAddress}</td>
-                        </tr>
-                      )) : (
+                  <div className="pr-detail-table-wrapper">
+                    <table className="pr-detail-table pr-line-items-table">
+                      <thead>
                         <tr>
-                          <td colSpan={6}>No line items are linked to this purchase request.</td>
+                          <th style={{ width: 45, textAlign: "center" }}>#</th>
+                          <th style={{ width: 140 }}>Item Code</th>
+                          <th>Item Name & Description</th>
+                          <th style={{ width: 90, textAlign: "right" }}>Qty</th>
+                          <th style={{ width: 120, textAlign: "right" }}>Unit Price</th>
+                          <th style={{ width: 130, textAlign: "right" }}>Total Amount</th>
+                          <th>Delivery Date</th>
+                          <th>Delivery Location</th>
                         </tr>
+                      </thead>
+                      <tbody>
+                        {lineItems.length ? (
+                          lineItems.map((item, index) => (
+                            <tr key={item.id}>
+                              <td style={{ textAlign: "center" }}>
+                                <span className="pr-row-seq">{index + 1}</span>
+                              </td>
+                              <td>
+                                <span className="pr-item-code-badge">{item.itemCode}</span>
+                              </td>
+                              <td>
+                                <strong style={{ color: "var(--foreground-hex)" }}>{item.itemName}</strong>
+                              </td>
+                              <td style={{ textAlign: "right", fontWeight: 650 }}>
+                                {item.quantity}
+                              </td>
+                              <td style={{ textAlign: "right", color: "var(--muted-foreground-hex)" }}>
+                                {item.unitPrice}
+                              </td>
+                              <td style={{ textAlign: "right", fontWeight: 750, color: "var(--primary-hex, #2563eb)" }}>
+                                {item.totalAmount}
+                              </td>
+                              <td>{item.deliveryDate || "—"}</td>
+                              <td style={{ color: "var(--muted-foreground-hex)" }}>
+                                {item.deliveryAddress || record.deliveryAddress || "—"}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8} style={{ textAlign: "center", padding: "28px 16px", color: "var(--muted-foreground-hex)" }}>
+                              No line items are linked to this purchase request.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                      {lineItems.length > 0 && (
+                        <tfoot>
+                          <tr>
+                            <td colSpan={3} style={{ textAlign: "right" }}>Total Summary:</td>
+                            <td style={{ textAlign: "right" }}>{totalItemQuantity}</td>
+                            <td style={{ textAlign: "right" }}>—</td>
+                            <td style={{ textAlign: "right", color: "#16a34a" }}>{calculatedGrandTotal}</td>
+                            <td colSpan={2}></td>
+                          </tr>
+                        </tfoot>
                       )}
-                    </tbody>
-                  </table>
+                    </table>
+                  </div>
                 </div>
               </div>
 

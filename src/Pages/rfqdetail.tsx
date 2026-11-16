@@ -71,6 +71,7 @@ import {
 
 import {
   cleanGuid,
+  isValidSupplierCode,
   createApprovalTasksForObject,
   getApprovalTasksForRecord,
   getTaskApprovalStatusLabel,
@@ -751,7 +752,8 @@ export default function RfqDetail() {
               cs.cr49f_name?.toLowerCase() === name.toLowerCase() ||
               (sel.cr49f_selectedsuppliernumber && cs.cr49f_supplierid1?.toLowerCase() === sel.cr49f_selectedsuppliernumber.toLowerCase())
           );
-          const supCode = sel.cr49f_selectedsuppliernumber || matched?.cr49f_supplierid1 || cachedMatch?.cr49f_supplierid1;
+          const rawCode = sel.cr49f_selectedsuppliernumber || matched?.cr49f_supplierid1 || cachedMatch?.cr49f_supplierid1;
+          const supCode = isValidSupplierCode(rawCode) ? rawCode.trim() : undefined;
           const supId = matched?.cr49f_supplierid || cachedMatch?.cr49f_supplierid || sel.cr49f_selectedsuppliersid || `sel-${idx + 1}`;
           const hasResponded =
             Boolean(sel.cr49f_responded) ||
@@ -794,7 +796,8 @@ export default function RfqDetail() {
               as.cr49f_name?.toLowerCase() === name.toLowerCase() ||
               as.cr49f_supplierid1?.toLowerCase() === name.toLowerCase()
           );
-          const supCode = sup.cr49f_supplierid1 || matched?.cr49f_supplierid1;
+          const rawCode = sup.cr49f_supplierid1 || matched?.cr49f_supplierid1;
+          const supCode = isValidSupplierCode(rawCode) ? rawCode.trim() : undefined;
           const supId = matched?.cr49f_supplierid || sup.cr49f_supplierid || `inv-${idx + 1}`;
           const hasResp =
             fullSupplierResponses.some(
@@ -840,7 +843,7 @@ export default function RfqDetail() {
             phone: s.phone,
             address: s.address,
             category: s.category || "Hardware",
-            code: s.code,
+            code: isValidSupplierCode(s.code) ? s.code : undefined,
             verified: s.verified,
             ranking: s.ranking,
             rewarded: isSupplierRewardedCheck(s.id, s.name, s.ranking),
@@ -862,7 +865,7 @@ export default function RfqDetail() {
             phone: item.supplier.cr49f_phonenumber || "+91 80 1234 5678",
             address: `${item.supplier.cr49f_city || "Bengaluru"}, ${item.supplier.cr49f_country || "India"}`,
             category: item.supplier.cr49f_suppliercategory || "Hardware",
-            code: item.supplier.cr49f_supplierid1,
+            code: isValidSupplierCode(item.supplier.cr49f_supplierid1) ? item.supplier.cr49f_supplierid1 : undefined,
             verified: true,
             ranking: idx + 1,
             rewarded: isSupplierRewardedCheck(supId, name, idx + 1),
@@ -1777,7 +1780,7 @@ export default function RfqDetail() {
                                 <span className="rfq-summary-supplier-category-badge">
                                   {supplier.category || "Supplier"}
                                 </span>
-                                {supplier.code && (
+                                {isValidSupplierCode(supplier.code) && (
                                   <span className="rfq-summary-supplier-category-badge" style={{ background: "rgba(37, 99, 235, 0.08)", color: "#2563eb", fontWeight: 700 }}>
                                     {supplier.code}
                                   </span>
@@ -2254,7 +2257,7 @@ export default function RfqDetail() {
                 responseId: s.id,
                 rfqId: cleanGuid(ref) || "",
                 supplierId: s.id,
-                supplierCode: s.id,
+                supplierCode: isValidSupplierCode(s.code) ? s.code : undefined,
                 supplierName: s.name,
                 supplierEmail: s.email,
                 status: (s.hasResponse ? "Submitted" : "Invited") as "Invited" | "Draft" | "Submitted",
@@ -2304,88 +2307,104 @@ export default function RfqDetail() {
                 <table className="rfq-detail-table">
                   <thead>
                     <tr>
-                      <th>Supplier Details</th>
-                      <th>Contact &amp; Email</th>
-                      <th>Response Status</th>
-                      <th>Quoted Total</th>
-                      <th>Promised Delivery</th>
-                      <th>Warranty</th>
-                      <th style={{ textAlign: "right" }}>Action</th>
+                      <th style={{ minWidth: 260, width: 300 }}>Supplier Details</th>
+                      <th style={{ minWidth: 220 }}>Contact &amp; Email</th>
+                      <th style={{ minWidth: 140 }}>Response Status</th>
+                      <th style={{ minWidth: 140 }}>Quoted Total</th>
+                      <th style={{ minWidth: 140 }}>Promised Delivery</th>
+                      <th style={{ minWidth: 140 }}>Warranty</th>
+                      <th style={{ minWidth: 170, textAlign: "right" }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {displayResponses.map((resp) => (
-                      <tr key={resp.responseId || resp.supplierId}>
-                        <td>
-                          <div className="rfq-detail-table-avatar">
-                            <span>{getInitials(resp.supplierName)}</span>
-                            <div>
-                              <strong>{resp.supplierName}</strong>
-                              {resp.supplierCode && (
-                                <span style={{ display: "block", fontSize: 11, color: "#64748b" }}>
-                                  {resp.supplierCode}
-                                </span>
-                              )}
+                    {displayResponses.map((resp) => {
+                      const displayCode = isValidSupplierCode(resp.supplierCode) ? resp.supplierCode : undefined;
+                      return (
+                        <tr key={resp.responseId || resp.supplierId}>
+                          <td>
+                            <div className="rfq-detail-table-avatar">
+                              <span className="rfq-avatar-circle">{getInitials(resp.supplierName)}</span>
+                              <div className="rfq-avatar-info">
+                                <div className="rfq-supplier-name-row">
+                                  <strong className="rfq-supplier-name">{resp.supplierName}</strong>
+                                  <span title="Verified Vendor" style={{ display: "inline-flex", alignItems: "center" }}>
+                                    <ShieldCheck size={14} className="rfq-supplier-verified" />
+                                  </span>
+                                </div>
+                                {displayCode && (
+                                  <span className="rfq-supplier-code-badge">
+                                    {displayCode}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <ShieldCheck size={12} className="rfq-supplier-verified" style={{ marginLeft: 4 }} />
-                          </div>
-                        </td>
-                        <td>
-                          <div>{resp.supplierEmail || "vendor@procurement.com"}</div>
-                        </td>
-                        <td>
-                          <span className={`supplier-status-pill ${resp.status.toLowerCase()}`}>
-                            {resp.status === "Submitted" ? (
-                              <CheckCircle2 size={11} />
-                            ) : resp.status === "Draft" ? (
-                              <Clock size={11} />
-                            ) : (
-                              <Mail size={11} />
-                            )}
-                            {resp.status}
-                          </span>
-                        </td>
-                        <td>
-                          <strong>
-                            {resp.totalAmount && resp.totalAmount > 0
-                              ? `$${resp.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                              : resp.status === "Invited"
-                                ? "Awaiting Quote"
-                                : "—"}
-                          </strong>
-                        </td>
-                        <td>{resp.deliveryDate ? new Date(resp.deliveryDate).toLocaleDateString() : "—"}</td>
-                        <td>{resp.warranty || "Standard Terms"}</td>
-                        <td style={{ textAlign: "right" }}>
-                          {isApprovedOrRewarded ? (
-                            <button
-                              type="button"
-                              className="supplier-btn-action"
-                              onClick={() => setSelectedQuotationForView(resp)}
-                              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
-                            >
-                              <FileText size={12} />
-                              View Quotation
-                            </button>
-                          ) : (
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4,
-                                fontSize: 11.5,
-                                color: "#94a3b8",
-                                fontWeight: 600,
-                              }}
-                              title="RFQ must be approved before quotations can be viewed"
-                            >
-                              <Clock size={12} />
-                              Pending RFQ Approval
+                          </td>
+                          <td>
+                            <div className="rfq-supplier-email-cell">
+                              <Mail size={13} className="rfq-email-icon" />
+                              <span>{resp.supplierEmail || "vendor@procurement.com"}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`supplier-status-pill ${resp.status.toLowerCase()}`}>
+                              {resp.status === "Submitted" ? (
+                                <CheckCircle2 size={12} />
+                              ) : resp.status === "Draft" ? (
+                                <Clock size={12} />
+                              ) : (
+                                <Mail size={12} />
+                              )}
+                              {resp.status}
                             </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td>
+                            <strong className="rfq-table-amount">
+                              {resp.totalAmount && resp.totalAmount > 0
+                                ? `$${resp.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                : resp.status === "Invited"
+                                  ? "Awaiting Quote"
+                                  : "—"}
+                            </strong>
+                          </td>
+                          <td>
+                            <span className="rfq-table-subtext">
+                              {resp.deliveryDate ? new Date(resp.deliveryDate).toLocaleDateString() : "—"}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="rfq-table-subtext">{resp.warranty || "Standard Terms"}</span>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {isApprovedOrRewarded ? (
+                              <button
+                                type="button"
+                                className="supplier-btn-action"
+                                onClick={() => setSelectedQuotationForView(resp)}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+                              >
+                                <FileText size={12} />
+                                View Quotation
+                              </button>
+                            ) : (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 5,
+                                  fontSize: 12,
+                                  color: "#94a3b8",
+                                  fontWeight: 600,
+                                }}
+                                title="RFQ must be approved before quotations can be viewed"
+                              >
+                                <Clock size={12} />
+                                Pending RFQ Approval
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2653,7 +2672,7 @@ export default function RfqDetail() {
               ) || {
                 id: selectedQuotationForView.supplierId,
                 name: selectedQuotationForView.supplierName,
-                code: selectedQuotationForView.supplierCode,
+                code: isValidSupplierCode(selectedQuotationForView.supplierCode) ? selectedQuotationForView.supplierCode : undefined,
                 email: selectedQuotationForView.supplierEmail,
                 hasResponse: true,
                 rewarded: selectedQuotationForView.status === "Rewarded",
@@ -2708,7 +2727,7 @@ export default function RfqDetail() {
                 ) || {
                   id: selectedQuotationForView.supplierId,
                   name: selectedQuotationForView.supplierName,
-                  code: selectedQuotationForView.supplierCode,
+                  code: isValidSupplierCode(selectedQuotationForView.supplierCode) ? selectedQuotationForView.supplierCode : undefined,
                   email: selectedQuotationForView.supplierEmail,
                   hasResponse: true,
                   rewarded: false,

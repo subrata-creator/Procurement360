@@ -31,6 +31,7 @@ import { Cr49f_procurementapprovalcyclesService } from "../../generated/services
 import { Cr49f_tasksesService } from "../../generated/services/Cr49f_tasksesService";
 import ApprovalCycleModal from "../../components/ApprovalCycleModal";
 import { cleanGuid } from "../../Services/ApprovalWorkflowService";
+import { SAMPLE_APPROVAL_CYCLES } from "../../data/SampleApprovalCycleData";
 import "../../Styles/ApprovalCycleSummary.css";
 
 const getObjectTypeName = (cycle: Cr49f_procurementapprovalcycles): string => {
@@ -96,11 +97,55 @@ export const ApprovalCycleSummary: React.FC = () => {
           cycleRes.value.data.find(
             (c) =>
               cleanGuid(c.cr49f_procurementapprovalcycleid).toLowerCase() === cycleCleanId ||
-              (c.cr49f_id && c.cr49f_id.toLowerCase() === id.toLowerCase())
+              (c.cr49f_id && c.cr49f_id.toLowerCase() === id.toLowerCase()) ||
+              (c.cr49f_objecttypename && c.cr49f_objecttypename.toLowerCase().includes(id.toLowerCase()))
           ) ?? null;
       }
 
       if (!matchedCycle) {
+        const idLower = id.toLowerCase();
+        const sampleMatch = SAMPLE_APPROVAL_CYCLES.find(
+          (s) =>
+            s.code.toLowerCase() === idLower ||
+            String(s.objectType) === id ||
+            s.objectTypeName.toLowerCase() === idLower ||
+            idLower.includes(s.objectTypeName.toLowerCase()) ||
+            idLower.includes(s.code.toLowerCase())
+        );
+
+        if (sampleMatch) {
+          matchedCycle = {
+            cr49f_procurementapprovalcycleid: sampleMatch.code,
+            cr49f_id: sampleMatch.code,
+            cr49f_name: `${sampleMatch.objectTypeName} Approval Cycle`,
+            cr49f_objecttype: sampleMatch.objectType,
+            cr49f_objecttypename: sampleMatch.objectTypeName,
+            statecode: 0,
+            statuscode: 1,
+            cr49f_sla: sampleMatch.tasks.reduce((sum, t) => sum + (t.cr49f_slanumber || 0), 0),
+            cr49f_slaunit: 1,
+            ownerid: "System",
+            owneridname: "Administrator",
+          } as Cr49f_procurementapprovalcycles;
+
+          const sampleTasks = sampleMatch.tasks.map((st, idx) => ({
+            cr49f_tasksid: `sample-task-${sampleMatch.code}-${idx + 1}`,
+            cr49f_task: st.cr49f_task,
+            cr49f_sequencenumber: st.cr49f_sequencenumber,
+            cr49f_role: st.cr49f_role,
+            cr49f_department: st.cr49f_department,
+            cr49f_slanumber: st.cr49f_slanumber,
+            cr49f_slaunit: st.cr49f_slaunit,
+            statecode: 0,
+            _cr49f_procurementapprovalcycle_value: sampleMatch.code,
+          })) as Cr49f_taskses[];
+
+          setCycle(matchedCycle);
+          setTasks(sampleTasks);
+          setLoading(false);
+          return;
+        }
+
         setCycle(null);
         setTasks([]);
         setLoading(false);
@@ -125,6 +170,25 @@ export const ApprovalCycleSummary: React.FC = () => {
 
         // Sort ascending by sequence number
         matchedTasks.sort((a, b) => (a.cr49f_sequencenumber ?? 0) - (b.cr49f_sequencenumber ?? 0));
+      }
+
+      if (matchedTasks.length === 0 && matchedCycle.cr49f_objecttype) {
+        const sampleMatch = SAMPLE_APPROVAL_CYCLES.find(
+          (s) => s.objectType === matchedCycle!.cr49f_objecttype
+        );
+        if (sampleMatch) {
+          matchedTasks = sampleMatch.tasks.map((st, idx) => ({
+            cr49f_tasksid: `sample-task-${sampleMatch.code}-${idx + 1}`,
+            cr49f_task: st.cr49f_task,
+            cr49f_sequencenumber: st.cr49f_sequencenumber,
+            cr49f_role: st.cr49f_role,
+            cr49f_department: st.cr49f_department,
+            cr49f_slanumber: st.cr49f_slanumber,
+            cr49f_slaunit: st.cr49f_slaunit,
+            statecode: 0,
+            _cr49f_procurementapprovalcycle_value: matchedCycle!.cr49f_procurementapprovalcycleid,
+          })) as Cr49f_taskses[];
+        }
       }
 
       setTasks(matchedTasks);

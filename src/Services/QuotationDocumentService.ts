@@ -2,6 +2,7 @@ import type { FullSupplierResponse, SupplierResponseLineItem } from "./RfqSuppli
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
 import { INITIAL_SAMPLE_SUPPLIERS, type SampleSupplierItem } from "../data/SampleSuppliersData";
+import { isValidSupplierCode } from "./ApprovalWorkflowService";
 
 export interface QuotationDocumentLine {
   lineNumber: number;
@@ -197,9 +198,9 @@ export function buildQuotationDocument(params: {
   );
 
   const supplierCode =
-    response.supplierCode ||
-    supplierProfile?.cr49f_supplierid1 ||
-    sampleSup?.supplier.cr49f_supplierid1 ||
+    (isValidSupplierCode(response.supplierCode) ? response.supplierCode : "") ||
+    (isValidSupplierCode(supplierProfile?.cr49f_supplierid1) ? supplierProfile?.cr49f_supplierid1 : "") ||
+    (isValidSupplierCode(sampleSup?.supplier.cr49f_supplierid1) ? sampleSup?.supplier.cr49f_supplierid1 : "") ||
     "SUP-101";
 
   const supplierName =

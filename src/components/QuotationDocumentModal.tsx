@@ -21,6 +21,7 @@ import {
   downloadQuotationDocumentPdf,
   numberToWords,
 } from "../Services/QuotationDocumentService";
+import { isValidSupplierCode } from "../Services/ApprovalWorkflowService";
 import type { FullSupplierResponse } from "../Services/RfqSupplierResponseService";
 import type { Cr49f_requestforqoutations } from "../generated/models/Cr49f_requestforqoutationsModel";
 import type { Cr49f_suppliers } from "../generated/models/Cr49f_suppliersModel";
@@ -122,7 +123,7 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
         deliveryLocation: deliveryLocation || rfq?.cr49f_deliverylocation || "Main Delivery Facility",
         buyerOrganization: "Procurement360 Enterprise Corporation",
         supplierId: supplier.id,
-        supplierCode: supplier.code || "SUP",
+        supplierCode: isValidSupplierCode(supplier.code) ? supplier.code! : "SUP",
         supplierName: supplier.name,
         supplierCategory: supplier.category,
         supplierEmail: supplier.email,
@@ -220,7 +221,7 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
                 </span>
               </div>
               <div className="quotation-doc-topbar-sub">
-                {doc.supplierName} ({doc.supplierCode}) • {doc.rfqNumber}
+                {doc.supplierName} {isValidSupplierCode(doc.supplierCode) ? `(${doc.supplierCode})` : ""} • {doc.rfqNumber}
               </div>
             </div>
           </div>
@@ -327,7 +328,9 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
                     <div>
                       <div className="quotation-supplier-name">{doc.supplierName}</div>
                       <div className="quotation-supplier-meta-tags">
-                        <span className="quotation-code-tag">ID: {doc.supplierCode}</span>
+                        {isValidSupplierCode(doc.supplierCode) && (
+                          <span className="quotation-code-tag">ID: {doc.supplierCode}</span>
+                        )}
                         {doc.supplierGstin && (
                           <span className="quotation-gstin-tag">
                             GSTIN: {doc.supplierGstin}
@@ -386,7 +389,7 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
                   </div>
                   <div className="quotation-party-field">
                     <span>Vendor ID:</span>
-                    <strong>{doc.supplierCode}</strong>
+                    <strong>{isValidSupplierCode(doc.supplierCode) ? doc.supplierCode : "Registered Vendor"}</strong>
                   </div>
                   <div className="quotation-party-field">
                     <span>Official Email:</span>
@@ -638,7 +641,7 @@ export const QuotationDocumentModal: React.FC<QuotationDocumentModalProps> = ({
               <div className="quotation-pending-contact-grid">
                 <div className="quotation-pending-contact-item">
                   <span>Vendor Identifier</span>
-                  <strong>{doc.supplierCode}</strong>
+                  <strong>{isValidSupplierCode(doc.supplierCode) ? doc.supplierCode : "Registered Vendor"}</strong>
                 </div>
                 <div className="quotation-pending-contact-item">
                   <span>Category</span>

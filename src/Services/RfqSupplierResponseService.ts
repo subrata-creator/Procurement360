@@ -6,7 +6,7 @@ import { Cr49f_purchaserequestlinesService } from "../generated/services/Cr49f_p
 import { Cr49f_suppliersService } from "../generated/services/Cr49f_suppliersService";
 import { Cr49f_supplierproductsService } from "../generated/services/Cr49f_supplierproductsService";
 import { INITIAL_SAMPLE_SUPPLIERS } from "../data/SampleSuppliersData";
-import { cleanGuid } from "./ApprovalWorkflowService";
+import { cleanGuid, isValidSupplierCode } from "./ApprovalWorkflowService";
 
 import type { Cr49f_rfqsupplierresponses } from "../generated/models/Cr49f_rfqsupplierresponsesModel";
 import type { Cr49f_rfqresponselines } from "../generated/models/Cr49f_rfqresponselinesModel";
@@ -721,10 +721,11 @@ export async function getSupplierResponsesForRfq(
       supplierLookup ||
       "";
 
-    const supplierCode =
+    const rawSupCode =
       supplierProfile?.cr49f_supplierid1 ||
       selSupp?.cr49f_selectedsuppliernumber ||
       "";
+    const supplierCode = isValidSupplierCode(rawSupCode) ? rawSupCode.trim() : "";
 
     const supplierName =
       supplierProfile?.cr49f_name ||
@@ -849,15 +850,19 @@ export async function getSupplierResponsesForRfq(
     if (!matched) {
       const supplierProfile = allSuppliers.find(
         (s) =>
-          s.cr49f_supplierid1?.toLowerCase() === selNum.toLowerCase() ||
+          (selNum && s.cr49f_supplierid1?.toLowerCase() === selNum.toLowerCase()) ||
           cleanGuid(s.cr49f_supplierid) === selNum.toLowerCase()
       );
+
+      const rawCode = isValidSupplierCode(selNum)
+        ? selNum
+        : (isValidSupplierCode(supplierProfile?.cr49f_supplierid1) ? supplierProfile!.cr49f_supplierid1! : "");
 
       results.push({
         responseId: "",
         rfqId: cleanRfqId,
         supplierId: supplierProfile?.cr49f_supplierid || selId || selNum,
-        supplierCode: selNum,
+        supplierCode: rawCode,
         supplierName: supplierProfile?.cr49f_name || sel.cr49f_supplierquotation || "Invited Supplier",
         supplierEmail: supplierProfile?.cr49f_email,
         status: "Invited",
@@ -1360,7 +1365,9 @@ export async function getSupplierRfqDetails(
     responseId: parentRespId,
     rfqId: cleanRfqId,
     supplierId: cleanSupId,
-    supplierCode: matchedSelSupp?.cr49f_selectedsuppliernumber || "",
+    supplierCode: isValidSupplierCode(matchedSelSupp?.cr49f_selectedsuppliernumber)
+      ? (matchedSelSupp?.cr49f_selectedsuppliernumber || "")
+      : "",
     supplierName: matchedSelSupp?.cr49f_supplierquotation || "Current Supplier",
     status,
     statuscode: parentResp?.statuscode ?? 1,
