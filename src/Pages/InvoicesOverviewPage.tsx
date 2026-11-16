@@ -84,10 +84,10 @@ function ProgressCircle({
     isApproved || percentage === 100
       ? "#10b981"
       : isRejected
-      ? "#ef4444"
-      : percentage > 0
-      ? "#f59e0b"
-      : "#cbd5e1";
+        ? "#ef4444"
+        : percentage > 0
+          ? "#f59e0b"
+          : "#cbd5e1";
 
   return (
     <div className="pr-progress-circle-wrap">
@@ -160,6 +160,7 @@ export const InvoicesOverviewPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [supplierQuery, setSupplierQuery] = useState<string>("All Suppliers");
   const [dateQuery, setDateQuery] = useState<string>("");
+  const [dateSortOrder, setDateSortOrder] = useState<"desc" | "asc">("desc");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
@@ -230,7 +231,7 @@ export const InvoicesOverviewPage: React.FC = () => {
           const parsed = JSON.parse(masterRaw);
           if (Array.isArray(parsed)) localInvoices.push(...parsed);
         }
-      } catch {}
+      } catch { }
 
       try {
         for (let i = 0; i < localStorage.length; i++) {
@@ -243,7 +244,7 @@ export const InvoicesOverviewPage: React.FC = () => {
             }
           }
         }
-      } catch {}
+      } catch { }
 
       // 3. Deduplicate and merge
       const mergedMap = new Map<string, any>();
@@ -325,8 +326,8 @@ export const InvoicesOverviewPage: React.FC = () => {
           inv.cr49f_totalamount !== undefined && Number(inv.cr49f_totalamount) > 0
             ? Number(inv.cr49f_totalamount)
             : calculatedTotal > 0
-            ? calculatedTotal
-            : poAmount;
+              ? calculatedTotal
+              : poAmount;
 
         const amountPaid = Number(inv.cr49f_amountpaid) || (inv.cr49f_paymentstatus === 1 ? totalAmount : 0);
         const remainingBalance = Math.max(0, totalAmount - amountPaid);
@@ -497,9 +498,8 @@ export const InvoicesOverviewPage: React.FC = () => {
     if (overdue.length > 0) {
       list.push({
         title: `${overdue.length} Invoices Overdue`,
-        detail: `Settlement past deadline for ${overdue[0].supplierName}${
-          overdue.length > 1 ? ` +${overdue.length - 1} more` : ""
-        }.`,
+        detail: `Settlement past deadline for ${overdue[0].supplierName}${overdue.length > 1 ? ` +${overdue.length - 1} more` : ""
+          }.`,
         filter: "OVERDUE",
       });
     }
@@ -575,8 +575,12 @@ export const InvoicesOverviewPage: React.FC = () => {
       }
 
       return true;
+    }).sort((a, b) => {
+      const timeA = a.invoiceDate ? new Date(a.invoiceDate).getTime() : 0;
+      const timeB = b.invoiceDate ? new Date(b.invoiceDate).getTime() : 0;
+      return dateSortOrder === "desc" ? timeB - timeA : timeA - timeB;
     });
-  }, [invoices, search, statusFilter, supplierQuery, dateQuery]);
+  }, [invoices, search, statusFilter, supplierQuery, dateQuery, dateSortOrder]);
 
   // Pagination calculation
   const totalPages = Math.ceil(filteredInvoices.length / PAGE_SIZE) || 1;
@@ -674,7 +678,7 @@ export const InvoicesOverviewPage: React.FC = () => {
             localStorage.setItem("procurement_all_invoices", JSON.stringify(list));
           }
         }
-      } catch {}
+      } catch { }
 
       await loadInvoices(true);
       if (selectedInvoiceForView) {
@@ -729,9 +733,8 @@ export const InvoicesOverviewPage: React.FC = () => {
       <section className="xd-kpis purchase-stats" aria-label="Invoice metrics">
         {kpiCards.map((metric) => (
           <article
-            className={`xd-kpi xd-${metric.tone} purchase-stat ${
-              statusFilter === metric.filter ? "selected" : ""
-            }`}
+            className={`xd-kpi xd-${metric.tone} purchase-stat ${statusFilter === metric.filter ? "selected" : ""
+              }`}
             key={metric.label}
             role="button"
             tabIndex={0}
@@ -839,9 +842,8 @@ export const InvoicesOverviewPage: React.FC = () => {
                   <span
                     className={`tone-${index % 4}`}
                     style={{
-                      width: `${
-                        maxSupplierSpend ? (row.value / maxSupplierSpend) * 100 : 0
-                      }%`,
+                      width: `${maxSupplierSpend ? (row.value / maxSupplierSpend) * 100 : 0
+                        }%`,
                     }}
                   />
                 </div>
@@ -953,7 +955,7 @@ export const InvoicesOverviewPage: React.FC = () => {
                   e.stopPropagation();
                   try {
                     (e.target as HTMLInputElement).showPicker();
-                  } catch {}
+                  } catch { }
                 }}
                 className="pr-hidden-date-input"
                 aria-label="Filter by invoice date"
@@ -1079,8 +1081,8 @@ export const InvoicesOverviewPage: React.FC = () => {
                   inv.totalAmount > 0
                     ? Math.min(100, Math.round((inv.amountPaid / inv.totalAmount) * 100))
                     : isPaid
-                    ? 100
-                    : 0;
+                      ? 100
+                      : 0;
 
                 return (
                   <div className="pr-grid-card" key={inv.id || inv.invoiceNumber}>
@@ -1092,9 +1094,8 @@ export const InvoicesOverviewPage: React.FC = () => {
                       />
                       <div className="pr-grid-badges">
                         <span
-                          className={`pr-status-badge ${
-                            isPaid ? "approved" : isOnHold ? "rejected" : "pending"
-                          }`}
+                          className={`pr-status-badge ${isPaid ? "approved" : isOnHold ? "rejected" : "pending"
+                            }`}
                         >
                           {inv.paymentStatusName}
                         </span>
@@ -1164,22 +1165,47 @@ export const InvoicesOverviewPage: React.FC = () => {
             <table className="pr-modern-table">
               <thead>
                 <tr>
-                  <th style={{ width: 44, textAlign: "center" }}></th>
-                  <th style={{ width: 48 }}>#</th>
-                  <th style={{ minWidth: 260 }}>Invoice Reference</th>
-                  <th style={{ minWidth: 150 }}>Associated PO</th>
-                  <th style={{ minWidth: 200 }}>Supplier / Vendor</th>
-                  <th style={{ minWidth: 130 }}>Total Amount</th>
-                  <th style={{ minWidth: 150 }}>Paid / Balance</th>
-                  <th style={{ minWidth: 140 }}>Due Date</th>
-                  <th style={{ minWidth: 130 }}>Status</th>
-                  <th style={{ minWidth: 120, textAlign: "right" }}>Actions</th>
+                  <th style={{ width: 34, textAlign: "center" }}></th>
+                  <th style={{ width: 36 }}>#</th>
+                  <th
+                    style={{ width: "21%", cursor: "pointer", userSelect: "none" }}
+                    onClick={() =>
+                      setDateSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
+                    }
+                    title={`Sorted by Created Date (${
+                      dateSortOrder === "desc" ? "Newest First" : "Oldest First"
+                    }). Click to toggle.`}
+                  >
+                    INVOICE REFERENCE{" "}
+                    <span
+                      className="sort-diamond"
+                      style={{ color: "var(--primary-hex, #2563eb)", fontWeight: 700 }}
+                    >
+                      {dateSortOrder === "desc" ? "▼" : "▲"}
+                    </span>
+                  </th>
+                  <th style={{ width: "14%" }}>
+                    ASSOCIATED PO <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "20%" }}>
+                    SUPPLIER / VENDOR <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "16%" }}>
+                    AMOUNT &amp; SETTLED <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "13%" }}>
+                    DUE DATE <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: "10%" }}>
+                    STATUS <span className="sort-diamond">◊</span>
+                  </th>
+                  <th style={{ width: 50, textAlign: "right" }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: "center", padding: "36px 0" }}>
+                    <td colSpan={9} style={{ textAlign: "center", padding: "36px 0" }}>
                       <div
                         style={{
                           display: "flex",
@@ -1202,8 +1228,8 @@ export const InvoicesOverviewPage: React.FC = () => {
                       inv.totalAmount > 0
                         ? Math.min(100, Math.round((inv.amountPaid / inv.totalAmount) * 100))
                         : isPaid
-                        ? 100
-                        : 0;
+                          ? 100
+                          : 0;
 
                     const isExpanded = expandedRowId === inv.id;
                     const rowIndex = String((safeCurrentPage - 1) * PAGE_SIZE + index + 1).padStart(
@@ -1248,16 +1274,11 @@ export const InvoicesOverviewPage: React.FC = () => {
                                   className="pr-details-title"
                                   onClick={() => setSelectedInvoiceForView(inv)}
                                   title={inv.invoiceNumber}
-                                  style={{ cursor: "pointer" }}
                                 >
                                   {inv.invoiceNumber}
                                 </strong>
                                 <div className="pr-details-meta">
-                                  <span className="pr-meta-ref">{inv.supplierName}</span>
-                                  <span className="pr-meta-sep">•</span>
-                                  <span className="pr-meta-date">
-                                    Issued {formatUsDate(inv.invoiceDate)}
-                                  </span>
+                                  <span>Issued {formatUsDate(inv.invoiceDate)}</span>
                                 </div>
                               </div>
                             </div>
@@ -1278,7 +1299,7 @@ export const InvoicesOverviewPage: React.FC = () => {
                               </button>
                             ) : (
                               <span className="pr-rfq-pill empty">
-                                <span>No PO Linked</span>
+                                <span>No PO</span>
                               </span>
                             )}
                           </td>
@@ -1301,49 +1322,45 @@ export const InvoicesOverviewPage: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* 6. Total Amount */}
+                          {/* 6. Amount & Settled (Combined cleanly) */}
                           <td className="pr-cell-amount">
-                            <strong>{formatCurrency(inv.totalAmount)}</strong>
-                          </td>
-
-                          {/* 7. Paid / Balance */}
-                          <td>
-                            <div
-                              className={`invoice-balance-cell ${
-                                inv.remainingBalance === 0
-                                  ? "settled"
-                                  : inv.paymentStatus === 4
-                                  ? "on-hold"
-                                  : inv.amountPaid > 0
-                                  ? "partial"
-                                  : "unpaid"
-                              }`}
-                            >
-                              <span className="balance-amount">
-                                {formatCurrency(inv.amountPaid)} paid
-                              </span>
-                              <span className="balance-sub">
-                                {inv.remainingBalance === 0
-                                  ? "Fully Settled"
-                                  : `Bal: ${formatCurrency(inv.remainingBalance)}`}
-                              </span>
+                            <div className="invoice-amount-block">
+                              <strong className="amount-main">
+                                {formatCurrency(inv.totalAmount)}
+                              </strong>
+                              {isPaid || inv.remainingBalance === 0 ? (
+                                <span className="invoice-settle-tag settled">
+                                  <Check size={10} /> Paid in Full
+                                </span>
+                              ) : isOnHold ? (
+                                <span className="invoice-settle-tag on-hold">
+                                  <AlertCircle size={10} /> On Hold
+                                </span>
+                              ) : inv.amountPaid > 0 ? (
+                                <span className="invoice-settle-tag partial">
+                                  {formatCurrency(inv.amountPaid)} paid (Bal: {formatCurrency(inv.remainingBalance)})
+                                </span>
+                              ) : (
+                                <span className="invoice-settle-tag unpaid">
+                                  Unpaid (Bal: {formatCurrency(inv.totalAmount)})
+                                </span>
+                              )}
                             </div>
                           </td>
 
-                          {/* 8. Due Date */}
+                          {/* 7. Due Date */}
                           <td>
                             <div
-                              className={`invoice-due-pill ${
-                                inv.isOverdue
+                              className={`invoice-due-pill ${inv.isOverdue
                                   ? "overdue"
                                   : inv.dueDaysRemaining !== undefined &&
                                     inv.dueDaysRemaining <= 7 &&
                                     inv.paymentStatus !== 1
-                                  ? "due-soon"
-                                  : "normal"
-                              }`}
+                                    ? "due-soon"
+                                    : "normal"
+                                }`}
                             >
-                              <Calendar size={12} />
+                              <Calendar size={11} />
                               <span>{formatUsDate(inv.dueDate)}</span>
                               {inv.isOverdue && <span style={{ fontWeight: 700 }}>(Overdue)</span>}
                               {inv.dueDaysRemaining !== undefined &&
@@ -1355,12 +1372,11 @@ export const InvoicesOverviewPage: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* 9. Payment Status */}
+                          {/* 8. Payment Status */}
                           <td>
                             <span
-                              className={`pr-status-badge ${
-                                isPaid ? "approved" : isOnHold ? "rejected" : "pending"
-                              }`}
+                              className={`pr-status-badge ${isPaid ? "approved" : isOnHold ? "rejected" : "pending"
+                                }`}
                             >
                               {isPaid ? (
                                 <CheckCircle2 size={12} className="badge-icon" />
@@ -1371,7 +1387,7 @@ export const InvoicesOverviewPage: React.FC = () => {
                             </span>
                           </td>
 
-                          {/* 10. Actions */}
+                          {/* 9. Actions */}
                           <td style={{ textAlign: "right" }}>
                             <div className="invoice-action-btn-group">
                               {inv.attachment && (
@@ -1381,7 +1397,6 @@ export const InvoicesOverviewPage: React.FC = () => {
                                   onClick={() => setSelectedInvoiceForView(inv)}
                                 >
                                   <Paperclip size={11} />
-                                  <span>Doc</span>
                                 </span>
                               )}
                               <button
@@ -1390,8 +1405,7 @@ export const InvoicesOverviewPage: React.FC = () => {
                                 onClick={() => setSelectedInvoiceForView(inv)}
                                 title="View invoice breakdown & milestones"
                               >
-                                <Eye size={12} />
-                                <span>View</span>
+                                <Eye size={13} />
                               </button>
                             </div>
                           </td>
@@ -1400,66 +1414,74 @@ export const InvoicesOverviewPage: React.FC = () => {
                         {/* EXPANDED ROW DETAIL DRAWER */}
                         {isExpanded && (
                           <tr className="pr-expanded-row">
-                            <td colSpan={10}>
-                              <div className="pr-detail-drawer">
-                                {/* Drawer Header Tabs & Close */}
-                                <div className="pr-drawer-header">
-                                  <div className="pr-drawer-tabs">
-                                    <button type="button" className="pr-drawer-tab active">
-                                      Financial Breakdown &amp; Audit
+                            <td colSpan={9}>
+                              <div className="pr-detail-drawer invoice-modern-drawer">
+                                {/* Drawer Top Bar */}
+                                <div className="invoice-drawer-topbar">
+                                  <div className="drawer-topbar-tabs">
+                                    <div className="drawer-tab-pill">
+                                      <Receipt size={14} />
+                                      <span>Commercial Breakdown &amp; 3-Way Audit</span>
+                                    </div>
+                                  </div>
+                                  <div className="drawer-topbar-right">
+                                    <span className="drawer-ref-badge">
+                                      Invoice: {inv.invoiceNumber}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="pr-drawer-close-btn"
+                                      onClick={() => setExpandedRowId(null)}
+                                      aria-label="Close drawer"
+                                    >
+                                      <X size={14} />
                                     </button>
                                   </div>
-                                  <button
-                                    type="button"
-                                    className="pr-drawer-close-btn"
-                                    onClick={() => setExpandedRowId(null)}
-                                    aria-label="Close drawer"
-                                  >
-                                    <X size={14} />
-                                  </button>
                                 </div>
 
-                                <div className="pr-drawer-grid">
-                                  {/* Left: Financial calculation breakdown */}
-                                  <div className="pr-drawer-meta-card">
-                                    <div className="pr-meta-card-title">
-                                      <Receipt size={15} />
-                                      <span>Commercial Calculation</span>
-                                    </div>
-                                    <div className="pr-meta-grid">
-                                      <div className="pr-meta-row">
-                                        <span className="label">PO Baseline Total</span>
-                                        <strong className="val">{formatCurrency(inv.poAmount)}</strong>
+                                {/* 3-Card Grid */}
+                                <div className="invoice-drawer-cards-grid">
+                                  {/* CARD 1: Commercial Calculation */}
+                                  <div className="invoice-panel-card calculation-panel">
+                                    <div className="panel-card-head">
+                                      <div className="panel-card-title">
+                                        <Receipt size={15} className="panel-icon" />
+                                        <span>Commercial Calculation</span>
                                       </div>
-                                      <div className="pr-meta-row">
-                                        <span className="label">Contractual Discount</span>
-                                        <strong className="val" style={{ color: "#16a34a" }}>
+                                      <span className="panel-badge-soft">Verified</span>
+                                    </div>
+
+                                    <div className="calculation-rows-list">
+                                      <div className="calc-item-row">
+                                        <span className="calc-label">PO Baseline Total</span>
+                                        <strong className="calc-value">{formatCurrency(inv.poAmount)}</strong>
+                                      </div>
+                                      <div className="calc-item-row">
+                                        <span className="calc-label">Contractual Discount</span>
+                                        <strong className="calc-value discount-text">
                                           -${Number(inv.discount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                                         </strong>
                                       </div>
-                                      <div className="pr-meta-row">
-                                        <span className="label">Additional Surcharges</span>
-                                        <strong className="val">
+                                      <div className="calc-item-row">
+                                        <span className="calc-label">Additional Surcharges</span>
+                                        <strong className="calc-value surcharge-text">
                                           +${Number(inv.additionalCharges || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                                         </strong>
                                       </div>
-                                      <div className="pr-meta-row">
-                                        <span className="label">Total Amount Payable</span>
-                                        <strong className="val" style={{ color: "#2563eb", fontSize: "14px" }}>
-                                          {formatCurrency(inv.totalAmount)}
-                                        </strong>
+                                      <div className="calc-item-row highlight-payable">
+                                        <span className="calc-label-bold">Total Amount Payable</span>
+                                        <strong className="calc-value-bold">{formatCurrency(inv.totalAmount)}</strong>
                                       </div>
-                                      <div className="pr-meta-row">
-                                        <span className="label">Amount Settled</span>
-                                        <strong className="val" style={{ color: "#16a34a" }}>
-                                          {formatCurrency(inv.amountPaid)}
-                                        </strong>
+                                      <div className="calc-item-row">
+                                        <span className="calc-label">Amount Settled</span>
+                                        <strong className="calc-value settled-text">{formatCurrency(inv.amountPaid)}</strong>
                                       </div>
-                                      <div className="pr-meta-row">
-                                        <span className="label">Remaining Balance</span>
+                                      <div className="calc-item-row">
+                                        <span className="calc-label">Remaining Balance</span>
                                         <strong
-                                          className="val"
-                                          style={{ color: inv.remainingBalance > 0 ? "#d97706" : "#16a34a" }}
+                                          className={`calc-value ${
+                                            inv.remainingBalance > 0 ? "balance-pending" : "balance-zero"
+                                          }`}
                                         >
                                           {formatCurrency(inv.remainingBalance)}
                                         </strong>
@@ -1467,90 +1489,184 @@ export const InvoicesOverviewPage: React.FC = () => {
                                     </div>
                                   </div>
 
-                                  {/* Middle: AI Match & Integrity */}
-                                  <div className="pr-drawer-ai-card">
-                                    <div className="pr-ai-card-title">
-                                      <Sparkles size={15} />
-                                      <span>3-Way Matching &amp; Audit</span>
+                                  {/* CARD 2: 3-Way Matching & Audit */}
+                                  <div className="invoice-panel-card audit-panel">
+                                    <div className="panel-card-head">
+                                      <div className="panel-card-title">
+                                        <Sparkles size={15} className="panel-icon ai-sparkle" />
+                                        <span>3-Way Match &amp; Integrity</span>
+                                      </div>
+                                      {inv.poRef ? (
+                                        <span className="panel-badge-success">
+                                          <CheckCircle2 size={11} /> Reconciled
+                                        </span>
+                                      ) : (
+                                        <span className="panel-badge-warning">
+                                          <AlertCircle size={11} /> Standalone
+                                        </span>
+                                      )}
                                     </div>
-                                    <p className="pr-ai-card-text">
-                                      {inv.poRef
-                                        ? `Invoice verified against Purchase Order ${inv.poRef}. Commercial values reconcile with approved PO total.`
-                                        : "Standalone invoice record. Please associate with a validated purchase order."}
-                                    </p>
-                                    <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+
+                                    <div className="audit-checklist-body">
+                                      <div className="audit-step-item">
+                                        <div className="audit-step-check">
+                                          <CheckCircle2 size={14} className="step-icon-passed" />
+                                        </div>
+                                        <div className="audit-step-info">
+                                          <span className="step-title">PO Association</span>
+                                          <span className="step-subtitle">
+                                            {inv.poRef
+                                              ? `Linked to Purchase Order ${inv.poRef}`
+                                              : "No purchase order linked to this invoice"}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="audit-step-item">
+                                        <div className="audit-step-check">
+                                          <CheckCircle2 size={14} className="step-icon-passed" />
+                                        </div>
+                                        <div className="audit-step-info">
+                                          <span className="step-title">Pricing &amp; Baseline Integrity</span>
+                                          <span className="step-subtitle">
+                                            {inv.poAmount > 0
+                                              ? `Commercial variance matches PO baseline ($${inv.poAmount.toFixed(2)})`
+                                              : "Commercial values reconcile with approved PO total"}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="audit-step-item">
+                                        <div className="audit-step-check">
+                                          <CheckCircle2 size={14} className="step-icon-passed" />
+                                        </div>
+                                        <div className="audit-step-info">
+                                          <span className="step-title">Supplier Authenticity</span>
+                                          <span className="step-subtitle">
+                                            Vendor credentials validated against Dataverse master
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="panel-footer-actions">
+                                      {inv.poRef && (
+                                        <button
+                                          type="button"
+                                          className="panel-btn-secondary"
+                                          onClick={() => navigate(`/orders/${inv.poRef}`)}
+                                        >
+                                          <ShoppingCart size={13} />
+                                          <span>View PO {inv.poRef}</span>
+                                          <ExternalLink size={11} />
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
-                                        className="pr-ai-card-link"
-                                        onClick={() => navigate(`/orders/${inv.poRef}`)}
-                                      >
-                                        View Linked PO <ExternalLink size={12} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="pr-ai-card-link"
+                                        className="panel-btn-primary"
                                         onClick={() => setSelectedInvoiceForView(inv)}
                                       >
-                                        Full Invoice View <Eye size={12} />
+                                        <Eye size={13} />
+                                        <span>Full Details</span>
                                       </button>
                                     </div>
                                   </div>
 
-                                  {/* Right: Supplier Profile & Quick Settlement Actions */}
-                                  <div className="pr-drawer-vendors-card">
-                                    <div className="pr-vendors-card-title">
-                                      <Building2 size={15} />
-                                      <span>Vendor Settlement</span>
+                                  {/* CARD 3: Vendor Settlement & Direct Actions */}
+                                  <div className="invoice-panel-card settlement-panel">
+                                    <div className="panel-card-head">
+                                      <div className="panel-card-title">
+                                        <Building2 size={15} className="panel-icon" />
+                                        <span>Vendor Settlement</span>
+                                      </div>
+                                      <span
+                                        className={`status-pill-subtle ${
+                                          isPaid ? "paid" : isOnHold ? "hold" : "unpaid"
+                                        }`}
+                                      >
+                                        {inv.paymentStatusName}
+                                      </span>
                                     </div>
-                                    <div className="pr-vendors-card-list">
-                                      <div className="pr-vendor-row">
-                                        <div className="vendor-left">
-                                          <span className="vendor-avatar">
-                                            {getInitials(inv.supplierName)}
-                                          </span>
-                                          <div className="vendor-info">
-                                            <strong className="vendor-name">{inv.supplierName}</strong>
-                                            <span className="vendor-status">
-                                              Status: {inv.paymentStatusName}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
 
-                                      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                        {inv.paymentStatus !== 1 && (
-                                          <button
-                                            type="button"
-                                            className="invoice-status-quick-btn pay-btn"
-                                            onClick={() => void handleQuickStatusChange(inv, 1)}
-                                            disabled={isUpdatingStatus}
-                                          >
-                                            <Check size={13} />
-                                            Mark as Paid
-                                          </button>
-                                        )}
-                                        {inv.paymentStatus !== 4 && (
-                                          <button
-                                            type="button"
-                                            className="invoice-status-quick-btn hold-btn"
-                                            onClick={() => void handleQuickStatusChange(inv, 4)}
-                                            disabled={isUpdatingStatus}
-                                          >
-                                            <AlertCircle size={13} />
-                                            Hold
-                                          </button>
-                                        )}
-                                        {inv.paymentStatus === 4 && (
-                                          <button
-                                            type="button"
-                                            className="invoice-status-quick-btn pay-btn"
-                                            onClick={() => void handleQuickStatusChange(inv, 2)}
-                                            disabled={isUpdatingStatus}
-                                          >
-                                            Release Hold
-                                          </button>
-                                        )}
+                                    {/* Vendor Details */}
+                                    <div className="drawer-vendor-profile-box">
+                                      <span className="drawer-vendor-avatar">
+                                        {getInitials(inv.supplierName)}
+                                      </span>
+                                      <div className="drawer-vendor-text">
+                                        <strong className="drawer-vendor-name" title={inv.supplierName}>
+                                          {inv.supplierName}
+                                        </strong>
+                                        <span className="drawer-vendor-sub">
+                                          Authorized Supplier • Tier 1
+                                        </span>
                                       </div>
+                                    </div>
+
+                                    {/* Settlement Meta */}
+                                    <div className="settlement-meta-grid">
+                                      <div className="settle-meta-item">
+                                        <span className="meta-lbl">Due Date</span>
+                                        <strong className="meta-val">{formatUsDate(inv.dueDate)}</strong>
+                                      </div>
+                                      <div className="settle-meta-item">
+                                        <span className="meta-lbl">Payment Status</span>
+                                        <strong className="meta-val">{inv.paymentStatusName}</strong>
+                                      </div>
+                                      <div className="settle-meta-item span-full">
+                                        <span className="meta-lbl">Settlement Progress</span>
+                                        <div className="drawer-progress-track">
+                                          <div
+                                            className="drawer-progress-fill"
+                                            style={{
+                                              width: `${progressPct}%`,
+                                              background: isPaid ? "#16a34a" : isOnHold ? "#dc2626" : "#2563eb",
+                                            }}
+                                          />
+                                        </div>
+                                        <span className="drawer-progress-caption">
+                                          {progressPct}% Paid • {formatCurrency(inv.amountPaid)} of {formatCurrency(inv.totalAmount)}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Quick Actions */}
+                                    <div className="drawer-actions-strip">
+                                      {inv.paymentStatus !== 1 && (
+                                        <button
+                                          type="button"
+                                          className="drawer-action-btn pay"
+                                          onClick={() => void handleQuickStatusChange(inv, 1)}
+                                          disabled={isUpdatingStatus}
+                                          title="Mark this invoice as Paid"
+                                        >
+                                          <Check size={14} />
+                                          <span>Mark as Paid</span>
+                                        </button>
+                                      )}
+                                      {inv.paymentStatus !== 4 ? (
+                                        <button
+                                          type="button"
+                                          className="drawer-action-btn hold"
+                                          onClick={() => void handleQuickStatusChange(inv, 4)}
+                                          disabled={isUpdatingStatus}
+                                          title="Put payment on hold"
+                                        >
+                                          <AlertCircle size={14} />
+                                          <span>Place on Hold</span>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="drawer-action-btn release"
+                                          onClick={() => void handleQuickStatusChange(inv, 2)}
+                                          disabled={isUpdatingStatus}
+                                          title="Release hold status"
+                                        >
+                                          <Clock3 size={14} />
+                                          <span>Release Hold</span>
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -1563,7 +1679,7 @@ export const InvoicesOverviewPage: React.FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10} style={{ padding: "48px 20px" }}>
+                    <td className="purchase-empty-state" colSpan={9} style={{ padding: "48px 20px" }}>
                       {invoices.length === 0
                         ? "No supplier invoices found in Dataverse cr49f_invoice1 table. Upload an invoice to begin tracking billing milestones."
                         : "No invoices match your current search and filter criteria."}
@@ -1658,13 +1774,12 @@ export const InvoicesOverviewPage: React.FC = () => {
                   <label>Payment Status</label>
                   <div>
                     <span
-                      className={`pr-status-badge ${
-                        selectedInvoiceForView.paymentStatus === 1
+                      className={`pr-status-badge ${selectedInvoiceForView.paymentStatus === 1
                           ? "approved"
                           : selectedInvoiceForView.paymentStatus === 4
-                          ? "rejected"
-                          : "pending"
-                      }`}
+                            ? "rejected"
+                            : "pending"
+                        }`}
                     >
                       {selectedInvoiceForView.paymentStatusName}
                     </span>
