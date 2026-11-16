@@ -48,8 +48,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   const items = isSupplier
     ? supplierNavigationItems
     : isAdmin
-    ? adminNavigationItems
-    : userNavigationItems;
+      ? adminNavigationItems
+      : userNavigationItems;
 
   return (
     <aside className="sidebar">
