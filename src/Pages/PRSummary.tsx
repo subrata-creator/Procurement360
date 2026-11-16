@@ -306,17 +306,31 @@ export default function PurchaseRequestDetail() {
   const liveRecord = useMemo(() => {
     if (!ref) return undefined;
     const routeRef = normalizeId(ref);
-    const foundLive = liveRequests.find((request) =>
-      normalizeId(request.cr49f_prnumber) === routeRef ||
-      normalizeId(request.cr49f_purchaserequestid) === routeRef
-    );
+    const cleanRouteGuid = cleanGuid(ref);
+
+    const foundLive = liveRequests.find((request) => {
+      const prId = cleanGuid(request.cr49f_purchaserequestid);
+      const prNum = normalizeId(request.cr49f_prnumber);
+      return (
+        (cleanRouteGuid && prId && cleanRouteGuid === prId) ||
+        (routeRef && prNum && prNum === routeRef) ||
+        (routeRef && normalizeId(request.cr49f_purchaserequestid) === routeRef)
+      );
+    });
     if (foundLive) return foundLive;
 
     // Fallback: seeded / mock PRs
-    const mockPr = getPurchaseRequestByRef(ref) || purchaseRequests.find((p) => normalizeId(p.ref) === routeRef);
+    const mockPr = getPurchaseRequestByRef(ref) || purchaseRequests.find((p) => {
+      const mRef = normalizeId(p.ref);
+      const mGuid = cleanGuid((p as any).guid || p.ref);
+      return (
+        mRef === routeRef ||
+        (cleanRouteGuid && mGuid && cleanRouteGuid === mGuid)
+      );
+    });
     if (mockPr) {
       return {
-        cr49f_purchaserequestid: mockPr.ref,
+        cr49f_purchaserequestid: (mockPr as any).guid || mockPr.ref,
         cr49f_prnumber: mockPr.ref,
         cr49f_prtitle: mockPr.title,
         cr49f_status: mockPr.status === "Approved" ? 1 : mockPr.status === "Rejected" ? 3 : 0,
@@ -333,8 +347,17 @@ export default function PurchaseRequestDetail() {
   const mappedLineItems: LineItem[] = useMemo(() => {
     if (!liveRecord) return [];
     const requestId = normalizeId(liveRecord.cr49f_purchaserequestid);
+    const cleanReqGuid = cleanGuid(liveRecord.cr49f_purchaserequestid);
+
     const lines = liveLines
-      .filter((line) => normalizeId(line._cr49f_purchaserequest_value) === requestId)
+      .filter((line) => {
+        const val = normalizeId(line._cr49f_purchaserequest_value);
+        const guidVal = cleanGuid(line._cr49f_purchaserequest_value);
+        return (
+          (cleanReqGuid && guidVal && cleanReqGuid === guidVal) ||
+          (requestId && val && val === requestId)
+        );
+      })
       .map((line, index) => {
         const quantity = Number(line.cr49f_quantity) || 0;
         const unitPrice = Number(line.cr49f_unitprice) || 0;
@@ -682,17 +705,18 @@ export default function PurchaseRequestDetail() {
     }
   };
 
-  if (loading) {
+  if (loading && !liveRecord) {
     return (
       <div className="pr-detail-page">
         <div className="pr-detail-notfound">
+          <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary-hex, #2563eb)", marginBottom: 12 }} />
           <p>Loading purchase request from Dataverse…</p>
         </div>
       </div>
     );
   }
 
-  if (loadError) {
+  if (loadError && !liveRecord) {
     return (
       <div className="pr-detail-page">
         <div className="pr-detail-notfound">
@@ -704,6 +728,16 @@ export default function PurchaseRequestDetail() {
   }
 
   if (!record || !liveRecord) {
+    if (loading) {
+      return (
+        <div className="pr-detail-page">
+          <div className="pr-detail-notfound">
+            <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary-hex, #2563eb)", marginBottom: 12 }} />
+            <p>Loading purchase request from Dataverse…</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="pr-detail-page">
         <div className="pr-detail-notfound">
@@ -1233,7 +1267,7 @@ export default function PurchaseRequestDetail() {
     }
   };
 
-  const calculatedGrandTotal = useMemo(() => {
+  const calculatedGrandTotal = (() => {
     if (liveRecord?.cr49f_totalamount != null && liveRecord.cr49f_totalamount > 0) {
       return currencyFormatter.format(liveRecord.cr49f_totalamount);
     }
@@ -1244,13 +1278,11 @@ export default function PurchaseRequestDetail() {
       return acc + (isNaN(numericVal) ? 0 : numericVal);
     }, 0);
     return sum > 0 ? currencyFormatter.format(sum) : record?.totalAmount || "$0.00";
-  }, [liveRecord?.cr49f_totalamount, lineItems, record?.totalAmount]);
+  })();
 
-  const totalItemQuantity = useMemo(() => {
-    return lineItems.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
-  }, [lineItems]);
+  const totalItemQuantity = lineItems.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
 
-  const prApprovalStats = useMemo(() => {
+  const prApprovalStats = (() => {
     if (approvalTasks.length === 0) {
       const isDone = prCreationStatus === "Completed";
       return { total: 4, approved: isDone ? 4 : 0, percent: isDone ? 100 : 25 };
@@ -1261,7 +1293,7 @@ export default function PurchaseRequestDetail() {
     ).length;
     const percent = Math.round((approved / total) * 100);
     return { total, approved, percent };
-  }, [approvalTasks, prCreationStatus]);
+  })();
 
   const toggleMilestone = (step: ApprovalStep) => {
     if (subTasksOpen && activeMilestone?.step === step.step) {
