@@ -18,7 +18,6 @@ import {
   AlertCircle,
   X,
   ExternalLink,
-  Paperclip,
   Eye,
   ShoppingCart,
   Building2,
@@ -167,7 +166,6 @@ export const InvoicesOverviewPage: React.FC = () => {
 
   // Modals & Action state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
-  const [selectedInvoiceForView, setSelectedInvoiceForView] = useState<EnrichedInvoice | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<boolean>(false);
 
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -681,16 +679,6 @@ export const InvoicesOverviewPage: React.FC = () => {
       } catch { }
 
       await loadInvoices(true);
-      if (selectedInvoiceForView) {
-        setSelectedInvoiceForView({
-          ...selectedInvoiceForView,
-          paymentStatus: newStatus,
-          amountPaid,
-          remainingBalance: Math.max(0, targetInvoice.totalAmount - amountPaid),
-          paymentStatusName:
-            newStatus === 1 ? "Paid" : newStatus === 3 ? "Partially Paid" : newStatus === 4 ? "On Hold" : "Not Paid",
-        });
-      }
     } catch (err) {
       console.error("Failed to update payment status:", err);
     } finally {
@@ -1105,7 +1093,9 @@ export const InvoicesOverviewPage: React.FC = () => {
                     <div className="pr-grid-card-body">
                       <strong
                         className="pr-grid-card-title"
-                        onClick={() => setSelectedInvoiceForView(inv)}
+                        onClick={() =>
+                          navigate(`/invoices/${encodeURIComponent(inv.invoiceNumber || inv.id)}`)
+                        }
                         title={inv.invoiceNumber}
                       >
                         {inv.invoiceNumber}
@@ -1137,9 +1127,11 @@ export const InvoicesOverviewPage: React.FC = () => {
                       <button
                         type="button"
                         className="pr-grid-btn"
-                        onClick={() => setSelectedInvoiceForView(inv)}
+                        onClick={() =>
+                          navigate(`/invoices/${encodeURIComponent(inv.invoiceNumber || inv.id)}`)
+                        }
                       >
-                        View Invoice Details
+                        Open Summary Page
                       </button>
                     </div>
                   </div>
@@ -1168,13 +1160,12 @@ export const InvoicesOverviewPage: React.FC = () => {
                   <th style={{ width: 34, textAlign: "center" }}></th>
                   <th style={{ width: 36 }}>#</th>
                   <th
-                    style={{ width: "21%", cursor: "pointer", userSelect: "none" }}
+                    style={{ width: "22%", cursor: "pointer", userSelect: "none" }}
                     onClick={() =>
                       setDateSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
                     }
-                    title={`Sorted by Created Date (${
-                      dateSortOrder === "desc" ? "Newest First" : "Oldest First"
-                    }). Click to toggle.`}
+                    title={`Sorted by Created Date (${dateSortOrder === "desc" ? "Newest First" : "Oldest First"
+                      }). Click to toggle.`}
                   >
                     INVOICE REFERENCE{" "}
                     <span
@@ -1187,25 +1178,24 @@ export const InvoicesOverviewPage: React.FC = () => {
                   <th style={{ width: "14%" }}>
                     ASSOCIATED PO <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "20%" }}>
+                  <th style={{ width: "22%" }}>
                     SUPPLIER / VENDOR <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "16%" }}>
+                  <th style={{ width: "18%" }}>
                     AMOUNT &amp; SETTLED <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "13%" }}>
+                  <th style={{ width: "14%" }}>
                     DUE DATE <span className="sort-diamond">◊</span>
                   </th>
                   <th style={{ width: "10%" }}>
                     STATUS <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: 50, textAlign: "right" }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: "center", padding: "36px 0" }}>
+                    <td colSpan={8} style={{ textAlign: "center", padding: "36px 0" }}>
                       <div
                         style={{
                           display: "flex",
@@ -1272,8 +1262,10 @@ export const InvoicesOverviewPage: React.FC = () => {
                               <div className="pr-details-text">
                                 <strong
                                   className="pr-details-title"
-                                  onClick={() => setSelectedInvoiceForView(inv)}
-                                  title={inv.invoiceNumber}
+                                  onClick={() =>
+                                    navigate(`/invoices/${encodeURIComponent(inv.invoiceNumber || inv.id)}`)
+                                  }
+                                  title={`Open Summary Page for ${inv.invoiceNumber}`}
                                 >
                                   {inv.invoiceNumber}
                                 </strong>
@@ -1352,12 +1344,12 @@ export const InvoicesOverviewPage: React.FC = () => {
                           <td>
                             <div
                               className={`invoice-due-pill ${inv.isOverdue
-                                  ? "overdue"
-                                  : inv.dueDaysRemaining !== undefined &&
-                                    inv.dueDaysRemaining <= 7 &&
-                                    inv.paymentStatus !== 1
-                                    ? "due-soon"
-                                    : "normal"
+                                ? "overdue"
+                                : inv.dueDaysRemaining !== undefined &&
+                                  inv.dueDaysRemaining <= 7 &&
+                                  inv.paymentStatus !== 1
+                                  ? "due-soon"
+                                  : "normal"
                                 }`}
                             >
                               <Calendar size={11} />
@@ -1386,35 +1378,12 @@ export const InvoicesOverviewPage: React.FC = () => {
                               {inv.paymentStatusName}
                             </span>
                           </td>
-
-                          {/* 9. Actions */}
-                          <td style={{ textAlign: "right" }}>
-                            <div className="invoice-action-btn-group">
-                              {inv.attachment && (
-                                <span
-                                  className="invoice-attachment-pill"
-                                  title={`Attachment: ${inv.attachment}`}
-                                  onClick={() => setSelectedInvoiceForView(inv)}
-                                >
-                                  <Paperclip size={11} />
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                className="invoice-row-action-btn"
-                                onClick={() => setSelectedInvoiceForView(inv)}
-                                title="View invoice breakdown & milestones"
-                              >
-                                <Eye size={13} />
-                              </button>
-                            </div>
-                          </td>
                         </tr>
 
                         {/* EXPANDED ROW DETAIL DRAWER */}
                         {isExpanded && (
                           <tr className="pr-expanded-row">
-                            <td colSpan={9}>
+                            <td colSpan={8}>
                               <div className="pr-detail-drawer invoice-modern-drawer">
                                 {/* Drawer Top Bar */}
                                 <div className="invoice-drawer-topbar">
@@ -1479,9 +1448,8 @@ export const InvoicesOverviewPage: React.FC = () => {
                                       <div className="calc-item-row">
                                         <span className="calc-label">Remaining Balance</span>
                                         <strong
-                                          className={`calc-value ${
-                                            inv.remainingBalance > 0 ? "balance-pending" : "balance-zero"
-                                          }`}
+                                          className={`calc-value ${inv.remainingBalance > 0 ? "balance-pending" : "balance-zero"
+                                            }`}
                                         >
                                           {formatCurrency(inv.remainingBalance)}
                                         </strong>
@@ -1564,10 +1532,12 @@ export const InvoicesOverviewPage: React.FC = () => {
                                       <button
                                         type="button"
                                         className="panel-btn-primary"
-                                        onClick={() => setSelectedInvoiceForView(inv)}
+                                        onClick={() =>
+                                          navigate(`/invoices/${encodeURIComponent(inv.invoiceNumber || inv.id)}`)
+                                        }
                                       >
                                         <Eye size={13} />
-                                        <span>Full Details</span>
+                                        <span>View Full Summary Page</span>
                                       </button>
                                     </div>
                                   </div>
@@ -1580,9 +1550,8 @@ export const InvoicesOverviewPage: React.FC = () => {
                                         <span>Vendor Settlement</span>
                                       </div>
                                       <span
-                                        className={`status-pill-subtle ${
-                                          isPaid ? "paid" : isOnHold ? "hold" : "unpaid"
-                                        }`}
+                                        className={`status-pill-subtle ${isPaid ? "paid" : isOnHold ? "hold" : "unpaid"
+                                          }`}
                                       >
                                         {inv.paymentStatusName}
                                       </span>
@@ -1679,7 +1648,7 @@ export const InvoicesOverviewPage: React.FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={9} style={{ padding: "48px 20px" }}>
+                    <td className="purchase-empty-state" colSpan={8} style={{ padding: "48px 20px" }}>
                       {invoices.length === 0
                         ? "No supplier invoices found in Dataverse cr49f_invoice1 table. Upload an invoice to begin tracking billing milestones."
                         : "No invoices match your current search and filter criteria."}
@@ -1732,175 +1701,7 @@ export const InvoicesOverviewPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 6. DETAIL PREVIEW MODAL */}
-      {selectedInvoiceForView && (
-        <div
-          className="invoice-detail-preview-modal"
-          onClick={() => setSelectedInvoiceForView(null)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="invoice-detail-card-inner" onClick={(e) => e.stopPropagation()}>
-            <header className="invoice-detail-modal-header">
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="invoice-modal-icon-badge">
-                  <Receipt size={18} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-                    {selectedInvoiceForView.invoiceNumber}
-                  </h3>
-                  <span style={{ fontSize: 12, color: "var(--muted-foreground-hex)" }}>
-                    Linked to Purchase Order {selectedInvoiceForView.poRef}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="invoice-modal-close-btn"
-                onClick={() => setSelectedInvoiceForView(null)}
-              >
-                <X size={17} />
-              </button>
-            </header>
-
-            <div className="invoice-detail-modal-body">
-              <div className="invoice-detail-grid-2">
-                <div className="invoice-detail-item">
-                  <label>Supplier / Vendor</label>
-                  <strong>{selectedInvoiceForView.supplierName}</strong>
-                </div>
-                <div className="invoice-detail-item">
-                  <label>Payment Status</label>
-                  <div>
-                    <span
-                      className={`pr-status-badge ${selectedInvoiceForView.paymentStatus === 1
-                          ? "approved"
-                          : selectedInvoiceForView.paymentStatus === 4
-                            ? "rejected"
-                            : "pending"
-                        }`}
-                    >
-                      {selectedInvoiceForView.paymentStatusName}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="invoice-detail-item">
-                  <label>Invoice Date</label>
-                  <strong>{formatUsDate(selectedInvoiceForView.invoiceDate)}</strong>
-                </div>
-                <div className="invoice-detail-item">
-                  <label>Payment Due Date</label>
-                  <strong>{formatUsDate(selectedInvoiceForView.dueDate)}</strong>
-                </div>
-              </div>
-
-              {/* Commercial Calculation Breakdown */}
-              <div className="invoice-detail-breakdown">
-                <div className="invoice-breakdown-row">
-                  <span>PO Baseline Total</span>
-                  <span>{formatCurrency(selectedInvoiceForView.poAmount)}</span>
-                </div>
-                <div className="invoice-breakdown-row">
-                  <span>Contractual Discount</span>
-                  <span style={{ color: "#16a34a" }}>
-                    -${Number(selectedInvoiceForView.discount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="invoice-breakdown-row">
-                  <span>Additional Charges</span>
-                  <span>
-                    +${Number(selectedInvoiceForView.additionalCharges || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="invoice-breakdown-row total-row">
-                  <span>Total Invoiced</span>
-                  <span style={{ color: "#2563eb" }}>
-                    {formatCurrency(selectedInvoiceForView.totalAmount)}
-                  </span>
-                </div>
-                <div className="invoice-breakdown-row">
-                  <span>Amount Paid to Date</span>
-                  <span style={{ color: "#16a34a", fontWeight: 700 }}>
-                    {formatCurrency(selectedInvoiceForView.amountPaid)}
-                  </span>
-                </div>
-                <div className="invoice-breakdown-row">
-                  <span>Remaining Balance</span>
-                  <span
-                    style={{
-                      color: selectedInvoiceForView.remainingBalance > 0 ? "#d97706" : "#16a34a",
-                      fontWeight: 750,
-                    }}
-                  >
-                    {formatCurrency(selectedInvoiceForView.remainingBalance)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Attachment if present */}
-              {selectedInvoiceForView.attachment && (
-                <div className="invoice-detail-item">
-                  <label>Attached Document</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                    <Paperclip size={14} style={{ color: "#2563eb" }} />
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>
-                      {selectedInvoiceForView.attachment}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <footer className="invoice-detail-modal-footer">
-              <div style={{ display: "flex", gap: 8 }}>
-                {selectedInvoiceForView.paymentStatus !== 1 && (
-                  <button
-                    type="button"
-                    className="invoice-status-quick-btn pay-btn"
-                    onClick={() => void handleQuickStatusChange(selectedInvoiceForView, 1)}
-                    disabled={isUpdatingStatus}
-                  >
-                    <Check size={14} />
-                    Mark as Paid
-                  </button>
-                )}
-                {selectedInvoiceForView.paymentStatus !== 4 && (
-                  <button
-                    type="button"
-                    className="invoice-status-quick-btn hold-btn"
-                    onClick={() => void handleQuickStatusChange(selectedInvoiceForView, 4)}
-                    disabled={isUpdatingStatus}
-                  >
-                    <AlertCircle size={14} />
-                    Put On Hold
-                  </button>
-                )}
-                {selectedInvoiceForView.paymentStatus === 4 && (
-                  <button
-                    type="button"
-                    className="invoice-status-quick-btn pay-btn"
-                    onClick={() => void handleQuickStatusChange(selectedInvoiceForView, 2)}
-                    disabled={isUpdatingStatus}
-                  >
-                    Release Hold
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                className="invoice-row-action-btn"
-                onClick={() => setSelectedInvoiceForView(null)}
-              >
-                Close
-              </button>
-            </footer>
-          </div>
-        </div>
-      )}
-
-      {/* 7. UPLOAD INVOICE MODAL */}
+      {/* 6. UPLOAD INVOICE MODAL */}
       <UploadInvoiceModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}

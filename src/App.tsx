@@ -31,6 +31,7 @@ import SupplierDashboard from "./Pages/Supplier/SupplierDashboard";
 import SupplierRfqsPage from "./Pages/Supplier/SupplierRfqsPage";
 import SupplierRfqResponsePage from "./Pages/Supplier/SupplierRfqResponsePage";
 import InvoicesOverviewPage from "./Pages/InvoicesOverviewPage";
+import InvoiceSummaryPage from "./Pages/InvoiceSummaryPage";
 
 import { Cr49f_userrolesesService } from "../src/generated/services/Cr49f_userrolesesService";
 
@@ -97,7 +98,9 @@ const AppContent: React.FC = () => {
   const isForecastRoute = location.pathname.startsWith("/rfq-forecast");
   const isRfqRoute = location.pathname.startsWith("/rfqs");
   const isOrdersRoute = location.pathname.startsWith("/orders");
-  const isInvoicesRoute = location.pathname.startsWith("/invoices");
+  const isInvoicesRoute =
+    location.pathname.startsWith("/invoices") ||
+    location.pathname.startsWith("/invoice-summary");
   const isTaskRoute = location.pathname.startsWith("/tasks/");
 
   const isRoleLoading = loggedInUser.userRole === "Loading...";
@@ -456,6 +459,8 @@ const AppContent: React.FC = () => {
           ) : isInvoicesRoute ? (
             <Routes>
               <Route path="/invoices" element={<InvoicesOverviewPage />} />
+              <Route path="/invoices/:ref" element={<InvoiceSummaryPage />} />
+              <Route path="/invoice-summary/:ref" element={<InvoiceSummaryPage />} />
             </Routes>
           ) : isTaskRoute ? (
             <Routes>
