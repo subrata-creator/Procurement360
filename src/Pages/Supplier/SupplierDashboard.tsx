@@ -134,9 +134,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
   // RFQ filtering & search
   const [rfqSearch, setRfqSearch] = useState<string>("");
-  const [rfqStatusFilter, setRfqStatusFilter] = useState<
-    "All" | "Pending" | "Submitted" | "Rewarded" | "Not Rewarded"
-  >("All");
 
   // Products filtering & search
   const [productSearch, setProductSearch] = useState<string>("");
@@ -287,27 +284,44 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
   // KPIs
   const totalRfqs = invitations.length;
   const rewardedRfqs = invitations.filter((i) => i.status === "Rewarded" || i.isRewarded).length;
-  const notRewardedRfqs = invitations.filter((i) => i.status === "Not Rewarded").length;
+  const submittedRfqs = invitations.filter(
+    (i) => (i.status === "Submitted" || (i.totalAmount && i.totalAmount > 0)) && !i.isRewarded
+  ).length;
   const pendingRfqs = invitations.filter(
     (i) =>
       i.status !== "Rewarded" &&
       !i.isRewarded &&
       i.status !== "Not Rewarded" &&
+      i.status !== "Submitted" &&
+      !(i.totalAmount && i.totalAmount > 0) &&
       (i.status === "Invited" || i.status === "Draft")
   ).length;
-  const submittedRfqs = invitations.filter((i) => i.status === "Submitted" && !i.isRewarded).length;
   const responseRate = totalRfqs > 0 ? Math.round((submittedRfqs / totalRfqs) * 100) : 20;
 
-  // Pipeline Counts for Momentum Chart
-  const invitedCount = invitations.filter((i) => i.status === "Invited").length || 4;
-  const draftCount = invitations.filter((i) => i.status === "Draft").length || 2;
-  const maxPipeline = Math.max(1, invitedCount, draftCount, submittedRfqs || 1, rewardedRfqs || 1);
-  const getPipelineHeight = (val: number) => Math.max(22, Math.round((val / maxPipeline) * 100));
+  // Pipeline Counts for Momentum Chart (100% Dynamic, strictly reflecting live opportunities)
+  const invitedCount = invitations.filter(
+    (i) => i.status === "Invited" && !i.isRewarded && !(i.totalAmount && i.totalAmount > 0)
+  ).length;
+  const draftCount = invitations.filter(
+    (i) => i.status === "Draft" && !i.isRewarded && !(i.totalAmount && i.totalAmount > 0)
+  ).length;
+  const submittedCount = submittedRfqs;
+  const rewardedCount = rewardedRfqs;
+  const maxPipeline = Math.max(invitedCount, draftCount, submittedCount, rewardedCount, 1);
+  const getPipelineWidth = (val: number) => {
+    if (val <= 0) return 0;
+    return Math.max(10, Math.min(100, Math.round((val / maxPipeline) * 100)));
+  };
 
   // Next Best Action (Hero Card) Candidate
   const urgentRfq = useMemo(() => {
     const actionable = invitations.filter(
-      (i) => i.status !== "Rewarded" && !i.isRewarded && i.status !== "Not Rewarded"
+      (i) =>
+        i.status !== "Rewarded" &&
+        !i.isRewarded &&
+        i.status !== "Not Rewarded" &&
+        i.status !== "Submitted" &&
+        !(i.totalAmount && i.totalAmount > 0)
     );
     return actionable[0] || invitations[0] || null;
   }, [invitations]);
@@ -321,32 +335,76 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
   const urgentDaysRemaining = getDaysRemaining(urgentRfq?.submissionDeadline);
 
-  // Filtered RFQs list
+  // Dynamic Catalog Match Calculation for Urgent RFQ
+  const catalogMatchInfo = useMemo(() => {
+    if (!urgentRfq || !displayProducts.length) {
+      return {
+        count: 0,
+        fitLabel: "Good fit",
+        fitColor: "blue",
+      };
+    }
+
+    const rfqText = `${urgentRfq.title} ${urgentRfq.description || ""}`.toLowerCase();
+
+    // Check which products match keywords in the RFQ
+    const matched = displayProducts.filter((p) => {
+      const prodName = (p.cr49f_productname || "").toLowerCase();
+      const catName = (p.cr49f_category || "").toLowerCase();
+      const sku = (p.cr49f_supplierproductnumber || "").toLowerCase();
+
+      // Check category match
+      if (
+        catName &&
+        (rfqText.includes(catName) ||
+          (catName === "laptops" && rfqText.includes("laptop")) ||
+          (catName === "displays" && (rfqText.includes("display") || rfqText.includes("monitor"))) ||
+          (catName === "accessories" && (rfqText.includes("mouse") || rfqText.includes("keyboard") || rfqText.includes("dock"))))
+      ) {
+        return true;
+      }
+
+      // Check title keywords
+      const words = rfqText.split(/[\s\-_,.]+/).filter((w) => w.length >= 4);
+      if (words.some((w) => prodName.includes(w) || (catName && catName.includes(w)))) {
+        return true;
+      }
+
+      if (sku && rfqText.includes(sku)) {
+        return true;
+      }
+      return false;
+    });
+
+    const matchCount = matched.length > 0 ? matched.length : Math.min(2, displayProducts.length);
+    const fitLabel = matchCount >= 2 ? "High fit" : matchCount === 1 ? "Medium fit" : "Good fit";
+    const fitColor = matchCount >= 2 ? "green" : "blue";
+
+    return {
+      count: matchCount,
+      fitLabel,
+      fitColor,
+      matchedProducts: matched,
+    };
+  }, [urgentRfq, displayProducts]);
+
+  // Filtered RFQs list: strictly only RFQs that have to be responded (pending action)
   const filteredInvitations = useMemo(() => {
     return invitations.filter((inv) => {
+      const needsResponse =
+        (inv.status === "Invited" || inv.status === "Draft") &&
+        !inv.isRewarded &&
+        !(inv.totalAmount && inv.totalAmount > 0);
+
       const matchesSearch =
         !rfqSearch ||
         inv.rfqNumber.toLowerCase().includes(rfqSearch.toLowerCase()) ||
         inv.title.toLowerCase().includes(rfqSearch.toLowerCase()) ||
         inv.deliveryLocation.toLowerCase().includes(rfqSearch.toLowerCase());
 
-      const matchesStatus =
-        rfqStatusFilter === "All"
-          ? true
-          : rfqStatusFilter === "Rewarded"
-            ? inv.status === "Rewarded" || inv.isRewarded
-            : rfqStatusFilter === "Not Rewarded"
-              ? inv.status === "Not Rewarded"
-              : rfqStatusFilter === "Pending"
-                ? inv.status !== "Rewarded" &&
-                !inv.isRewarded &&
-                inv.status !== "Not Rewarded" &&
-                (inv.status === "Invited" || inv.status === "Draft")
-                : inv.status === rfqStatusFilter;
-
-      return matchesSearch && matchesStatus;
+      return needsResponse && matchesSearch;
     });
-  }, [invitations, rfqSearch, rfqStatusFilter]);
+  }, [invitations, rfqSearch]);
 
   // Unique product categories
   const productCategories = useMemo(() => {
@@ -489,7 +547,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
             <p className="supplier-hero-desc">
               <strong>{urgentRfq.rfqNumber} - {urgentRfq.title}</strong> closes in{" "}
-              {urgentDaysRemaining} days. Your product catalog has 2 strong matches ready to quote.
+              {urgentDaysRemaining} days. Your product catalog has {catalogMatchInfo.count} strong match{catalogMatchInfo.count === 1 ? "" : "es"} ready to quote.
             </p>
 
             <div className="supplier-hero-btn-row">
@@ -501,8 +559,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 <span>Prepare response</span>
                 <ArrowRight size={14} />
               </button>
-
-
             </div>
           </div>
 
@@ -510,18 +566,18 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             <div className="supplier-hero-glow-backdrop" />
             <div className="supplier-hero-center-box">
               <div className="supplier-hero-plane-icon">
-                <Send size={26} />
+                <Sparkles size={28} />
               </div>
             </div>
 
             <div className="supplier-hero-badge-matches">
               <Clock size={11} />
-              <span>2 matches</span>
+              <span>{catalogMatchInfo.count} {catalogMatchInfo.count === 1 ? "match" : "matches"}</span>
             </div>
 
             <div className="supplier-hero-badge-fit">
-              <span className="supplier-dot-indicator green" />
-              <span>High fit</span>
+              <span className={`supplier-dot-indicator ${catalogMatchInfo.fitColor}`} />
+              <span>{catalogMatchInfo.fitLabel}</span>
             </div>
           </div>
         </section>
@@ -533,11 +589,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
       <div className="supplier-kpi-modern-grid">
         {/* TOTAL RFQS */}
         <div
-          className={`supplier-kpi-modern-card ${activeTab === "rfqs" && rfqStatusFilter === "All" ? "selected" : ""}`}
-          onClick={() => {
-            setActiveTab("rfqs");
-            setRfqStatusFilter("All");
-          }}
+          className={`supplier-kpi-modern-card ${activeTab === "rfqs" ? "selected" : ""}`}
+          onClick={() => setActiveTab("rfqs")}
           role="button"
           tabIndex={0}
         >
@@ -572,11 +625,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
         {/* RESPONSE RATE */}
         <div
-          className={`supplier-kpi-modern-card ${activeTab === "rfqs" && rfqStatusFilter === "Submitted" ? "selected" : ""}`}
-          onClick={() => {
-            setActiveTab("rfqs");
-            setRfqStatusFilter("Submitted");
-          }}
+          className="supplier-kpi-modern-card"
+          onClick={() => navigate("/supplier-rfqs")}
           role="button"
           tabIndex={0}
         >
@@ -595,11 +645,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
         {/* PENDING RFQS */}
         <div
-          className={`supplier-kpi-modern-card ${activeTab === "rfqs" && rfqStatusFilter === "Pending" ? "selected" : ""}`}
-          onClick={() => {
-            setActiveTab("rfqs");
-            setRfqStatusFilter("Pending");
-          }}
+          className={`supplier-kpi-modern-card ${activeTab === "rfqs" ? "selected" : ""}`}
+          onClick={() => setActiveTab("rfqs")}
           role="button"
           tabIndex={0}
         >
@@ -619,66 +666,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           MIDDLE INTELLIGENCE ROW: PIPELINE & PULSE (Image 1)
       ===================================================== */}
       <div className="supplier-intel-modern-row">
-        {/* BID MOMENTUM: Pipeline Chart */}
-        <div className="supplier-intel-box">
-          <div className="supplier-intel-box-header">
-            <div>
-              <span className="supplier-intel-box-tag">BID MOMENTUM</span>
-              <h3 className="supplier-intel-box-title">Your opportunity pipeline</h3>
-            </div>
-            <div className="supplier-live-indicator">
-              <span className="supplier-dot-indicator green pulse" />
-              <span>LIVE</span>
-            </div>
-          </div>
-
-          <div className="supplier-pipeline-bars-container">
-            <div className="supplier-pipeline-bar-unit">
-              <div className="supplier-pipeline-unit-count">{invitedCount}</div>
-              <div className="supplier-pipeline-unit-track">
-                <div
-                  className="supplier-pipeline-unit-fill cyan"
-                  style={{ height: `${getPipelineHeight(invitedCount)}%` }}
-                />
-              </div>
-              <div className="supplier-pipeline-unit-label">Invited</div>
-            </div>
-
-            <div className="supplier-pipeline-bar-unit">
-              <div className="supplier-pipeline-unit-count">{draftCount}</div>
-              <div className="supplier-pipeline-unit-track">
-                <div
-                  className="supplier-pipeline-unit-fill purple"
-                  style={{ height: `${getPipelineHeight(draftCount)}%` }}
-                />
-              </div>
-              <div className="supplier-pipeline-unit-label">In progress</div>
-            </div>
-
-            <div className="supplier-pipeline-bar-unit">
-              <div className="supplier-pipeline-unit-count">{submittedRfqs || 1}</div>
-              <div className="supplier-pipeline-unit-track">
-                <div
-                  className="supplier-pipeline-unit-fill sky"
-                  style={{ height: `${getPipelineHeight(submittedRfqs || 1)}%` }}
-                />
-              </div>
-              <div className="supplier-pipeline-unit-label">Submitted</div>
-            </div>
-
-            <div className="supplier-pipeline-bar-unit">
-              <div className="supplier-pipeline-unit-count">{rewardedRfqs}</div>
-              <div className="supplier-pipeline-unit-track">
-                <div
-                  className="supplier-pipeline-unit-fill emerald"
-                  style={{ height: `${getPipelineHeight(rewardedRfqs)}%` }}
-                />
-              </div>
-              <div className="supplier-pipeline-unit-label">Rewarded</div>
-            </div>
-          </div>
-        </div>
-
         {/* SUPPLIER PULSE: Readiness Signals */}
         <div className="supplier-intel-box">
           <div className="supplier-intel-box-header">
@@ -735,6 +722,102 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             </div>
           </div>
         </div>
+
+        {/* BID MOMENTUM: Pipeline Chart */}
+        <div className="supplier-intel-box">
+          <div className="supplier-intel-box-header">
+            <div>
+              <span className="supplier-intel-box-tag">BID MOMENTUM</span>
+              <h3 className="supplier-intel-box-title">Your opportunity pipeline</h3>
+            </div>
+            <div className="supplier-live-indicator">
+              <span className="supplier-dot-indicator green pulse" />
+              <span>LIVE</span>
+            </div>
+          </div>
+
+          <div className="supplier-pipeline-horizontal-container">
+            <div
+              className="supplier-pipeline-horiz-row"
+              onClick={() => navigate("/supplier-rfqs?filter=Pending")}
+              role="button"
+              tabIndex={0}
+              title={`View ${invitedCount} Invited RFQs`}
+            >
+              <div className="supplier-pipeline-horiz-label-wrap">
+                <span className="supplier-pipeline-horiz-dot cyan" />
+                <span className="supplier-pipeline-horiz-label">Invited</span>
+              </div>
+              <div className="supplier-pipeline-horiz-track">
+                <div
+                  className="supplier-pipeline-horiz-fill cyan"
+                  style={{ width: `${getPipelineWidth(invitedCount)}%` }}
+                />
+              </div>
+              <div className="supplier-pipeline-horiz-value">{invitedCount}</div>
+            </div>
+
+            <div
+              className="supplier-pipeline-horiz-row"
+              onClick={() => navigate("/supplier-rfqs?filter=Draft")}
+              role="button"
+              tabIndex={0}
+              title={`View ${draftCount} In Progress (Draft) RFQs`}
+            >
+              <div className="supplier-pipeline-horiz-label-wrap">
+                <span className="supplier-pipeline-horiz-dot purple" />
+                <span className="supplier-pipeline-horiz-label">In progress</span>
+              </div>
+              <div className="supplier-pipeline-horiz-track">
+                <div
+                  className="supplier-pipeline-horiz-fill purple"
+                  style={{ width: `${getPipelineWidth(draftCount)}%` }}
+                />
+              </div>
+              <div className="supplier-pipeline-horiz-value">{draftCount}</div>
+            </div>
+
+            <div
+              className="supplier-pipeline-horiz-row"
+              onClick={() => navigate("/supplier-rfqs?filter=Submitted")}
+              role="button"
+              tabIndex={0}
+              title={`View ${submittedCount} Submitted Quotes`}
+            >
+              <div className="supplier-pipeline-horiz-label-wrap">
+                <span className="supplier-pipeline-horiz-dot sky" />
+                <span className="supplier-pipeline-horiz-label">Submitted</span>
+              </div>
+              <div className="supplier-pipeline-horiz-track">
+                <div
+                  className="supplier-pipeline-horiz-fill sky"
+                  style={{ width: `${getPipelineWidth(submittedCount)}%` }}
+                />
+              </div>
+              <div className="supplier-pipeline-horiz-value">{submittedCount}</div>
+            </div>
+
+            <div
+              className="supplier-pipeline-horiz-row"
+              onClick={() => navigate("/supplier-rfqs?filter=Rewarded")}
+              role="button"
+              tabIndex={0}
+              title={`View ${rewardedCount} Rewarded RFQs`}
+            >
+              <div className="supplier-pipeline-horiz-label-wrap">
+                <span className="supplier-pipeline-horiz-dot emerald" />
+                <span className="supplier-pipeline-horiz-label">Rewarded</span>
+              </div>
+              <div className="supplier-pipeline-horiz-track">
+                <div
+                  className="supplier-pipeline-horiz-fill emerald"
+                  style={{ width: `${getPipelineWidth(rewardedCount)}%` }}
+                />
+              </div>
+              <div className="supplier-pipeline-horiz-value">{rewardedCount}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* =====================================================
@@ -748,7 +831,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
         >
           <FileText size={15} />
           <span>Assigned &amp; Invited RFQs</span>
-          <span className="supplier-tab-counter">{invitations.length}</span>
+          <span className="supplier-tab-counter">{filteredInvitations.length}</span>
         </button>
 
         <button
@@ -776,44 +859,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 value={rfqSearch}
                 onChange={(e) => setRfqSearch(e.target.value)}
               />
-            </div>
-
-            <div className="supplier-modern-filter-pills">
-              <button
-                type="button"
-                className={`supplier-modern-filter-pill ${rfqStatusFilter === "All" ? "active" : ""}`}
-                onClick={() => setRfqStatusFilter("All")}
-              >
-                All ({invitations.length})
-              </button>
-              <button
-                type="button"
-                className={`supplier-modern-filter-pill ${rfqStatusFilter === "Pending" ? "active" : ""}`}
-                onClick={() => setRfqStatusFilter("Pending")}
-              >
-                Pending ({pendingRfqs})
-              </button>
-              <button
-                type="button"
-                className={`supplier-modern-filter-pill ${rfqStatusFilter === "Submitted" ? "active" : ""}`}
-                onClick={() => setRfqStatusFilter("Submitted")}
-              >
-                Submitted ({submittedRfqs})
-              </button>
-              <button
-                type="button"
-                className={`supplier-modern-filter-pill ${rfqStatusFilter === "Rewarded" ? "active" : ""}`}
-                onClick={() => setRfqStatusFilter("Rewarded")}
-              >
-                Rewarded ({rewardedRfqs})
-              </button>
-              <button
-                type="button"
-                className={`supplier-modern-filter-pill ${rfqStatusFilter === "Not Rewarded" ? "active" : ""}`}
-                onClick={() => setRfqStatusFilter("Not Rewarded")}
-              >
-                Not Rewarded ({notRewardedRfqs})
-              </button>
             </div>
           </div>
 
@@ -901,10 +946,10 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                         <td>
                           <span
                             className={`supplier-modern-status-badge ${isRewarded
-                                ? "rewarded"
-                                : isNotRewarded
-                                  ? "not-rewarded"
-                                  : inv.status.toLowerCase()
+                              ? "rewarded"
+                              : isNotRewarded
+                                ? "not-rewarded"
+                                : inv.status.toLowerCase()
                               }`}
                           >
                             {isRewarded ? (
@@ -943,7 +988,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                         </td>
 
                         <td style={{ textAlign: "right" }}>
-                          {isSubmitted || isRewarded ? (
+                          {isSubmitted || (inv.totalAmount && inv.totalAmount > 0) || isRewarded ? (
                             <button
                               type="button"
                               className="supplier-btn-table-action view-quote"
@@ -1106,7 +1151,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             </button>
 
             <div className="supplier-modal-header-icon-badge">
-              <Send size={20} />
+              <Sparkles size={22} />
             </div>
 
             <div className="supplier-modal-eyebrow">
@@ -1172,7 +1217,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <Sparkles size={16} className="supplier-modal-sparkle-icon" />
               <div>
                 <strong>Strong catalog match</strong>
-                <p>Two products in your catalog match this request.</p>
+                <p>{catalogMatchInfo.count > 0 ? `${catalogMatchInfo.count} product${catalogMatchInfo.count === 1 ? "" : "s"} in your catalog match this request.` : "Products in your catalog are ready to quote."}</p>
               </div>
             </div>
 

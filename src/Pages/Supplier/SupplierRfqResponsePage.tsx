@@ -666,13 +666,12 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
           </span>
           {response && (
             <span
-              className={`supplier-status-pill ${
-                response.status === "Rewarded"
+              className={`supplier-status-pill ${response.status === "Rewarded"
                   ? "rewarded"
                   : response.status === "Not Rewarded"
-                  ? "not-rewarded"
-                  : response.status.toLowerCase()
-              }`}
+                    ? "not-rewarded"
+                    : response.status.toLowerCase()
+                }`}
             >
               {response.status === "Rewarded" ? (
                 <Award size={12} />
@@ -726,10 +725,10 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                   <Check size={18} />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  <div className="supplier-banner-title">
                     Quotation Successfully Submitted &amp; Generated
                   </div>
-                  <div style={{ fontSize: 12.5, opacity: 0.9 }}>
+                  <div className="supplier-banner-subtitle">
                     Submitted on {response.responseDate ? new Date(response.responseDate).toLocaleString() : "Recently"}. Official quotation document is recorded and locked for review by Procurement.
                   </div>
                 </div>
@@ -752,8 +751,8 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                       gap: 6,
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "#f1f5f9",
-                      background: "rgba(255, 255, 255, 0.15)",
+                      color: "#065f46",
+                      background: "rgba(16, 185, 129, 0.15)",
                       padding: "5px 10px",
                       borderRadius: 6,
                     }}
@@ -762,9 +761,44 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                     Document available after RFQ approval
                   </div>
                 )}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600 }}>
+                <div className="supplier-banner-status-tag">
                   <Lock size={13} />
-                  Read-Only
+                  <span>Read-Only</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rewarded Banner */}
+          {isRewarded && (
+            <div className="supplier-submitted-banner rewarded">
+              <div className="supplier-submitted-banner-left">
+                <div className="supplier-submitted-icon">
+                  <Award size={18} />
+                </div>
+                <div>
+                  <div className="supplier-banner-title">
+                    Quotation Rewarded — Contract Awarded
+                  </div>
+                  <div className="supplier-banner-subtitle">
+                    Congratulations! Your organization has been officially awarded the contract for this RFQ.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {isRfqApproved && (
+                  <button
+                    type="button"
+                    className="supplier-btn-banner-action"
+                    onClick={() => setIsQuotationDocOpen(true)}
+                  >
+                    <FileText size={13} />
+                    View Awarded Quotation
+                  </button>
+                )}
+                <div className="supplier-banner-status-tag rewarded">
+                  <Award size={13} />
+                  <span>Awarded</span>
                 </div>
               </div>
             </div>
@@ -772,19 +806,16 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
 
           {/* Not Rewarded Banner */}
           {isNotRewarded && (
-            <div
-              className="supplier-submitted-banner"
-              style={{ background: "linear-gradient(135deg, #475569 0%, #334155 100%)", borderColor: "#64748b" }}
-            >
+            <div className="supplier-submitted-banner not-rewarded">
               <div className="supplier-submitted-banner-left">
-                <div className="supplier-submitted-icon" style={{ background: "rgba(255, 255, 255, 0.15)", color: "#cbd5e1" }}>
+                <div className="supplier-submitted-icon">
                   <XCircle size={18} />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  <div className="supplier-banner-title">
                     RFQ Evaluation Complete — Quote Not Rewarded
                   </div>
-                  <div style={{ fontSize: 12.5, opacity: 0.9 }}>
+                  <div className="supplier-banner-subtitle">
                     This RFQ contract has been awarded to another participating supplier. Thank you for participating in this procurement cycle.
                   </div>
                 </div>
@@ -800,9 +831,9 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                     View Submitted Quotation
                   </button>
                 )}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600 }}>
+                <div className="supplier-banner-status-tag">
                   <Lock size={13} />
-                  Closed
+                  <span>Closed</span>
                 </div>
               </div>
             </div>
@@ -821,10 +852,10 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                   {isRewarded
                     ? "CONTRACT REWARDED"
                     : isNotRewarded
-                    ? "NOT REWARDED"
-                    : isSubmitted
-                    ? "RESPONSE SUBMITTED"
-                    : "RESPONSE REQUESTED"}
+                      ? "NOT REWARDED"
+                      : isSubmitted
+                        ? "RESPONSE SUBMITTED"
+                        : "RESPONSE REQUESTED"}
                 </span>
               </div>
 
@@ -1350,8 +1381,8 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                     {progressPercent === 100
                       ? "All details completed — ready to submit quotation!"
                       : !deliveryDate
-                      ? "Almost there — add your delivery date."
-                      : `${completedLinesCount} of ${lines.length} items priced.`}
+                        ? "Almost there — add your delivery date."
+                        : `${completedLinesCount} of ${lines.length} items priced.`}
                   </div>
                 </div>
 
@@ -1454,8 +1485,8 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                           isRewarded
                             ? { background: "rgba(16, 185, 129, 0.1)", borderColor: "rgba(16, 185, 129, 0.3)" }
                             : isNotRewarded
-                            ? { background: "#f8fafc", borderColor: "#cbd5e1" }
-                            : undefined
+                              ? { background: "#f8fafc", borderColor: "#cbd5e1" }
+                              : undefined
                         }
                       >
                         {isRewarded ? (
@@ -1470,15 +1501,15 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
                             {isRewarded
                               ? "Quotation Rewarded"
                               : isNotRewarded
-                              ? "Contract Not Rewarded"
-                              : "Quotation Submitted"}
+                                ? "Contract Not Rewarded"
+                                : "Quotation Submitted"}
                           </strong>
                           <p style={{ margin: "2px 0 0", fontSize: 11.5, color: isNotRewarded ? "#64748b" : undefined }}>
                             {isRewarded
                               ? "Official procurement award winner"
                               : isNotRewarded
-                              ? "Awarded to another participating supplier"
-                              : "Locked in Dataverse for evaluation"}
+                                ? "Awarded to another participating supplier"
+                                : "Locked in Dataverse for evaluation"}
                           </p>
                         </div>
                       </div>
@@ -1544,12 +1575,12 @@ export const SupplierRfqResponsePage: React.FC<SupplierRfqResponsePageProps> = (
           response={
             response
               ? {
-                  ...response,
-                  lines,
-                  deliveryDate,
-                  paymentTerms,
-                  warranty,
-                }
+                ...response,
+                lines,
+                deliveryDate,
+                paymentTerms,
+                warranty,
+              }
               : null
           }
           supplierProfile={activeSupplier}
