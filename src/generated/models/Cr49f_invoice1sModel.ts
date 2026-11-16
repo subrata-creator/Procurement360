@@ -31,6 +31,7 @@ export interface Cr49f_invoice1sBase {
   cr49f_invoicedate?: string;
   cr49f_invoicenumber?: string;
   cr49f_paymentstatus?: Cr49f_invoice1scr49f_paymentstatus;
+  cr49f_poamount?: number;
   cr49f_totalamount?: number;
   importsequencenumber?: number;
   overriddencreatedon?: string;

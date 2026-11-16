@@ -33,6 +33,7 @@ export interface EnrichedInvoice {
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
+  poAmount: number;
   totalAmount: number;
   amountPaid: number;
   remainingBalance: number;
@@ -182,6 +183,7 @@ export const InvoicesOverviewPage: React.FC = () => {
           (matchedPo as any)?.supplier ||
           "Authorized Supplier";
 
+        const poAmount = Number(inv.cr49f_poamount) || Number(matchedPo?.cr49f_totalamount) || 0;
         const totalAmount = Number(inv.cr49f_totalamount) || Number(matchedPo?.cr49f_totalamount) || 0;
         const amountPaid = Number(inv.cr49f_amountpaid) || 0;
         const remainingBalance = Math.max(0, totalAmount - amountPaid);
@@ -223,6 +225,7 @@ export const InvoicesOverviewPage: React.FC = () => {
           invoiceNumber,
           invoiceDate: inv.cr49f_invoicedate || inv.createdon || new Date().toISOString().split("T")[0],
           dueDate: inv.cr49f_duedate || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+          poAmount,
           totalAmount,
           amountPaid,
           remainingBalance,
@@ -687,15 +690,22 @@ export const InvoicesOverviewPage: React.FC = () => {
 
                     {/* Purchase Order */}
                     <td>
-                      <button
-                        type="button"
-                        className="invoice-po-link-pill"
-                        onClick={() => navigate(`/orders/${inv.poRef}`)}
-                        title={`View Purchase Order ${inv.poRef}`}
-                      >
-                        {inv.poRef}
-                        <ExternalLink size={10} />
-                      </button>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <button
+                          type="button"
+                          className="invoice-po-link-pill"
+                          onClick={() => navigate(`/orders/${inv.poRef}`)}
+                          title={`View Purchase Order ${inv.poRef}`}
+                        >
+                          {inv.poRef}
+                          <ExternalLink size={10} />
+                        </button>
+                        {inv.poAmount > 0 && (
+                          <span style={{ fontSize: 11, color: "var(--muted-foreground-hex)" }}>
+                            PO: {formatCurrency(inv.poAmount)}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Supplier */}
@@ -881,6 +891,12 @@ export const InvoicesOverviewPage: React.FC = () => {
 
               {/* Financial Calculation Breakdown */}
               <div className="invoice-detail-breakdown">
+                {selectedInvoiceForView.poAmount > 0 && (
+                  <div className="invoice-breakdown-row" style={{ background: "rgba(37, 99, 235, 0.05)", padding: "5px 8px", borderRadius: "6px", marginBottom: "4px" }}>
+                    <span>Purchase Order Value (Baseline)</span>
+                    <strong style={{ color: "#2563eb" }}>{formatCurrency(selectedInvoiceForView.poAmount)}</strong>
+                  </div>
+                )}
                 <div className="invoice-breakdown-row">
                   <span>Base / Subtotal Amount</span>
                   <strong>{formatCurrency(selectedInvoiceForView.totalAmount + selectedInvoiceForView.discount - selectedInvoiceForView.additionalCharges)}</strong>

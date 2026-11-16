@@ -31,7 +31,7 @@
   border: 1px solid var(--border-hex, #e2e8f0);
   border-radius: 14px;
   width: 100%;
-  max-width: 680px;
+  max-width: 920px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -266,17 +266,17 @@
    Form & Inputs
    --------------------------------------------------------- */
 .invoice-modal-form {
-  padding: 18px 24px 22px;
+  padding: 22px 28px 24px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .invoice-form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 14px 18px;
+  gap: 16px 22px;
 }
 
 .invoice-form-group {

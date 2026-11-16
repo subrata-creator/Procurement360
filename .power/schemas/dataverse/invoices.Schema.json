@@ -130,6 +130,13 @@
           "x-ms-dataverse-attribute-of": "cr49f_paymentstatus",
           "x-ms-read-only": true
         },
+        "cr49f_poamount": {
+          "type": "string",
+          "title": "PO Amount",
+          "x-ms-dataverse-attribute": "cr49f_poamount",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "cr49f_poamount"
+        },
         "cr49f_totalamount": {
           "type": "string",
           "title": "Total Amount",

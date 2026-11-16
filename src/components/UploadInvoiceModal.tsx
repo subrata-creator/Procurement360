@@ -17,6 +17,7 @@ import {
   Percent,
   PlusCircle,
   ShoppingBag,
+  FileText,
 } from "lucide-react";
 import type { OrderRecord } from "../data/OrdersData";
 import {
@@ -66,6 +67,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
   const [invoiceNumber, setInvoiceNumber] = useState<string>("");
   const [invoiceDate, setInvoiceDate] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>("");
+  const [poAmount, setPoAmount] = useState<number>(0);
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
@@ -183,6 +185,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
       setInvoiceNumber(`INV-${today.getFullYear()}-${randomSuffix}`);
       setInvoiceDate(todayIso);
       setDueDate(dueIso);
+      setPoAmount(activePO?.amount || 0);
       setTotalAmount(activePO?.amount || 0);
       setAmountPaid(0);
       setDiscount(0);
@@ -201,6 +204,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
     setSelectedPoNumber(poNum);
     const matched = availablePOs.find((p) => p.poNumber === poNum);
     if (matched) {
+      setPoAmount(matched.amount || 0);
       setTotalAmount(matched.amount || 0);
       setAmountPaid(0);
     }
@@ -326,6 +330,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
         cr49f_invoicenumber: invoiceNumber.trim(),
         cr49f_invoicedate: invoiceDate,
         cr49f_duedate: dueDate,
+        cr49f_poamount: Number(poAmount) || Number(activePO?.amount) || 0,
         cr49f_totalamount: Number(calculatedNetAmount) || Number(totalAmount) || 0,
         cr49f_amountpaid: Number(amountPaid) || 0,
         cr49f_discount: Number(discount) || 0,
@@ -366,6 +371,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
         cr49f_invoicenumber: invoiceNumber.trim(),
         cr49f_invoicedate: invoiceDate,
         cr49f_duedate: dueDate,
+        cr49f_poamount: Number(poAmount) || Number(activePO?.amount) || 0,
         cr49f_totalamount: Number(calculatedNetAmount),
         cr49f_amountpaid: Number(amountPaid),
         cr49f_discount: Number(discount),
@@ -623,10 +629,32 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
               <span className="invoice-field-hint">Current payment settlement status</span>
             </div>
 
-            {/* ROW 3: Base Amount & Amount Paid */}
+            {/* ROW 3: Purchase Order Value & Base Subtotal */}
+            <div className="invoice-form-group">
+              <label htmlFor="inv-po-amount" className="invoice-field-label">
+                Purchase Order Value ($)
+              </label>
+              <div className="invoice-input-wrapper">
+                <ShoppingBag size={15} className="invoice-input-icon" />
+                <input
+                  id="inv-po-amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="invoice-text-input"
+                  value={poAmount || ""}
+                  onChange={(e) => setPoAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
+                />
+              </div>
+              <span className="invoice-field-hint">
+                {activePO ? `Purchase Order baseline (${activePO.poNumber})` : "Baseline total value of associated Purchase Order"}
+              </span>
+            </div>
+
             <div className="invoice-form-group">
               <label htmlFor="inv-total" className="invoice-field-label">
-                Base Subtotal Amount ($) <span className="required">*</span>
+                Invoice Subtotal Amount ($) <span className="required">*</span>
               </label>
               <div className="invoice-input-wrapper">
                 <DollarSign size={15} className="invoice-input-icon" />
@@ -642,28 +670,7 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
                 />
               </div>
               <span className="invoice-field-hint">
-                {activePO ? `Purchase Order amount: $${activePO.amount.toLocaleString()}` : "Invoice subtotal before adjustments"}
-              </span>
-            </div>
-
-            <div className="invoice-form-group">
-              <label htmlFor="inv-amount-paid" className="invoice-field-label">
-                Amount Paid to Date ($)
-              </label>
-              <div className="invoice-input-wrapper">
-                <DollarSign size={15} className="invoice-input-icon" />
-                <input
-                  id="inv-amount-paid"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="invoice-text-input"
-                  value={amountPaid || ""}
-                  onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-              <span className="invoice-field-hint">
-                Remaining Balance: <strong>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+                Commercial invoice subtotal before adjustments
               </span>
             </div>
 
@@ -707,15 +714,62 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
               </div>
               <span className="invoice-field-hint">Shipping, packaging, or handling surcharges</span>
             </div>
+
+            {/* ROW 5: Amount Paid & Notes */}
+            <div className="invoice-form-group">
+              <label htmlFor="inv-amount-paid" className="invoice-field-label">
+                Amount Paid to Date ($)
+              </label>
+              <div className="invoice-input-wrapper">
+                <DollarSign size={15} className="invoice-input-icon" />
+                <input
+                  id="inv-amount-paid"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="invoice-text-input"
+                  value={amountPaid || ""}
+                  onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+              <span className="invoice-field-hint">
+                Remaining Balance: <strong>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+              </span>
+            </div>
+
+            <div className="invoice-form-group">
+              <label htmlFor="inv-notes" className="invoice-field-label">
+                Invoice Notes &amp; Remarks <span className="optional">(Optional)</span>
+              </label>
+              <div className="invoice-input-wrapper">
+                <FileText size={15} className="invoice-input-icon" />
+                <input
+                  id="inv-notes"
+                  type="text"
+                  className="invoice-text-input"
+                  placeholder="e.g. Milestone 1 settlement, billing remarks"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </div>
+              <span className="invoice-field-hint">Internal billing remarks or milestone references</span>
+            </div>
           </div>
 
           {/* FINANCIAL SUMMARY CARD */}
           <div className="invoice-financial-summary-card">
             <div className="invoice-financial-summary-header">
-              <span>Financial Calculation</span>
-              <strong>
-                Net Payable: ${calculatedNetAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </strong>
+              <span>Financial Settlement Summary</span>
+              <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                {poAmount > 0 && (
+                  <span style={{ fontSize: "12px", color: "var(--muted-foreground-hex, #64748b)" }}>
+                    PO Baseline: <strong>${Number(poAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+                  </span>
+                )}
+                <strong>
+                  Net Payable: ${calculatedNetAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </strong>
+              </div>
             </div>
             <div className="invoice-financial-summary-formula">
               <span>Subtotal (${Number(totalAmount || 0).toLocaleString()})</span>
@@ -725,8 +779,11 @@ export const UploadInvoiceModal: React.FC<UploadInvoiceModalProps> = ({
               <span>Charges (${Number(additionalCharges || 0).toLocaleString()})</span>
               <span>=</span>
               <strong className="invoice-net-highlight">
-                ${calculatedNetAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                Net: ${calculatedNetAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </strong>
+              <span style={{ marginLeft: "auto", fontSize: "11.5px" }}>
+                Balance Due: <strong style={{ color: remainingBalance > 0 ? "#d97706" : "#16a34a" }}>${remainingBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+              </span>
             </div>
           </div>
 
