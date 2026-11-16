@@ -20,7 +20,6 @@ const menuItems = [
   { label: "Invoices", icon: FileText, path: "/invoices" },
   { label: "Products / Services", icon: BarChart3, path: "/products-services" },
   { label: "Suppliers", icon: Users, path: "/suppliers" },
-  { label: "Contracts", icon: FileText, path: "/contracts" },
 ];
 
 export default function Sidebar() {

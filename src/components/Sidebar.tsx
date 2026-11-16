@@ -26,7 +26,6 @@ export const userNavigationItems = [
   { label: "Orders", icon: ShoppingBag },
   { label: "Suppliers", icon: Truck },
   { label: "Invoices", icon: ReceiptText },
-  { label: "Contracts", icon: FileSignature },
 ];
 
 export const supplierNavigationItems = [
