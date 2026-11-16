@@ -299,10 +299,15 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
   const responseRate = totalRfqs > 0 ? Math.round((submittedRfqs / totalRfqs) * 100) : 20;
 
   // Pipeline Counts for Momentum Chart
-  const invitedCount = invitations.filter((i) => i.status === "Invited").length || 4;
-  const draftCount = invitations.filter((i) => i.status === "Draft").length || 2;
-  const maxPipeline = Math.max(1, invitedCount, draftCount, submittedRfqs || 1, rewardedRfqs || 1);
-  const getPipelineHeight = (val: number) => Math.max(22, Math.round((val / maxPipeline) * 100));
+  const invitedCount = invitations.filter((i) => i.status === "Invited").length;
+  const draftCount = invitations.filter((i) => i.status === "Draft").length;
+  const submittedCount = submittedRfqs;
+  const rewardedCount = rewardedRfqs;
+  const maxPipeline = Math.max(1, invitedCount, draftCount, submittedCount, rewardedCount);
+  const getPipelineHeight = (val: number) => {
+    if (val <= 0) return 0;
+    return Math.max(14, Math.round((val / maxPipeline) * 100));
+  };
 
   // Next Best Action (Hero Card) Candidate
   const urgentRfq = useMemo(() => {
@@ -688,8 +693,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <div className="supplier-pipeline-unit-count">{invitedCount}</div>
               <div className="supplier-pipeline-unit-track">
                 <div
-                  className="supplier-pipeline-unit-fill cyan"
-                  style={{ height: `${getPipelineHeight(invitedCount)}%` }}
+                  className={`supplier-pipeline-unit-fill cyan ${invitedCount === 0 ? "zero" : ""}`}
+                  style={{ height: invitedCount > 0 ? `${getPipelineHeight(invitedCount)}%` : "3px" }}
                 />
               </div>
               <div className="supplier-pipeline-unit-label">Invited</div>
@@ -699,19 +704,19 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <div className="supplier-pipeline-unit-count">{draftCount}</div>
               <div className="supplier-pipeline-unit-track">
                 <div
-                  className="supplier-pipeline-unit-fill purple"
-                  style={{ height: `${getPipelineHeight(draftCount)}%` }}
+                  className={`supplier-pipeline-unit-fill purple ${draftCount === 0 ? "zero" : ""}`}
+                  style={{ height: draftCount > 0 ? `${getPipelineHeight(draftCount)}%` : "3px" }}
                 />
               </div>
               <div className="supplier-pipeline-unit-label">In progress</div>
             </div>
 
             <div className="supplier-pipeline-bar-unit">
-              <div className="supplier-pipeline-unit-count">{submittedRfqs || 1}</div>
+              <div className="supplier-pipeline-unit-count">{submittedRfqs}</div>
               <div className="supplier-pipeline-unit-track">
                 <div
-                  className="supplier-pipeline-unit-fill sky"
-                  style={{ height: `${getPipelineHeight(submittedRfqs || 1)}%` }}
+                  className={`supplier-pipeline-unit-fill sky ${submittedRfqs === 0 ? "zero" : ""}`}
+                  style={{ height: submittedRfqs > 0 ? `${getPipelineHeight(submittedRfqs)}%` : "3px" }}
                 />
               </div>
               <div className="supplier-pipeline-unit-label">Submitted</div>
@@ -721,8 +726,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <div className="supplier-pipeline-unit-count">{rewardedRfqs}</div>
               <div className="supplier-pipeline-unit-track">
                 <div
-                  className="supplier-pipeline-unit-fill emerald"
-                  style={{ height: `${getPipelineHeight(rewardedRfqs)}%` }}
+                  className={`supplier-pipeline-unit-fill emerald ${rewardedRfqs === 0 ? "zero" : ""}`}
+                  style={{ height: rewardedRfqs > 0 ? `${getPipelineHeight(rewardedRfqs)}%` : "3px" }}
                 />
               </div>
               <div className="supplier-pipeline-unit-label">Rewarded</div>
