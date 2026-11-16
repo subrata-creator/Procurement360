@@ -32,7 +32,6 @@ export const userNavigationItems = [
 export const supplierNavigationItems = [
   { label: "Dashboard", icon: Home },
   { label: "My RFQs", icon: ClipboardList },
-  { label: "My Quotations", icon: FileSignature },
 ];
 
 export interface SidebarProps {

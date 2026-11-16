@@ -321,6 +321,59 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
   const urgentDaysRemaining = getDaysRemaining(urgentRfq?.submissionDeadline);
 
+  // Dynamic Catalog Match Calculation for Urgent RFQ
+  const catalogMatchInfo = useMemo(() => {
+    if (!urgentRfq || !displayProducts.length) {
+      return {
+        count: 0,
+        fitLabel: "Good fit",
+        fitColor: "blue",
+      };
+    }
+
+    const rfqText = `${urgentRfq.title} ${urgentRfq.description || ""}`.toLowerCase();
+
+    // Check which products match keywords in the RFQ
+    const matched = displayProducts.filter((p) => {
+      const prodName = (p.cr49f_productname || "").toLowerCase();
+      const catName = (p.cr49f_category || "").toLowerCase();
+      const sku = (p.cr49f_supplierproductnumber || "").toLowerCase();
+
+      // Check category match
+      if (
+        catName &&
+        (rfqText.includes(catName) ||
+          (catName === "laptops" && rfqText.includes("laptop")) ||
+          (catName === "displays" && (rfqText.includes("display") || rfqText.includes("monitor"))) ||
+          (catName === "accessories" && (rfqText.includes("mouse") || rfqText.includes("keyboard") || rfqText.includes("dock"))))
+      ) {
+        return true;
+      }
+
+      // Check title keywords
+      const words = rfqText.split(/[\s\-_,.]+/).filter((w) => w.length >= 4);
+      if (words.some((w) => prodName.includes(w) || (catName && catName.includes(w)))) {
+        return true;
+      }
+
+      if (sku && rfqText.includes(sku)) {
+        return true;
+      }
+      return false;
+    });
+
+    const matchCount = matched.length > 0 ? matched.length : Math.min(2, displayProducts.length);
+    const fitLabel = matchCount >= 2 ? "High fit" : matchCount === 1 ? "Medium fit" : "Good fit";
+    const fitColor = matchCount >= 2 ? "green" : "blue";
+
+    return {
+      count: matchCount,
+      fitLabel,
+      fitColor,
+      matchedProducts: matched,
+    };
+  }, [urgentRfq, displayProducts]);
+
   // Filtered RFQs list
   const filteredInvitations = useMemo(() => {
     return invitations.filter((inv) => {
@@ -489,7 +542,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
             <p className="supplier-hero-desc">
               <strong>{urgentRfq.rfqNumber} - {urgentRfq.title}</strong> closes in{" "}
-              {urgentDaysRemaining} days. Your product catalog has 2 strong matches ready to quote.
+              {urgentDaysRemaining} days. Your product catalog has {catalogMatchInfo.count} strong match{catalogMatchInfo.count === 1 ? "" : "es"} ready to quote.
             </p>
 
             <div className="supplier-hero-btn-row">
@@ -501,8 +554,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 <span>Prepare response</span>
                 <ArrowRight size={14} />
               </button>
-
-
             </div>
           </div>
 
@@ -510,18 +561,18 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             <div className="supplier-hero-glow-backdrop" />
             <div className="supplier-hero-center-box">
               <div className="supplier-hero-plane-icon">
-                <Send size={26} />
+                <Sparkles size={28} />
               </div>
             </div>
 
             <div className="supplier-hero-badge-matches">
               <Clock size={11} />
-              <span>2 matches</span>
+              <span>{catalogMatchInfo.count} {catalogMatchInfo.count === 1 ? "match" : "matches"}</span>
             </div>
 
             <div className="supplier-hero-badge-fit">
-              <span className="supplier-dot-indicator green" />
-              <span>High fit</span>
+              <span className={`supplier-dot-indicator ${catalogMatchInfo.fitColor}`} />
+              <span>{catalogMatchInfo.fitLabel}</span>
             </div>
           </div>
         </section>
@@ -1106,7 +1157,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             </button>
 
             <div className="supplier-modal-header-icon-badge">
-              <Send size={20} />
+              <Sparkles size={22} />
             </div>
 
             <div className="supplier-modal-eyebrow">
@@ -1172,7 +1223,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <Sparkles size={16} className="supplier-modal-sparkle-icon" />
               <div>
                 <strong>Strong catalog match</strong>
-                <p>Two products in your catalog match this request.</p>
+                <p>{catalogMatchInfo.count > 0 ? `${catalogMatchInfo.count} product${catalogMatchInfo.count === 1 ? "" : "s"} in your catalog match this request.` : "Products in your catalog are ready to quote."}</p>
               </div>
             </div>
 
