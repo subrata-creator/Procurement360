@@ -1653,7 +1653,6 @@ export default function PurchaseRequestDetail() {
             { id: "RFQs", label: "RFQs", icon: FileText, count: associatedRfqs.length },
             { id: "Associated Tasks", label: "Associated Tasks", icon: ShieldCheck, count: approvalTasks.length },
             { id: "Notes", label: "Notes", icon: MessageSquare, count: notes.length },
-            { id: "Attachments", label: "Attachments", icon: Paperclip, count: 0 },
           ].map((tab) => {
             const TabIcon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -2086,9 +2085,6 @@ export default function PurchaseRequestDetail() {
           </div>
         )}
 
-        {activeTab === "Attachments" && (
-          <div className="pr-detail-tab-empty">No {activeTab.toLowerCase()} linked to this purchase request yet.</div>
-        )}
 
         {activeTab === "Summary" && (
           <>
@@ -2186,14 +2182,6 @@ export default function PurchaseRequestDetail() {
                       <strong>{priorityLabel}</strong>
                     </div>
                   </div>
-
-                  <div className="pr-detail-field">
-                    <div className="pr-detail-field-icon green"><DollarSign size={16} /></div>
-                    <div className="pr-detail-field-info">
-                      <span>Total Value</span>
-                      <strong>{calculatedGrandTotal}</strong>
-                    </div>
-                  </div>
                 </div>
 
                 <div className="pr-detail-justification">
@@ -2221,8 +2209,6 @@ export default function PurchaseRequestDetail() {
                           <th style={{ width: 140 }}>Item Code</th>
                           <th>Item Name & Description</th>
                           <th style={{ width: 90, textAlign: "right" }}>Qty</th>
-                          <th style={{ width: 120, textAlign: "right" }}>Unit Price</th>
-                          <th style={{ width: 130, textAlign: "right" }}>Total Amount</th>
                           <th>Delivery Date</th>
                           <th>Delivery Location</th>
                         </tr>
@@ -2243,12 +2229,6 @@ export default function PurchaseRequestDetail() {
                               <td style={{ textAlign: "right", fontWeight: 650 }}>
                                 {item.quantity}
                               </td>
-                              <td style={{ textAlign: "right", color: "var(--muted-foreground-hex)" }}>
-                                {item.unitPrice}
-                              </td>
-                              <td style={{ textAlign: "right", fontWeight: 750, color: "var(--primary-hex, #2563eb)" }}>
-                                {item.totalAmount}
-                              </td>
                               <td>{item.deliveryDate || "—"}</td>
                               <td style={{ color: "var(--muted-foreground-hex)" }}>
                                 {item.deliveryAddress || record.deliveryAddress || "—"}
@@ -2257,7 +2237,7 @@ export default function PurchaseRequestDetail() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={8} style={{ textAlign: "center", padding: "28px 16px", color: "var(--muted-foreground-hex)" }}>
+                            <td colSpan={6} style={{ textAlign: "center", padding: "28px 16px", color: "var(--muted-foreground-hex)" }}>
                               No line items are linked to this purchase request.
                             </td>
                           </tr>
@@ -2268,8 +2248,6 @@ export default function PurchaseRequestDetail() {
                           <tr>
                             <td colSpan={3} style={{ textAlign: "right" }}>Total Summary:</td>
                             <td style={{ textAlign: "right" }}>{totalItemQuantity}</td>
-                            <td style={{ textAlign: "right" }}>—</td>
-                            <td style={{ textAlign: "right", color: "#16a34a" }}>{calculatedGrandTotal}</td>
                             <td colSpan={2}></td>
                           </tr>
                         </tfoot>
