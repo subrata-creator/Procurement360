@@ -100,31 +100,146 @@
 .rfq-detail-actions {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+}
+
+.rfq-detail-secondary-btn,
+.rfq-detail-primary-btn,
+.rfq-detail-actions .rfq-btn-outline {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rfq-detail-secondary-btn,
+.rfq-detail-actions .rfq-btn-outline {
+  background: var(--card-hex, #ffffff);
+  border: 1px solid var(--border-hex, #cbd5e1);
+  color: var(--foreground-hex, #1e293b);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.rfq-detail-secondary-btn:hover,
+.rfq-detail-actions .rfq-btn-outline:hover {
+  border-color: var(--primary-hex, #2563eb);
+  color: var(--primary-hex, #2563eb);
+  background: color-mix(in srgb, var(--primary-hex, #2563eb) 8%, var(--card-hex, #ffffff));
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14);
+  transform: translateY(-1px);
+}
+
+.rfq-detail-secondary-btn:active,
+.rfq-detail-actions .rfq-btn-outline:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.rfq-detail-secondary-btn svg,
+.rfq-detail-actions .rfq-btn-outline svg {
+  width: 15px;
+  height: 15px;
+  color: var(--primary-hex, #2563eb);
+  transition: transform 0.15s ease;
+}
+
+.rfq-detail-secondary-btn:hover svg,
+.rfq-detail-actions .rfq-btn-outline:hover svg {
+  transform: scale(1.08);
+}
+
+.rfq-detail-secondary-btn .rfq-btn-count-pill,
+.rfq-detail-actions .rfq-btn-outline .rfq-btn-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--primary-hex, #2563eb) 12%, transparent);
+  color: var(--primary-hex, #2563eb);
 }
 
 .rfq-detail-primary-btn {
-  height: 36px;
-  padding: 0 13px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  border: none;
-  border-radius: 6px;
-  background: var(--primary-hex);
-  color: var(--primary-foreground-hex);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
+  background: linear-gradient(135deg, var(--primary-hex, #2563eb), #1d4ed8);
+  border: 1px solid #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28);
 }
 
 .rfq-detail-primary-btn:hover {
-  background: var(--primary-700);
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  border-color: #1e40af;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+  transform: translateY(-1px);
+}
+
+.rfq-detail-primary-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
 }
 
 .rfq-detail-primary-btn svg {
   width: 15px;
   height: 15px;
+  color: #ffffff;
+}
+
+/* Dark mode adjustments for detail actions */
+[data-theme="dark"] .rfq-detail-secondary-btn,
+:root[data-theme="dark"] .rfq-detail-secondary-btn,
+.dark .rfq-detail-secondary-btn,
+[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline,
+:root[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline,
+.dark .rfq-detail-actions .rfq-btn-outline {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .rfq-detail-secondary-btn:hover,
+:root[data-theme="dark"] .rfq-detail-secondary-btn:hover,
+.dark .rfq-detail-secondary-btn:hover,
+[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline:hover,
+:root[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline:hover,
+.dark .rfq-detail-actions .rfq-btn-outline:hover {
+  background: #334155;
+  border-color: #60a5fa;
+  color: #60a5fa;
+  box-shadow: 0 2px 8px rgba(96, 165, 250, 0.2);
+}
+
+[data-theme="dark"] .rfq-detail-secondary-btn svg,
+:root[data-theme="dark"] .rfq-detail-secondary-btn svg,
+.dark .rfq-detail-secondary-btn svg,
+[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline svg,
+:root[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline svg,
+.dark .rfq-detail-actions .rfq-btn-outline svg {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .rfq-detail-secondary-btn .rfq-btn-count-pill,
+:root[data-theme="dark"] .rfq-detail-secondary-btn .rfq-btn-count-pill,
+.dark .rfq-detail-secondary-btn .rfq-btn-count-pill,
+[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline .rfq-btn-count-pill,
+:root[data-theme="dark"] .rfq-detail-actions .rfq-btn-outline .rfq-btn-count-pill,
+.dark .rfq-detail-actions .rfq-btn-outline .rfq-btn-count-pill {
+  background: rgba(96, 165, 250, 0.16);
+  color: #60a5fa;
 }
 
 /* =========================================================

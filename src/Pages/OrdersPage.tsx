@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Building2,
   Calendar,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -147,54 +146,7 @@ function ProgressCircle({
   );
 }
 
-function MiniProgressStepper({
-  status,
-  isApproved,
-}: {
-  status: OrderStatus;
-  isApproved: boolean;
-}) {
-  const step2Done = isApproved || status === "In Review";
-  const step3Done = isApproved;
-  const isRejected = status === "Rejected";
 
-  return (
-    <div className="pr-mini-stepper">
-      <div className="pr-mini-stepper-track">
-        <div className="pr-mini-node done" title="PO Created">
-          <Check size={8} />
-        </div>
-        <div className={`pr-mini-line ${step2Done ? "done" : ""}`} />
-        <div
-          className={`pr-mini-node ${step2Done ? "done" : ""}`}
-          title="In Review"
-        >
-          {step2Done ? <Check size={8} /> : <span className="inner-dot" />}
-        </div>
-        <div className={`pr-mini-line ${step3Done ? "done" : ""}`} />
-        <div
-          className={`pr-mini-node ${
-            step3Done ? "done" : isRejected ? "rejected" : ""
-          }`}
-          title="Approved"
-        >
-          {step3Done ? (
-            <Check size={8} />
-          ) : isRejected ? (
-            <X size={8} />
-          ) : (
-            <span className="inner-dot" />
-          )}
-        </div>
-      </div>
-      <div className="pr-mini-stepper-labels">
-        <span>Created</span>
-        <span>Review</span>
-        <span>Approved</span>
-      </div>
-    </div>
-  );
-}
 
 const OrdersPage: FC = () => {
   const navigate = useNavigate();
@@ -572,9 +524,9 @@ const OrdersPage: FC = () => {
             type="button"
             onClick={() => setIsUploadInvoiceModalOpen(true)}
             className="pr-btn-primary"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            title="Upload and register supplier invoice"
           >
-            <Plus size={14} />
+            <Plus size={15} />
             <span>Upload Invoice</span>
           </button>
         </div>
@@ -1148,8 +1100,8 @@ const OrdersPage: FC = () => {
             <table className="pr-modern-table">
               <thead>
                 <tr>
-                  <th style={{ width: 30 }}></th>
-                  <th style={{ width: 32 }}>#</th>
+                  <th className="pr-cell-chevron" style={{ width: 34, textAlign: "center" }}></th>
+                  <th className="pr-cell-num" style={{ width: 50, textAlign: "center" }}>#</th>
                   <th
                     style={{ width: "22%", cursor: "pointer", userSelect: "none" }}
                     onClick={() =>
@@ -1185,13 +1137,12 @@ const OrdersPage: FC = () => {
                   <th style={{ width: "9%" }}>
                     STATUS <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "9%" }}>PROGRESS</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10}>
+                    <td className="purchase-empty-state" colSpan={9}>
                       <div
                         style={{
                           display: "flex",
@@ -1372,20 +1323,12 @@ const OrdersPage: FC = () => {
                               {row.status}
                             </span>
                           </td>
-
-                          {/* 10. Progress Stepper */}
-                          <td className="pr-cell-stepper">
-                            <MiniProgressStepper
-                              status={row.status}
-                              isApproved={isApproved}
-                            />
-                          </td>
                         </tr>
 
                         {/* EXPANDED ROW DETAIL DRAWER */}
                         {isExpanded && (
                           <tr className="pr-expanded-row">
-                            <td colSpan={10}>
+                            <td colSpan={9}>
                               <div className="pr-detail-drawer">
                                 {/* Drawer Header Tabs & Close */}
                                 <div className="pr-drawer-header">
@@ -1648,7 +1591,7 @@ const OrdersPage: FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10} style={{ padding: "48px 20px" }}>
+                    <td className="purchase-empty-state" colSpan={9} style={{ padding: "48px 20px" }}>
                       {orderList.length === 0
                         ? "No purchase orders found in Dataverse cr49f_purchaseorders table. When an RFQ is awarded or an order is created, it will appear here dynamically."
                         : "No purchase orders match these filters."}

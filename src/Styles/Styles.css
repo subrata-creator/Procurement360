@@ -1227,7 +1227,7 @@ button {
 .rfq-global-search input { width: 100%; border: 0; outline: 0; color: #465a79; font-size: 10px; }
 .rfq-notification { position: relative; width: 26px; height: 29px; padding: 0; border: 0; background: transparent; color: #243553; font-size: 20px; }
 .rfq-notification i { position: absolute; top: 1px; right: 1px; width: 7px; height: 7px; border-radius: 50%; background: #f23462; }
-.rfq-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+.rfq-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .rfq-metric { position: relative; height: 78px; display: flex; align-items: center; gap: 13px; overflow: hidden; padding: 13px; border-radius: 10px; color: #162544; }
 .rfq-metric.blue { background: #eaf4ff; }.rfq-metric.purple { background: #f3eaff; }.rfq-metric.amber { background: #fff3dc; }.rfq-metric.pink { background: #ffe7ef; }
 .rfq-metric-icon { width: 43px; height: 43px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; background: rgba(255,255,255,.65); font-size: 25px; }
@@ -1748,13 +1748,13 @@ button {
 }
 
 .rfq-page .rfq-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
   margin: 0 0 14px;
 }
 
 .rfq-page .xd-kpi {
-  min-height: 108px;
+  min-height: 96px;
 }
 
 .rfq-page .purchase-title-copy strong {
@@ -1843,7 +1843,7 @@ button {
   opacity: 0.45;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 700px) {
   .rfq-page .rfq-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

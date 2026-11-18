@@ -184,8 +184,8 @@ export function getRfqRewardInfo(
     Boolean(row.cr49f_awarddate) ||
     (typeof window !== "undefined" &&
       (localStorage.getItem(`rfq_status_${rfqId}`) === "Rewarded" ||
-       localStorage.getItem(`rfq_awarded_supplier_${rfqId}`) !== null ||
-       (rfqNum && localStorage.getItem(`rfq_awarded_supplier_${rfqNum}`) !== null)));
+        localStorage.getItem(`rfq_awarded_supplier_${rfqId}`) !== null ||
+        (rfqNum && localStorage.getItem(`rfq_awarded_supplier_${rfqNum}`) !== null)));
 
   const isRewarded = Boolean(matchedPo || matchedSelected || rfqRewarded);
 
@@ -310,10 +310,10 @@ function ProgressCircle({
     isApproved || percentage === 100
       ? "#10b981"
       : isRejected
-      ? "#ef4444"
-      : percentage > 0
-      ? "#f59e0b"
-      : "#cbd5e1";
+        ? "#ef4444"
+        : percentage > 0
+          ? "#f59e0b"
+          : "#cbd5e1";
 
   return (
     <div className="pr-progress-circle-wrap">
@@ -349,48 +349,7 @@ function ProgressCircle({
   );
 }
 
-function MiniProgressStepper({
-  status,
-  isApproved,
-  progressPercentage,
-}: {
-  status: string;
-  isApproved: boolean;
-  progressPercentage?: number;
-}) {
-  const step2Done = isApproved || (progressPercentage ?? 0) >= 50;
-  const step3Done = isApproved || (progressPercentage ?? 0) === 100;
-  const isRejected = status === "Rejected";
 
-  return (
-    <div className="pr-mini-stepper">
-      <div className="pr-mini-stepper-track">
-        <div className="pr-mini-node done" title="RFQ Created">
-          <Check size={8} />
-        </div>
-        <div className={`pr-mini-line ${step2Done ? "done" : ""}`} />
-        <div
-          className={`pr-mini-node ${step2Done ? "done" : (progressPercentage ?? 0) > 0 ? "active" : ""}`}
-          title="In Review"
-        >
-          {step2Done ? <Check size={8} /> : <span className="inner-dot" />}
-        </div>
-        <div className={`pr-mini-line ${step3Done ? "done" : ""}`} />
-        <div
-          className={`pr-mini-node ${step3Done ? "done" : isRejected ? "rejected" : ""}`}
-          title="Approved"
-        >
-          {step3Done ? <Check size={8} /> : isRejected ? <X size={8} /> : <span className="inner-dot" />}
-        </div>
-      </div>
-      <div className="pr-mini-stepper-labels">
-        <span>Created</span>
-        <span>Review</span>
-        <span>Approved</span>
-      </div>
-    </div>
-  );
-}
 
 // Helper: Extract invited suppliers for an RFQ record
 function getInvitedSuppliersForRfq(row: RawRfq): RfqDrawerSupplier[] {
@@ -677,7 +636,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       value: counts.total,
       caption: "All RFQ records",
       progress: 100,
-      icon: <ClipboardList size={18} />,
+      icon: <ClipboardList size={16} />,
       tone: "blue",
       filter: "All Status" as const,
     },
@@ -686,7 +645,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       value: counts.rewarded,
       caption: `${percentOf(counts.rewarded)}% of RFQs`,
       progress: percentOf(counts.rewarded),
-      icon: <Award size={18} />,
+      icon: <Award size={16} />,
       tone: "green",
       filter: "Rewarded" as const,
     },
@@ -695,8 +654,8 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       value: counts.approved,
       caption: `${percentOf(counts.approved)}% of RFQs`,
       progress: percentOf(counts.approved),
-      icon: <CircleCheck size={18} />,
-      tone: "blue",
+      icon: <CircleCheck size={16} />,
+      tone: "emerald",
       filter: "Approved" as const,
     },
     {
@@ -704,7 +663,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       value: counts.pending,
       caption: `${percentOf(counts.pending)}% of RFQs`,
       progress: percentOf(counts.pending),
-      icon: <Clock3 size={18} />,
+      icon: <Clock3 size={16} />,
       tone: "amber",
       filter: "Pending" as const,
     },
@@ -713,7 +672,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
       value: counts.rejected,
       caption: `${percentOf(counts.rejected)}% of RFQs`,
       progress: percentOf(counts.rejected),
-      icon: <CircleX size={18} />,
+      icon: <CircleX size={16} />,
       tone: "red",
       filter: "Rejected" as const,
     },
@@ -974,7 +933,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                   e.stopPropagation();
                   try {
                     (e.target as HTMLInputElement).showPicker();
-                  } catch {}
+                  } catch { }
                 }}
                 className="pr-hidden-date-input"
                 id="rfq-created-date-input"
@@ -1177,10 +1136,10 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
             <table className="pr-modern-table">
               <thead>
                 <tr>
-                  <th style={{ width: 30 }}></th>
-                  <th style={{ width: 32 }}>#</th>
+                  <th className="pr-cell-chevron" style={{ width: 34, textAlign: "center" }}></th>
+                  <th className="pr-cell-num" style={{ width: 50, textAlign: "center" }}>S.No</th>
                   <th
-                    style={{ width: "23%", cursor: "pointer", userSelect: "none" }}
+                    style={{ width: "26%", cursor: "pointer", userSelect: "none" }}
                     onClick={() => setDateSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
                     title={`Sorted by Created Date (${dateSortOrder === "desc" ? "Newest First" : "Oldest First"}). Click to toggle.`}
                   >
@@ -1190,26 +1149,25 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                     </span>
                   </th>
                   <th style={{ width: "11%" }}>ASSOCIATED PR</th>
-                  <th style={{ width: "10%" }}>ASSOCIATED PO</th>
-                  <th style={{ width: "12%" }}>
+                  <th style={{ width: "11%" }}>ASSOCIATED PO</th>
+                  <th style={{ width: "13%" }}>
                     SUBMISSION DEADLINE <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "12%" }}>
+                  <th style={{ width: "13%" }}>
                     DELIVERY LOCATION <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "11%" }}>
+                  <th style={{ width: "13%" }}>
                     CREATED BY <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "11%" }}>
+                  <th style={{ width: "13%" }}>
                     STATUS <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "8%" }}>PROGRESS</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10}>
+                    <td className="purchase-empty-state" colSpan={9}>
                       Loading RFQs from Dataverse...
                     </td>
                   </tr>
@@ -1428,15 +1386,14 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                               </div>
                             ) : (
                               <span
-                                className={`pr-status-badge ${
-                                  isApproved
+                                className={`pr-status-badge ${isApproved
                                     ? "approved"
                                     : isRejected
-                                    ? "rejected"
-                                    : isChangesNeeded
-                                    ? "changes-needed"
-                                    : "pending"
-                                }`}
+                                      ? "rejected"
+                                      : isChangesNeeded
+                                        ? "changes-needed"
+                                        : "pending"
+                                  }`}
                               >
                                 {isApproved ? (
                                   <>
@@ -1459,22 +1416,12 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                             )}
                           </td>
 
-                          {/* 10. Progress Stepper */}
-                          <td className="pr-cell-progress">
-                            <MiniProgressStepper
-                              status={statusLabel}
-                              isApproved={isApproved || isRewarded}
-                              progressPercentage={progressPct}
-                            />
-                          </td>
-
-
                         </tr>
 
                         {/* EXPANDED ROW DETAIL DRAWER */}
                         {isExpanded && (
                           <tr className="pr-expanded-row">
-                            <td colSpan={10}>
+                            <td colSpan={9}>
                               <div className="pr-detail-drawer">
                                 {/* Drawer Header Tabs & Close */}
                                 <div className="pr-drawer-header">
@@ -1768,23 +1715,22 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                                               </div>
                                               <div className="pr-history-task-right">
                                                 <span
-                                                  className={`pr-history-badge ${
-                                                    tStatus === "Approved"
+                                                  className={`pr-history-badge ${tStatus === "Approved"
                                                       ? "approved"
                                                       : tStatus === "Rejected"
-                                                      ? "rejected"
-                                                      : t.statecode === 0
-                                                      ? "active"
-                                                      : "pending"
-                                                  }`}
+                                                        ? "rejected"
+                                                        : t.statecode === 0
+                                                          ? "active"
+                                                          : "pending"
+                                                    }`}
                                                 >
                                                   {tStatus === "Approved"
                                                     ? "Approved"
                                                     : tStatus === "Rejected"
-                                                    ? "Rejected"
-                                                    : t.statecode === 0
-                                                    ? "Action Needed"
-                                                    : "Waiting"}
+                                                      ? "Rejected"
+                                                      : t.statecode === 0
+                                                        ? "Action Needed"
+                                                        : "Waiting"}
                                                 </span>
                                                 {t.cr49f_approvaltasksid && (
                                                   <button
@@ -1853,7 +1799,7 @@ const RfqPage: React.FC<RfqPageProps> = ({ openCreateModal = false }) => {
                   })
                 ) : (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10}>
+                    <td className="purchase-empty-state" colSpan={9}>
                       No RFQs match these filters.
                     </td>
                   </tr>

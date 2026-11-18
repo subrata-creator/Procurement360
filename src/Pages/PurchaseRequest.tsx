@@ -334,42 +334,7 @@ function ProgressCircle({ percentage, isApproved }: { percentage: number; isAppr
   );
 }
 
-function MiniProgressStepper({
-  status,
-  isApproved,
-  progressPercentage,
-}: {
-  status: PRStatus;
-  isApproved: boolean;
-  progressPercentage?: number;
-}) {
-  const step2Done = isApproved || (progressPercentage ?? 0) >= 50;
-  const step3Done = isApproved || (progressPercentage ?? 0) === 100;
-  const isRejected = status === "Rejected";
 
-  return (
-    <div className="pr-mini-stepper">
-      <div className="pr-mini-stepper-track">
-        <div className="pr-mini-node done" title="PR Created">
-          <Check size={8} />
-        </div>
-        <div className={`pr-mini-line ${step2Done ? "done" : ""}`} />
-        <div className={`pr-mini-node ${step2Done ? "done" : (progressPercentage ?? 0) > 0 ? "active" : ""}`} title="In Review">
-          {step2Done ? <Check size={8} /> : <span className="inner-dot" />}
-        </div>
-        <div className={`pr-mini-line ${step3Done ? "done" : ""}`} />
-        <div className={`pr-mini-node ${step3Done ? "done" : isRejected ? "rejected" : ""}`} title="Approved">
-          {step3Done ? <Check size={8} /> : isRejected ? <X size={8} /> : <span className="inner-dot" />}
-        </div>
-      </div>
-      <div className="pr-mini-stepper-labels">
-        <span>Created</span>
-        <span>Review</span>
-        <span>Approved</span>
-      </div>
-    </div>
-  );
-}
 
 export default function PurchaseRequest() {
   const navigate = useNavigate();
@@ -1497,8 +1462,8 @@ export default function PurchaseRequest() {
             <table className="pr-modern-table">
               <thead>
                 <tr>
-                  <th style={{ width: 34 }}></th>
-                  <th style={{ width: 44 }}>#</th>
+                  <th className="pr-cell-chevron" style={{ width: 34, textAlign: "center" }}></th>
+                  <th className="pr-cell-num" style={{ width: 50, textAlign: "center" }}>S.No</th>
                   <th
                     style={{ width: "23%", cursor: "pointer", userSelect: "none" }}
                     onClick={() => setDateSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
@@ -1522,14 +1487,13 @@ export default function PurchaseRequest() {
                   <th style={{ width: "8%" }}>
                     PRIORITY <span className="sort-diamond">◊</span>
                   </th>
-                  <th style={{ width: "13%" }}>PROGRESS</th>
                   <th style={{ width: 44, textAlign: "center" }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoadingRequests ? (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10}>
+                    <td className="purchase-empty-state" colSpan={9}>
                       Loading purchase requests from Dataverse...
                     </td>
                   </tr>
@@ -1673,15 +1637,6 @@ export default function PurchaseRequest() {
                             </span>
                           </td>
 
-                          {/* 10. Progress Stepper */}
-                          <td className="pr-cell-progress">
-                            <MiniProgressStepper
-                              status={request.status}
-                              isApproved={isApproved}
-                              progressPercentage={progressPct}
-                            />
-                          </td>
-
                           {/* 11. Actions */}
                           <td className="pr-cell-actions">
                             <div className="pr-actions-menu-wrap">
@@ -1735,7 +1690,7 @@ export default function PurchaseRequest() {
                         {/* EXPANDED ROW DETAIL DRAWER */}
                         {isExpanded && (
                           <tr className="pr-expanded-row">
-                            <td colSpan={10}>
+                            <td colSpan={9}>
                               <div className="pr-detail-drawer">
                                 {/* Drawer Header Tabs & Close */}
                                 <div className="pr-drawer-header">
@@ -1970,7 +1925,7 @@ export default function PurchaseRequest() {
                   })
                 ) : (
                   <tr>
-                    <td className="purchase-empty-state" colSpan={10}>
+                    <td className="purchase-empty-state" colSpan={9}>
                       No purchase requests match these filters.
                     </td>
                   </tr>

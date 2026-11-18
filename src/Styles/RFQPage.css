@@ -13,17 +13,196 @@
   --rfq-red: var(--destructive-hex, #EF4444);
 }
 
+/* RFQ KPI 5-card single line layout & tone styling */
 .rfq-page .rfq-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin: 0 0 16px;
+  width: 100%;
+}
+
+.rfq-page .xd-kpi {
+  min-height: 96px;
+  padding: 10px 12px;
+  gap: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border-hex);
+  border-top: 2.5px solid var(--tone, var(--primary-hex));
+  background: var(--card-hex, #ffffff);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.rfq-page .xd-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.rfq-page .xd-kpi.selected {
+  border-color: var(--tone);
+  box-shadow: 0 0 0 1.5px var(--tone), 0 6px 18px rgba(0, 0, 0, 0.1);
+}
+
+.rfq-page .xd-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rfq-page .xd-kpi-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted-foreground-hex, #64748b);
+}
+
+.rfq-page .xd-kpi-icon {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--tone-bg);
+  color: var(--tone);
+}
+
+.rfq-page .xd-kpi-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.rfq-page .xd-kpi-mid {
+  display: flex;
+  align-items: baseline;
+  margin: 2px 0;
+}
+
+.rfq-page .xd-kpi-mid strong {
+  font-size: 23px;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.rfq-page .xd-kpi-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.rfq-page .xd-kpi-cap {
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--muted-foreground-hex, #64748b);
+}
+
+.rfq-page .xd-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-hex, #e2e8f0) 75%, transparent);
+}
+
+.rfq-page .xd-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+/* 1. Total RFQs (Blue) */
+.rfq-page .xd-kpi.xd-blue {
+  --tone: #2563eb;
+  --tone-bg: rgba(37, 99, 235, 0.12);
+}
+.rfq-page .xd-kpi.xd-blue .xd-kpi-mid strong {
+  color: #2563eb;
+}
+.rfq-page .xd-kpi.xd-blue .xd-progress span {
+  background: linear-gradient(90deg, #60a5fa, #2563eb);
+}
+
+/* 2. Rewarded RFQs (Green shade) */
+.rfq-page .xd-kpi.xd-green {
+  --tone: #16a34a;
+  --tone-bg: rgba(22, 163, 74, 0.12);
+}
+.rfq-page .xd-kpi.xd-green .xd-kpi-mid strong {
+  color: #16a34a;
+}
+.rfq-page .xd-kpi.xd-green .xd-progress span {
+  background: linear-gradient(90deg, #4ade80, #16a34a);
+}
+
+/* 3. Approved RFQs (Green shade - Emerald) */
+.rfq-page .xd-kpi.xd-emerald {
+  --tone: #059669;
+  --tone-bg: rgba(5, 150, 105, 0.12);
+}
+.rfq-page .xd-kpi.xd-emerald .xd-kpi-mid strong {
+  color: #059669;
+}
+.rfq-page .xd-kpi.xd-emerald .xd-progress span {
+  background: linear-gradient(90deg, #34d399, #059669);
+}
+
+/* 4. Pending RFQs (Yellow / Amber) */
+.rfq-page .xd-kpi.xd-amber {
+  --tone: #d97706;
+  --tone-bg: rgba(217, 119, 6, 0.13);
+}
+.rfq-page .xd-kpi.xd-amber .xd-kpi-mid strong {
+  color: #d97706;
+}
+.rfq-page .xd-kpi.xd-amber .xd-progress span {
+  background: linear-gradient(90deg, #fbbf24, #d97706);
+}
+
+/* 5. Rejected RFQs (Red) */
+.rfq-page .xd-kpi.xd-red {
+  --tone: #dc2626;
+  --tone-bg: rgba(220, 38, 38, 0.12);
+}
+.rfq-page .xd-kpi.xd-red .xd-kpi-mid strong {
+  color: #dc2626;
+}
+.rfq-page .xd-kpi.xd-red .xd-progress span {
+  background: linear-gradient(90deg, #f87171, #dc2626);
 }
 
 .rfq-page .xd-kpi.xd-violet {
   --tone: var(--rfq-violet);
   --tone-bg: rgba(167, 139, 250, 0.14);
 }
-
 .rfq-page .xd-kpi.xd-violet .xd-kpi-icon { color: var(--rfq-violet); }
 .rfq-page .xd-kpi.xd-violet .xd-progress span { background: var(--rfq-violet); }
+
+/* Dark mode overrides for counts */
+[data-theme="dark"] .rfq-page .xd-kpi.xd-blue .xd-kpi-mid strong,
+:root[data-theme="dark"] .rfq-page .xd-kpi.xd-blue .xd-kpi-mid strong {
+  color: #60a5fa;
+}
+[data-theme="dark"] .rfq-page .xd-kpi.xd-green .xd-kpi-mid strong,
+:root[data-theme="dark"] .rfq-page .xd-kpi.xd-green .xd-kpi-mid strong {
+  color: #4ade80;
+}
+[data-theme="dark"] .rfq-page .xd-kpi.xd-emerald .xd-kpi-mid strong,
+:root[data-theme="dark"] .rfq-page .xd-kpi.xd-emerald .xd-kpi-mid strong {
+  color: #34d399;
+}
+[data-theme="dark"] .rfq-page .xd-kpi.xd-amber .xd-kpi-mid strong,
+:root[data-theme="dark"] .rfq-page .xd-kpi.xd-amber .xd-kpi-mid strong {
+  color: #fbbf24;
+}
+[data-theme="dark"] .rfq-page .xd-kpi.xd-red .xd-kpi-mid strong,
+:root[data-theme="dark"] .rfq-page .xd-kpi.xd-red .xd-kpi-mid strong {
+  color: #f87171;
+}
 
 .rfq-page .rfq-search {
   border-color: var(--rfq-border);
@@ -584,7 +763,7 @@
 }
 
 @media (max-width: 700px) {
-  .rfq-page .rfq-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rfq-page .rfq-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
 
 @media (max-width: 900px) {
@@ -596,7 +775,7 @@
 }
 
 @media (max-width: 480px) {
-  .rfq-page .rfq-metrics { grid-template-columns: 1fr; }
+  .rfq-page .rfq-metrics { grid-template-columns: 1fr !important; }
   .rfq-page .rfq-filters {
     grid-template-columns: minmax(0, 1fr) 145px 130px;
     gap: 7px;
@@ -801,15 +980,27 @@
 }
 
 .rfq-page .pr-modern-table .pr-cell-chevron {
-  width: 30px !important;
-  padding-left: 8px !important;
-  padding-right: 2px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  max-width: 34px !important;
+  padding: 12px 4px !important;
+  text-align: center !important;
 }
 
 .rfq-page .pr-modern-table .pr-cell-num {
-  width: 32px !important;
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
   padding: 12px 4px !important;
-  text-align: center;
+  text-align: center !important;
+}
+
+.rfq-page .pr-modern-table thead th.pr-cell-num {
+  text-align: center !important;
+}
+
+.rfq-page .pr-modern-table thead th.pr-cell-chevron {
+  text-align: center !important;
 }
 
 .rfq-page .pr-modern-table .pr-cell-actions {

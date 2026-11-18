@@ -1450,6 +1450,82 @@
   border-color: #cbd5e1;
 }
 
+.pr-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--primary-hex, #2563eb);
+  background: linear-gradient(135deg, var(--primary-hex, #2563eb), #1d4ed8);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.pr-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  border-color: #1e40af;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.38);
+  transform: translateY(-1px);
+}
+
+.pr-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+.pr-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.pr-btn-primary svg {
+  width: 15px;
+  height: 15px;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .pr-btn-primary,
+:root[data-theme="dark"] .pr-btn-primary,
+.dark .pr-btn-primary {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .pr-btn-primary:hover:not(:disabled),
+:root[data-theme="dark"] .pr-btn-primary:hover:not(:disabled),
+.dark .pr-btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #60a5fa;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+}
+
+[data-theme="dark"] .pr-btn-more-filters,
+:root[data-theme="dark"] .pr-btn-more-filters,
+.dark .pr-btn-more-filters {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .pr-btn-more-filters:hover,
+:root[data-theme="dark"] .pr-btn-more-filters:hover,
+.dark .pr-btn-more-filters:hover {
+  background: #334155;
+  border-color: #475569;
+}
+
 .pr-view-toggle {
   display: flex;
   align-items: center;
@@ -1586,7 +1662,8 @@
 
 .pr-cell-chevron {
   text-align: center;
-  padding-left: 14px !important;
+  padding: 12px 4px !important;
+  width: 34px;
 }
 
 .pr-chevron-btn {
@@ -1611,6 +1688,16 @@
   font-size: 12px;
   font-weight: 600;
   color: #94a3b8;
+  text-align: center !important;
+  width: 50px;
+}
+
+.pr-modern-table thead th.pr-cell-num {
+  text-align: center !important;
+}
+
+.pr-modern-table thead th.pr-cell-chevron {
+  text-align: center !important;
 }
 
 /* Request Details Column */

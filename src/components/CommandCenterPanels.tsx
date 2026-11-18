@@ -1,5 +1,4 @@
-import { createPortal } from "react-dom";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Cr49f_approvaltasksesService } from "../generated/services/Cr49f_approvaltasksesService";
 import { Cr49f_purchaserequestsService } from "../generated/services/Cr49f_purchaserequestsService";
 import { Cr49f_requestforqoutationsService } from "../generated/services/Cr49f_requestforqoutationsService";
@@ -27,20 +26,14 @@ import {
   type AiFlowResponseParsed,
 } from "../utils/procurementIntelligence";
 import {
-  calculateProcurementHealth,
-  type ProcurementHealthResult,
-} from "../utils/procurementHealth";
-import {
   ArrowRight,
   CircleAlert,
   CircleCheck,
   Gauge,
-  Info,
   RefreshCw,
   ShieldAlert,
   Sparkles,
   TrendingUp,
-  X,
 } from "lucide-react";
 import "../Styles/CommandCenter.css";
 
@@ -103,7 +96,6 @@ const formatCurrency = (val: number): string => {
 
 export default function CommandCenterPanels({
   onViewPRs,
-  onOpenTask,
   onViewForecast,
   onViewSuppliers,
 }: Props) {
@@ -112,7 +104,7 @@ export default function CommandCenterPanels({
   const [rfqResponses, setRfqResponses] = useState<Cr49f_rfqsupplierresponses[]>([]);
   const [supplierProducts, setSupplierProducts] = useState<Cr49f_supplierproducts[]>([]);
   const [suppliersList, setSuppliersList] = useState<Cr49f_suppliers[]>([]);
-  const [approvalTasks, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
+  const [, setApprovalTasks] = useState<Cr49f_approvaltaskses[]>([]);
   const [prLines, setPrLines] = useState<Cr49f_purchaserequestlines[]>([]);
   const [dynamicOrders, setDynamicOrders] = useState<OrderRow[]>([]);
   const [aiFlowResult, setAiFlowResult] = useState<AiFlowResponseParsed | null>(null);
@@ -122,72 +114,9 @@ export default function CommandCenterPanels({
   const isExecutingFlowRef = useRef(false);
   const [isLoadingHealth, setIsLoadingHealth] = useState(true);
   const [, setHealthError] = useState(false);
-  const [showScoreCalc, setShowScoreCalc] = useState(false);
-  const calcBtnRef = useRef<HTMLButtonElement>(null);
-  const calcPopoverRef = useRef<HTMLDivElement>(null);
-  const [popoverPosition, setPopoverPosition] = useState({ left: 0, top: 0, placement: "below" as "above" | "below" });
-
   // Spend Intelligence state
   const [spendPeriod, setSpendPeriod] = useState<"All Time" | "Quarterly" | "Monthly">("All Time");
   const [spendCategory, setSpendCategory] = useState<string>("ALL");
-
-  useLayoutEffect(() => {
-    if (!showScoreCalc) return;
-    const updatePosition = () => {
-      const btn = calcBtnRef.current;
-      const popover = calcPopoverRef.current;
-      if (!btn || !popover) return;
-
-      const anchor = btn.getBoundingClientRect();
-      const bounds = popover.getBoundingClientRect();
-
-      const spaceBelow = window.innerHeight - anchor.bottom;
-      const spaceAbove = anchor.top;
-      const placement = spaceBelow >= bounds.height + 14 || spaceBelow >= spaceAbove ? "below" : "above";
-
-      let left = anchor.right - bounds.width + 10;
-      if (left < 14) left = 14;
-      if (left + bounds.width > window.innerWidth - 14) {
-        left = window.innerWidth - bounds.width - 14;
-      }
-
-      const top = placement === "below"
-        ? Math.min(anchor.bottom + 6, window.innerHeight - bounds.height - 8)
-        : Math.max(8, anchor.top - bounds.height - 6);
-
-      setPopoverPosition({ left, top, placement });
-    };
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [showScoreCalc]);
-
-  useEffect(() => {
-    if (!showScoreCalc) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!calcBtnRef.current?.contains(target) && !calcPopoverRef.current?.contains(target)) {
-        setShowScoreCalc(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowScoreCalc(false);
-        calcBtnRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showScoreCalc]);
 
   useEffect(() => {
     let active = true;
@@ -254,9 +183,7 @@ export default function CommandCenterPanels({
     };
   }, []);
 
-  const healthData: ProcurementHealthResult = useMemo(() => {
-    return calculateProcurementHealth(prs, rfqs, rfqResponses, supplierProducts, approvalTasks);
-  }, [prs, rfqs, rfqResponses, supplierProducts, approvalTasks]);
+
 
   const intelligenceData: ProcurementIntelligenceResult = useMemo(() => {
     return calculateProcurementIntelligence(prs, prLines, rfqs, rfqResponses);
@@ -320,16 +247,7 @@ export default function CommandCenterPanels({
     }
   }, [isLoadingHealth, prs.length, rfqs.length, runAiFlow]);
 
-  const scoreDisplay = healthData.healthScore !== null ? healthData.healthScore : "--";
-  const scorePct = healthData.healthScore !== null ? healthData.healthScore : 0;
-  const ringColor =
-    healthData.statusTone === "positive"
-      ? "var(--success-hex, #22c55e)"
-      : healthData.statusTone === "stable"
-        ? "var(--primary-hex, #2563eb)"
-        : healthData.statusTone === "attention"
-          ? "var(--warning-hex, #f59e0b)"
-          : "var(--destructive-hex, #ef4444)";
+
 
   // =========================================================================
   // DYNAMIC SPEND INTELLIGENCE
@@ -575,189 +493,6 @@ export default function CommandCenterPanels({
 
   return (
     <>
-      <section className="cc-executive-grid" aria-label="Procurement health and attention">
-        <article className="cc-panel cc-health-panel">
-          <div className="cc-section-heading">
-            <div>
-              <span className="cc-eyebrow">AT A GLANCE</span>
-              <h2>Procurement Health</h2>
-            </div>
-          </div>
-
-          <div className="cc-health-content">
-            <div
-              className="cc-health-ring"
-              role="img"
-              aria-label={`Procurement Health score ${scoreDisplay} out of 100 (${healthData.statusLevel})`}
-              style={
-                {
-                  "--health-score": `${scorePct}%`,
-                  "--health-color": ringColor,
-                } as React.CSSProperties
-              }
-            >
-              <div className="cc-health-ring-inner">
-                <strong>{isLoadingHealth ? "..." : scoreDisplay}</strong>
-                <span>of 100</span>
-              </div>
-            </div>
-
-            <div className="cc-health-details">
-              <div className="cc-health-status-row">
-                <span className={`cc-health-status ${healthData.statusTone}`}>
-                  {healthData.statusTone === "positive" && <CircleCheck size={14} />}
-                  {healthData.statusTone === "stable" && <CircleCheck size={14} />}
-                  {healthData.statusTone === "attention" && <CircleAlert size={14} />}
-                  {healthData.statusTone === "critical" && <ShieldAlert size={14} />}
-                  {isLoadingHealth ? "Calculating health..." : healthData.statusLevel}
-                </span>
-
-                <button
-                  ref={calcBtnRef}
-                  type="button"
-                  className="cc-health-calc-btn"
-                  onClick={() => setShowScoreCalc((v) => !v)}
-                  title="View Score Calculation Breakdown"
-                  aria-label="View Score Calculation Breakdown"
-                  aria-expanded={showScoreCalc}
-                >
-                  <Info size={14} />
-                </button>
-              </div>
-
-              <p>
-                {isLoadingHealth
-                  ? "Evaluating approval queues, supplier responses, and catalog coverage..."
-                  : healthData.statusSummary}
-              </p>
-
-              <div className="cc-health-signals">
-                <span title="Percentage of PRs reviewed on time">
-                  <i className={healthData.prApproval.tone} />
-                  PR Approval
-                  <b>
-                    {healthData.prApproval.pct !== null
-                      ? `${healthData.prApproval.pct}%`
-                      : "N/A"}
-                  </b>
-                </span>
-
-                <span title="RFQ Supplier response coverage">
-                  <i className={healthData.rfqCoverage.tone} />
-                  RFQ Response Coverage
-                  <b>
-                    {healthData.rfqCoverage.pct !== null
-                      ? `${healthData.rfqCoverage.pct}%`
-                      : "N/A"}
-                  </b>
-                </span>
-
-                <span title="Active suppliers registered in catalog">
-                  <i className={healthData.supplierAvailability.tone} />
-                  Supplier Availability
-                  <b>
-                    {healthData.supplierAvailability.pct !== null
-                      ? `${healthData.supplierAvailability.pct}%`
-                      : "N/A"}
-                  </b>
-                </span>
-
-                <div
-                  className="cc-health-signal-row clickable"
-                  onClick={() => {
-                    const el = document.getElementById("work-queue") || document.querySelector(".work-queue");
-                    if (el) {
-                      el.scrollIntoView({ behavior: "smooth", block: "start" });
-                    } else if (onOpenTask) {
-                      onOpenTask();
-                    }
-                  }}
-                  style={{ cursor: "pointer" }}
-                  title="Click to scroll to My Procurement Tasks in Work Queue"
-                >
-                  <span title="Open approval tasks currently awaiting review">
-                    <i className={healthData.openTasks.tone} />
-                    Open Procurement Tasks
-                  </span>
-                  <b className={healthData.openTasks.count > 0 ? "attention" : ""}>
-                    {healthData.openTasks.count}
-                  </b>
-                  <small>pending <ArrowRight size={12} style={{ verticalAlign: "middle" }} /></small>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {showScoreCalc &&
-            createPortal(
-              <div
-                ref={calcPopoverRef}
-                className={`cc-health-calc-popover ${popoverPosition.placement}`}
-                role="dialog"
-                aria-label="Score Calculation Breakdown"
-                style={{
-                  position: "fixed",
-                  left: popoverPosition.left,
-                  top: popoverPosition.top,
-                  zIndex: 9999,
-                }}
-              >
-                <div className="cc-calc-popover-header">
-                  <strong>Score Calculation Breakdown</strong>
-                  <button
-                    type="button"
-                    className="cc-calc-close-btn"
-                    onClick={() => setShowScoreCalc(false)}
-                    aria-label="Close calculation breakdown"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-                <div className="cc-calc-popover-body">
-                  <div className="cc-calc-row">
-                    <span>PR Approval ({healthData.weightsUsed.pr}%)</span>
-                    <strong>+{healthData.calculationBreakdown.prContribution} pts</strong>
-                  </div>
-                  <div className="cc-calc-row">
-                    <span>RFQ Coverage ({healthData.weightsUsed.rfq}%)</span>
-                    <strong>+{healthData.calculationBreakdown.rfqContribution} pts</strong>
-                  </div>
-                  <div className="cc-calc-row">
-                    <span>Supplier Availability ({healthData.weightsUsed.supplier}%)</span>
-                    <strong>+{healthData.calculationBreakdown.supplierContribution} pts</strong>
-                  </div>
-                  <div className="cc-calc-divider" />
-                  <div className="cc-calc-row total">
-                    <span>Total Health Score</span>
-                    <strong>{scoreDisplay} / 100</strong>
-                  </div>
-                  <p className="cc-calc-note">{healthData.calculationBreakdown.weightsNote}</p>
-                  <div
-                    className="cc-calc-task-warning cc-calc-task-interactive"
-                    onClick={() => {
-                      setShowScoreCalc(false);
-                      const el = document.getElementById("work-queue") || document.querySelector(".work-queue");
-                      if (el) {
-                        el.scrollIntoView({ behavior: "smooth", block: "start" });
-                      } else if (onOpenTask) {
-                        onOpenTask();
-                      }
-                    }}
-                    style={{ cursor: "pointer" }}
-                    title="Click to view My Procurement Tasks in Work Queue"
-                  >
-                    <CircleAlert size={12} />
-                    <span>
-                      Open Tasks indicator: <b>{healthData.openTasks.count} pending</b> (view in Work Queue &darr;)
-                    </span>
-                  </div>
-                </div>
-              </div>,
-              document.body
-            )}
-        </article>
-      </section>
-
       <section className="cc-panel cc-intelligence-panel">
         <div className="cc-section-heading">
           <div>

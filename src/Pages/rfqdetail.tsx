@@ -1432,23 +1432,27 @@ export default function RfqDetail() {
         </div>
 
         <div className="rfq-detail-actions">
-          {isApprovedOrRewarded ? (
+          <button
+            type="button"
+            className="rfq-detail-secondary-btn rfq-btn-outline"
+            onClick={() => setActiveTab("Associated Tasks")}
+            title="View Approval Tasks for this RFQ"
+          >
+            <ShieldCheck size={15} />
+            <span>View Approval Tasks</span>
+            {approvalTasks.length > 0 && (
+              <span className="rfq-btn-count-pill">{approvalTasks.length}</span>
+            )}
+          </button>
+          {isApprovedOrRewarded && (
             <button
               type="button"
               className="rfq-detail-primary-btn"
               onClick={() => navigate("/orders")}
+              title="Create Purchase Order from this RFQ"
             >
-              <FileText size={12} />
-              Create Purchase Order
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="rfq-btn-outline"
-              onClick={() => setActiveTab("Associated Tasks")}
-            >
-              <ShieldCheck size={13} />
-              View Approval Tasks
+              <FileText size={15} />
+              <span>Create Purchase Order</span>
             </button>
           )}
         </div>

@@ -709,9 +709,9 @@ export const InvoicesOverviewPage: React.FC = () => {
             type="button"
             onClick={() => setIsUploadModalOpen(true)}
             className="pr-btn-primary"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            title="Upload and register supplier invoice"
           >
-            <Plus size={14} />
+            <Plus size={15} />
             <span>Upload Invoice</span>
           </button>
         </div>
